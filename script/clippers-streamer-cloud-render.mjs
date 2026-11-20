@@ -187,6 +187,39 @@ export function whisperArgs({ model, wav, outBase, language = 'en', threads = 4 
   return ['-m', model, '-f', wav, '-l', lang, '-t', String(t), '-ml', '1', '-sow', '-oj', '-np', '-of', outBase];
 }
 
+/**
+ * whisper-cli args for language detection only (v1.8.7: `-dl` exits after auto-detecting the language).
+ * No `-np`: it disables whisper's log, and the detected language is printed on that log (stderr).
+ */
+export function whisperDetectArgs({ model, wav, threads = 4 }) {
+  const t = Math.min(16, Math.max(1, Number.parseInt(threads, 10) || 4));
+  return ['-m', model, '-f', wav, '-l', 'auto', '-dl', '-t', String(t)];
+}
+
+/** "auto-detected language: es (p = 0.873)" (whisper.cpp stderr) -> { language, confidence } | null. */
+export function parseWhisperLanguage(text) {
+  const m = [...String(text ?? '').matchAll(/auto-detected language:\s*([a-z]{2,3})\s*\(p\s*=\s*([0-9.]+)\)/gi)].at(-1);
+  if (!m) return null;
+  const confidence = Number(m[2]);
+  return { language: m[1].toLowerCase(), confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0 };
+}
+
+/**
+ * Spoken language of the downloaded cut (first <= 30 s of audio, whisper's window). Never throws:
+ * { status: 'detected', language, confidence } | { status: 'whisper_not_configured' | 'detection_failed', error? }.
+ */
+export async function detectSpeechLanguage({ sourceFile, workDir, env = process.env, ffmpeg = 'ffmpeg', runner = run, maxSec = 30 }) {
+  const whisperBin = clean(env.CLIPPERS_WHISPER_BIN, 300), whisperModel = clean(env.CLIPPERS_WHISPER_MODEL, 300);
+  if (!whisperBin || !whisperModel) return { status: 'whisper_not_configured' };
+  try {
+    const wav = path.join(workDir, 'lang.wav');
+    await runner(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', sourceFile, '-t', String(Math.min(30, Math.max(5, maxSec))), '-vn', '-ac', '1', '-ar', '16000', wav], { timeoutMs: 120_000 });
+    const { stdout, stderr } = await runner(whisperBin, whisperDetectArgs({ model: whisperModel, wav, threads: env.CLIPPERS_WHISPER_THREADS }), { timeoutMs: 120_000 });
+    const found = parseWhisperLanguage(`${stderr}\n${stdout}`);
+    return found ? { status: 'detected', ...found } : { status: 'detection_failed', error: 'WHISPER_LANGUAGE_NOT_PRINTED' };
+  } catch (e) { return { status: 'detection_failed', error: String(e?.message ?? e).replace(/[^A-Za-z0-9_:.-]+/g, '_').slice(0, 60) }; }
+}
+
 /** Rendered output check: exact 1080x1920 video, audio present, 3 s <= duration <= 60 s (+0.5 tolerance). */
 export function validateRenderProbe(probe, { maxSec = STREAMER_CLIP_MAX_SECONDS } = {}) {
   const streams = Array.isArray(probe?.streams) ? probe.streams : [];

@@ -25,10 +25,10 @@ import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
-import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText } from './clippers-streamer-cloud-render.mjs';
+import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText, detectSpeechLanguage } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
 import { emptyCloudPublish, cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
-import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS } from '../shared/clippers-account-lanes.mjs';
+import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS, resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE } from '../shared/clippers-account-lanes.mjs';
 
 const HOUR = 3_600_000;
 const MAX_POSTS = 600;
@@ -77,6 +77,8 @@ export function cloudPublishConfig(env = process.env) {
     clipSeconds: env.CLIPPERS_STREAMER_LANES_ENABLED !== 'false'
       ? int(env.CLIPPERS_STREAMER_CLIP_SECONDS, CLIP_SECONDS.target, CLIP_SECONDS.min, CLIP_SECONDS.max)
       : int(env.CLIPPERS_STREAMER_CLIP_SECONDS, 45, 10, STREAMER_CLIP_MAX_SECONDS),
+    // Unknown clip language: Twitch broadcaster_language prior, then whisper detection on the cut (>= this confidence).
+    languageMinConfidence: (() => { const n = Number.parseFloat(env.CLIPPERS_STREAMER_LANGUAGE_MIN_CONFIDENCE ?? ''); return Number.isFinite(n) ? Math.min(0.99, Math.max(0.5, n)) : LANGUAGE_DETECT_MIN_CONFIDENCE; })(),
     maxSourceAgeHours: int(env.CLIPPERS_STREAMER_CLOUD_MAX_SOURCE_AGE_HOURS, 72, 6, 168),
     // YouTube answers GitHub-hosted runner IPs with "Sign in to confirm you're not a bot" (even with
     // --impersonate chrome), so the cloud lane takes Twitch clips only unless YouTube is listed explicitly.
@@ -213,6 +215,17 @@ export async function liveDescriptionCheck({ candidate, env, fetch: fetchImpl })
     }
   } catch (e) { return { checked: false, reason: code(e, 'LIVE_CHECK_FAILED') }; }
   return { checked: false, reason: 'live_check_keys_missing' };
+}
+
+/** Twitch channel broadcaster_language (Helix channels) as a cheap language prior; null when unknown/unavailable. */
+export async function broadcasterLanguage({ candidate, env, fetch: fetchImpl }) {
+  const [platform, id] = String(candidate?.creatorKey ?? '').split(':');
+  if (platform !== 'twitch' || !id || !real(env.TWITCH_CLIENT_ID) || !real(env.TWITCH_CLIENT_SECRET)) return null;
+  try {
+    const client = createTwitchClient({ fetch: fetchImpl, clientId: env.TWITCH_CLIENT_ID, clientSecret: env.TWITCH_CLIENT_SECRET });
+    const [channel] = await client.helix('channels', [['broadcaster_id', id]]);
+    return typeof channel?.broadcaster_language === 'string' ? channel.broadcaster_language.slice(0, 8) : null;
+  } catch { return null; }
 }
 
 export function postItem({ candidate, destination, scheduledAt, caption, mediaUrl, mediaSha256, hookVariant, lane = null }) {
@@ -378,7 +391,7 @@ export function createApprovalLedger(query) {
  * deps: { store, approvals, metricool (createPortfolioMetricool-like), stager, fetch, download, render, outputDir }
  */
 export async function runCloudPublisher({ env = process.env, now = Date.now(), owner, store, approvals, metricool, stager, fetch: fetchImpl = globalThis.fetch,
-  download = downloadSource, render = renderVerticalClip, makeDir = makeWorkDir, outputDir = null, minIntervalMs = 0, clock = () => Date.now(), growthOnly = false }) {
+  download = downloadSource, render = renderVerticalClip, detectLanguage = detectSpeechLanguage, makeDir = makeWorkDir, outputDir = null, minIntervalMs = 0, clock = () => Date.now(), growthOnly = false }) {
   // A growth-only pass (read-only analytics) runs even while publishing is off; the kill switch still stops it.
   const config = { ...cloudPublishConfig(env), ...(growthOnly ? { enabled: true } : {}) };
   const ns = STREAMER_STATE_NAMESPACE(owner);
@@ -585,7 +598,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   const runStartedAt = clock();
   report.counts.platforms = config.platforms.join(',');
   const canStart = report.status !== 'held_missing_secrets' && (config.dryRun || canWrite);
-  for (const candidate of canStart ? queue : []) {
+  for (const queued of canStart ? queue : []) {
+    let candidate = queued;
     if (processed >= config.clipsPerRun || tried >= config.clipsPerRun + 3) break;
     if (botBlocked && candidate.platform === 'youtube') continue; // one bot check is enough for this run
     if (clock() - runStartedAt > config.runDeadlineMs) { report.heldReasons.push('run_deadline_reached'); break; }
@@ -615,7 +629,40 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       .filter(p => !isHeld(ledgerNow, p.destination))
       .filter(p => p.scheduledAt && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(p.destination) && x.status !== 'deferred'));
     // Account lanes: exactly one account per clip (replaces the fan-out to every destination).
-    let lanePick = null;
+    let lanePick = null, pre = null, languageEvidence = null;
+    const discardPre = async () => { if (pre?.workDir) await rm(pre.workDir, { recursive: true, force: true }).catch(() => undefined); pre = null; };
+    if (config.lanesEnabled && routeCandidate(candidate, { creator: state.creators?.[candidate.creatorKey] ?? null, streamOwner: null }).reason === 'language_unknown') {
+      // Clip/VOD language missing: channel broadcaster_language first, else whisper on the downloaded cut.
+      let resolved = resolveCandidateLanguage({ broadcasterLanguage: await broadcasterLanguage({ candidate, env, fetch: fetchImpl }), minConfidence: config.languageMinConfidence });
+      if (!resolved.language) {
+        try {
+          const dir = await makeDir();
+          pre = { workDir: dir, source: null };
+          pre.source = await download({ candidate, workDir: dir, targetSec: config.clipSeconds, env });
+        } catch (e) {
+          await discardPre();
+          report.counts.failed++; report.errors.push(`clip:${code(e)}`);
+          if (code(e) === 'SOURCE_BOT_CHECK') botBlocked = true;
+          await setClip({ status: 'failed', attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, reason: code(e) });
+          continue;
+        }
+        if (clock() - runStartedAt > config.runDeadlineMs) { await discardPre(); report.heldReasons.push('run_deadline_reached'); await setClip({ status: 'deferred', reason: 'run_deadline_reached' }); break; }
+        const detection = await detectLanguage({ sourceFile: pre.source.file, workDir: pre.workDir, env, maxSec: Math.min(30, pre.source.cut?.duration ?? 30) });
+        resolved = resolveCandidateLanguage({ detection, minConfidence: config.languageMinConfidence });
+        languageEvidence = { source: 'whisper', status: detection.status, detected: detection.language ?? null, confidence: detection.confidence ?? null, error: detection.error ?? null, threshold: config.languageMinConfidence };
+      } else languageEvidence = { source: resolved.source, detected: resolved.language, confidence: null };
+      if (!resolved.language) {
+        await discardPre();
+        report.heldReasons.push(`lane_unrouted:${resolved.reason}`); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1;
+        report.counts.languageHeld = (report.counts.languageHeld ?? 0) + 1;
+        // Kept held (not retried: the same audio gives the same answer); evidence stays in the ledger.
+        await setClip({ status: 'held_language', reason: resolved.reason, languageEvidence });
+        continue;
+      }
+      languageEvidence = { ...languageEvidence, language: resolved.language };
+      report.counts[`language_${resolved.source}`] = (report.counts[`language_${resolved.source}`] ?? 0) + 1;
+      candidate = { ...candidate, language: resolved.language, languageSource: resolved.source, languageConfidence: resolved.confidence };
+    }
     if (config.lanesEnabled) {
       const freshLedger = cloudPublishOf(parseStreamerState(await store.read(ns)));
       lanePick = laneTarget({ state, ledger: freshLedger, candidate, config, now });
@@ -624,7 +671,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         const heldPick = laneTarget({ state, ledger: { ...freshLedger, holds: {} }, candidate, config, now });
         if (heldPick.ok && isHeld(freshLedger, heldPick.destination)) { lanePick = heldPick; heldTargets = [{ destination: heldPick.destination, index: 0, lane: heldPick }]; }
       }
-      if (!lanePick.ok) { report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
+      if (!lanePick.ok) { await discardPre(); if (languageEvidence) await setClip({ languageEvidence }); report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
       plan.splice(0, plan.length, ...(heldTargets.length ? [] : [{ destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt }]));
       report.counts[`lane_${lanePick.lane}`] = (report.counts[`lane_${lanePick.lane}`] ?? 0) + 1;
     } else if (plan.length > 1) {
@@ -634,7 +681,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const first = config.destinations.findIndex(d => isHeld(ledgerNow, d) && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(d) && x.status !== 'deferred'));
       if (first >= 0 && config.destinations.every(d => isHeld(ledgerNow, d))) heldTargets = [{ destination: config.destinations[first], index: first, lane: null }];
     }
-    if (!plan.length && !heldTargets.length) { report.heldReasons.push('no_free_slots'); break; }
+    if (!plan.length && !heldTargets.length) { await discardPre(); report.heldReasons.push('no_free_slots'); break; }
     tried++;
     let { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
     if (lanePick?.killedHooks?.includes(hookVariant)) { hookVariant = hookVariant === 'title' ? 'teaser' : 'title'; hookMode = 'killed_arm_swap'; }
@@ -642,11 +689,12 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const caption = lanePick
       ? laneCaption({ lane: lanePick.lane, title: candidate.title, name: creatorName, handle: candidate.handle, platform: candidate.platform, sourceUrl: candidate.sourceUrl })
       : clipCaption(candidate, hookVariant);
-    if (!captionHasCredit(caption, candidate.handle, candidate.sourceUrl)) { await setClip({ status: 'blocked', reason: 'caption_missing_credit' }); report.counts.blocked++; continue; }
+    if (!captionHasCredit(caption, candidate.handle, candidate.sourceUrl)) { await discardPre(); await setClip({ status: 'blocked', reason: 'caption_missing_credit' }); report.counts.blocked++; continue; }
     let workDir = null, rendered = null, asset = null;
     try {
-      workDir = await makeDir();
-      const source = await download({ candidate, workDir, targetSec: config.clipSeconds, env });
+      workDir = pre?.workDir ?? await makeDir();
+      const source = pre?.source ?? await download({ candidate, workDir, targetSec: config.clipSeconds, env });
+      pre = null; // owned by workDir now (removed in finally)
       if (clock() - runStartedAt > config.runDeadlineMs) { // Too late to render + publish safely in this run.
         report.heldReasons.push('run_deadline_reached');
         await setClip({ status: 'deferred', reason: 'run_deadline_reached' });
@@ -660,7 +708,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       report.counts.rendered++;
       processed++;
       const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
-        captions: rendered.captions ?? null, captionsError: rendered.captionsError ?? null, captionLanguage: rendered.captionLanguage ?? null };
+        captions: rendered.captions ?? null, captionsError: rendered.captionsError ?? null, captionLanguage: rendered.captionLanguage ?? null, languageEvidence };
       if (config.dryRun) {
         if (outputDir) { await mkdir(outputDir, { recursive: true }); await copyFile(rendered.file, path.join(outputDir, `${candidate.id.replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`)); }
         await setClip({ ...base, status: 'dry_run_rendered' });

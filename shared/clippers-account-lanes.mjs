@@ -78,6 +78,24 @@ export function normalizeLanguage(value) {
   return /^[a-z]{2,3}$/.test(code) ? code : null;
 }
 export const SERVED_LANGUAGES = freeze(['en', 'es']);
+export const LANGUAGE_DETECT_MIN_CONFIDENCE = 0.6;
+
+/**
+ * Language for a candidate whose clip/VOD language is missing. Order: Twitch channel broadcaster_language
+ * (cheap prior), then whisper detection on the cut (needs confidence >= threshold). Returns
+ * { language, source, confidence } when known (served or not), or { language: null, reason } to keep it held.
+ */
+export function resolveCandidateLanguage({ broadcasterLanguage = null, detection = null, minConfidence = LANGUAGE_DETECT_MIN_CONFIDENCE } = {}) {
+  const prior = normalizeLanguage(broadcasterLanguage);
+  if (prior && prior !== 'other') return { language: prior, source: 'broadcaster_language', confidence: null };
+  if (!detection) return { language: null, reason: 'language_unknown' };
+  if (detection.status !== 'detected') return { language: null, reason: `language_detect_${detection.status}` };
+  const language = normalizeLanguage(detection.language);
+  if (!language) return { language: null, reason: 'language_detect_failed' };
+  const confidence = Number(detection.confidence);
+  if (!(confidence >= minConfidence)) return { language: null, reason: 'language_low_confidence', detected: language, confidence: Number.isFinite(confidence) ? confidence : null };
+  return { language, source: 'whisper', confidence };
+}
 
 /**
  * Pick exactly one lane for a candidate. Only clips whose language is known and exactly 'en' or 'es' are routed,
