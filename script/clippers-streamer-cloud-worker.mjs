@@ -505,7 +505,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const scheduledAt = nextSlot({ now, config: slotConfig, destination, index: q.index ?? 0, posts: fresh.posts });
       if (!scheduledAt) { report.heldReasons.push('held_release:no_free_slots'); break; }
       const lane = q.lane ? { ...q.lane, dailyLimit: plan.cap,
-        draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now })) } : null;
+        draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now, override: overrideApplies(config, destination) })) } : null; // override: TikTok only, so Facebook releases need the real 1k gate
       const item = postItem({ candidate: { id: q.candidateId, creatorKey: q.creatorKey }, destination, scheduledAt, caption: q.caption, mediaUrl, mediaSha256: q.mediaSha256, hookVariant: q.hookVariant, lane });
       if (!lane) item.draft = true; // queued without lane fields (lanes off): owner approves it as a draft, whatever the current lane mode
       const blocked = await update((s, c) => {
