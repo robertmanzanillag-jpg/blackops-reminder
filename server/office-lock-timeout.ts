@@ -48,7 +48,7 @@ export function skipOnOwnerLockTimeout(step: string, run: () => Promise<void>, d
     try {
       await run();
     } catch (error) {
-      if (!isLockNotAvailable(error)) throw error;
+      if (!isLockNotAvailable(error) || (error as { updateStarted?: unknown }).updateStarted === true) throw error;
       let holders: LockHolder[] | "unavailable" = "unavailable";
       try { holders = await diagnose(); } catch { /* diagnostics are best effort */ }
       log(JSON.stringify({ event: "office_owner_lock_busy", step, action: "skipped_cycle_will_retry", holders }));

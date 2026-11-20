@@ -64,3 +64,25 @@ test("Kong supervisor reads video status before taking the council owner lock", 
   assert.equal(reads, 1);
   assert.equal(readsInsideLock, 0);
 });
+
+test("every pool role gets a named application_name; council pools cap idle-in-transaction at 30 s", async () => {
+  const { blackopsApplicationName, councilPoolConfig, COUNCIL_IDLE_IN_TRANSACTION_MS } = await import("../server/agent-council-store");
+  assert.equal(blackopsApplicationName("streamers", { GITHUB_ACTIONS: "true", GITHUB_JOB: "discover" }), "blackops-streamers:gha-discover");
+  assert.equal(blackopsApplicationName("web-db", { REPLIT_DEPLOYMENT: "1" }), "blackops-web-db:replit-web");
+  assert.ok(blackopsApplicationName("x".repeat(80), { GITHUB_ACTIONS: "true", GITHUB_JOB: "y".repeat(80) }).length <= 63);
+  const config = councilPoolConfig("postgres://example/db", "credit-notify", {});
+  assert.equal(config.application_name, "blackops-credit-notify:local");
+  assert.equal(config.idle_in_transaction_session_timeout, 30_000);
+  assert.equal(COUNCIL_IDLE_IN_TRANSACTION_MS, 30_000);
+});
+
+test("no PostgreSQL pool in server/ or script/ is left without application_name", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const unnamed: string[] = [];
+  for (const dir of ["server", "script"]) for (const file of (readdirSync(new URL(`../${dir}/`, import.meta.url), { recursive: true }) as string[]).filter(f => !f.startsWith("office-api-budget-v6/") && f !== "software-factory-store.ts")) {
+    if (!/\.(ts|mjs)$/.test(file) || /\.test\./.test(file)) continue;
+    const src = readFileSync(new URL(`../${dir}/${file}`, import.meta.url), "utf8");
+    for (const m of src.matchAll(/new (?:pg\.)?Pool\(\{[^;]*?\}\)/gs)) if (!/application_name/.test(m[0]) && !/councilPoolConfig/.test(m[0])) unnamed.push(`${dir}/${file}`);
+  }
+  assert.deepEqual(unnamed, []);
+});

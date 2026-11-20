@@ -46,7 +46,7 @@ async function main() {
   const owner = (process.env.DEFAULT_USER_ID ?? "").trim();
   if (!owner) throw new Error("DEFAULT_USER_ID_REQUIRED");
   if (!process.env.DATABASE_URL?.trim()) throw new Error("DATABASE_URL_REQUIRED");
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 10000, max: 1 });
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 10000, max: 1 , application_name: "blackops-review-enqueue" });
   pool.on("error", () => undefined);
   try {
     if (!apply) {

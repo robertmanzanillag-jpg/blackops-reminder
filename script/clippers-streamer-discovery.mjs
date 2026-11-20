@@ -309,6 +309,14 @@ export function createPendingActionsQueue(query) {
   };
 }
 
+/** Owner decisions from the approval queue onto local candidates (pure; no IO). */
+export function syncApprovals(state, statuses) {
+  // Prohibited / taken-down clips stay rejected locally even if the row was approved before the takedown.
+  for (const c of state.candidates) if (c.clipPolicy?.status === 'prohibited' && c.approval && c.approval.status !== 'not_requested') c.approval.status = 'rejected';
+  for (const c of state.candidates) if (c.clipPolicy?.status !== 'prohibited' && c.approval?.pendingActionId && statuses.has(c.approval.pendingActionId)) c.approval.status = statuses.get(c.approval.pendingActionId) === 'executed' ? 'approved' : statuses.get(c.approval.pendingActionId);
+  return state;
+}
+
 // ---------- One run ----------
 export async function runStreamerDiscovery({ env = process.env, now = Date.now(), fetch: fetchImpl = globalThis.fetch, store, queue, owner, minIntervalMs = 0 }) {
   const config = streamerConfig(env);
@@ -347,22 +355,31 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
   if (report.errors.length) report.status = twitch || youtube ? 'partial' : 'failed';
   else if (credentialFailures) report.status = twitch || youtube ? 'partial' : 'held_credentials';
   let queued = 0;
-  const saved = await store.transact(STREAMER_STATE_NAMESPACE(owner), async raw => {
+  // Never hold the council owner lock across IO on another pool: read the approval queue and insert
+  // (idempotent per candidate) BEFORE the transaction; the transaction itself only applies results.
+  const ns = STREAMER_STATE_NAMESPACE(owner);
+  const preview = parseStreamerStateStrict(await store.read(ns));
+  if (!preview) throw new Error('STREAMER_STATE_INVALID');
+  const draft = twitch || youtube ? applyDiscovery(preview, { now, twitch, youtube, config }) : preview;
+  const draftIds = draft.candidates.map(c => c.approval?.pendingActionId).filter(Boolean);
+  const statuses = queue ? await queue.statuses(owner, draftIds) : new Map();
+  syncApprovals(draft, statuses);
+  const requested = new Map();
+  if (queue && config.city.pages.length) {
+    for (const c of selectForApproval(draft, config)) {
+      const row = approvalRow(c, owner, config);
+      requested.set(c.id, { status: row.status, pendingActionId: await queue.insert(row), requestedAt: report.at, mode: row.input.approvalMode });
+    }
+  }
+  const saved = await store.transact(ns, async raw => {
     let state = parseStreamerStateStrict(raw);
     if (!state) throw new Error('STREAMER_STATE_INVALID');
     if (twitch || youtube) state = applyDiscovery(state, { now, twitch, youtube, config });
-    // Sync owner decisions from the approval queue.
-    const ids = state.candidates.map(c => c.approval?.pendingActionId).filter(Boolean);
-    const statuses = queue ? await queue.statuses(owner, ids) : new Map();
-    // Prohibited / taken-down clips stay rejected locally even if the row was approved before the takedown.
-    for (const c of state.candidates) if (c.clipPolicy?.status === 'prohibited' && c.approval && c.approval.status !== 'not_requested') c.approval.status = 'rejected';
-    for (const c of state.candidates) if (c.clipPolicy?.status !== 'prohibited' && c.approval?.pendingActionId && statuses.has(c.approval.pendingActionId)) c.approval.status = statuses.get(c.approval.pendingActionId) === 'executed' ? 'approved' : statuses.get(c.approval.pendingActionId);
-    if (queue && config.city.pages.length) {
-      for (const c of selectForApproval(state, config)) {
-        const row = approvalRow(c, owner, config);
-        c.approval = { status: row.status, pendingActionId: await queue.insert(row), requestedAt: report.at, mode: row.input.approvalMode };
-        queued++;
-      }
+    syncApprovals(state, statuses);
+    queued = 0;
+    for (const c of state.candidates) {
+      const approval = requested.get(c.id);
+      if (approval && c.approval?.status === 'not_requested') { c.approval = approval; queued++; }
     }
     const overdue = state.takedowns.filter(t => !t.removedAt && Date.parse(t.removeBy) < now);
     if (overdue.length) heldReasons.push('takedown_overdue');
@@ -401,7 +418,7 @@ async function main() {
   }
   const { getCouncilStore, createCouncilPool } = await import('../server/agent-council-store.ts');
   const store = await getCouncilStore();
-  const pool = await createCouncilPool();
+  const pool = await createCouncilPool('streamers');
   const query = async (sql, values) => { const client = await pool.connect(); try { return await client.query(sql, values); } finally { client.release(); } };
   const owner = process.env.DEFAULT_USER_ID.trim();
   if (args.includes('--export-local-queue')) {

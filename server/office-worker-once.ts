@@ -6,6 +6,8 @@
  * lease inside the budget. Uncertain or fenced work is never replayed: a failed
  * cycle ends the run, exactly as the PC worker's single-pass/fail-fast modes do.
  */
+import { isLockNotAvailable } from "./office-lock-timeout";
+
 export const OFFICE_ONCE_MAX_DURATION_MS = 13 * 60_000;
 /** Existing five-minute claim lease plus one minute for admission and settlement. */
 export const OFFICE_ONCE_CLAIM_WINDOW_MS = 6 * 60_000;
@@ -74,6 +76,12 @@ export function safeFailureCode(error: unknown): string {
     if (typeof name === "string" && /^[A-Za-z]{1,40}$/.test(name)) return `CLASS_${name}`;
   } catch { /* a hostile error object must not break the report */ }
   return "UNKNOWN";
+}
+
+/** 55P03 lock_not_available raised before a council update callback ran (nothing was written). */
+export function isRetryableLockContention(error: unknown): boolean {
+  if (!isLockNotAvailable(error)) return false;
+  try { return Object.getOwnPropertyDescriptor(error as object, "updateStarted")?.value !== true; } catch { return false; }
 }
 
 const defaultClock: OfficeOnceClock = {
@@ -146,6 +154,16 @@ export async function runOfficeWorkerOnce(host: OfficeOnceHost, options: {
           else if (idleExitMs && now() - lastWorkAt >= idleExitMs) { cycles++; return result("idle"); }
         }
       } catch (error) {
+        // Owner-lock contention (55P03) raised before any council update started wrote nothing:
+        // skip this cycle with a notice and retry on the next one. Every other error still fails.
+        if (isRetryableLockContention(error)) {
+          console.log(`::notice::Office worker cycle skipped: council owner lock busy (55P03); retrying next cycle.`);
+          console.error(JSON.stringify({ event: "office_owner_lock_busy", step: "cycle", action: "skipped_cycle_will_retry" }));
+          cycles++;
+          if (halted()) continue;
+          await new Promise<void>(resolve => { const id = clock.setTimeout(() => { wake = undefined; resolve(); }, pollMs); wake = () => { clock.clearTimeout(id); wake = undefined; resolve(); }; });
+          continue;
+        }
         console.error(`Office worker cycle unconfirmed; no task will be retried automatically. code=${safeFailureCode(error)}`);
         return result("unconfirmed");
       }

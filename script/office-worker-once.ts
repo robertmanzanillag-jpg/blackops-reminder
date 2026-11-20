@@ -6,6 +6,7 @@ import { describeOwnerLockHolders, skipOnOwnerLockTimeout } from "../server/offi
 export { safeFailureCode };
 // Same validation and fixed review-only flags as the reviewed Windows launcher.
 import { parseWorkerConfig, safeWorkerEnvironment } from "./office-windows-worker.mjs";
+import { blackopsApplicationName } from "../server/agent-council-store";
 
 const CONFIG_KEYS = ["DATABASE_URL", "DEFAULT_USER_ID", "OPENAI_API_KEY", "OFFICE_OPENAI_MODEL", "OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT", "OFFICE_OPENAI_MAX_OUTPUT_TOKENS",
   "OFFICE_ACADEMY_PREPARATION_ENABLED", "OFFICE_ACADEMY_EXECUTION_ENABLED", "OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED", "OFFICE_EXPECTED_WEB_REVISION", "GITHUB_TOKEN",
@@ -32,7 +33,7 @@ async function main() {
   const lockKey = `office-worker-executor:v1:${ownerKey}`;
   // Dedicated session for the advisory lock. Requires a direct (non transaction-pooled) URL;
   // a pooled session makes verify() fail and the run stops instead of running unowned.
-  const lockPool = new Pool({ connectionString: config.DATABASE_URL, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 15000, query_timeout: 20000 });
+  const lockPool = new Pool({ connectionString: config.DATABASE_URL, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 15000, query_timeout: 20000, application_name: blackopsApplicationName("office-owner") });
   let host: Awaited<ReturnType<typeof import("../server/office-worker-assembly")["assembleOfficeWorker"]>> | undefined;
   let lockClient: import("pg").PoolClient | undefined;
   // Council rows are keyed by sha256(owner): the same key the council store locks.

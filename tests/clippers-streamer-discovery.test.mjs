@@ -219,3 +219,19 @@ test('with the cloud publisher on, approvals go only to platforms it can downloa
   const rows = [...queue.rows.values()];
   assert.ok(rows.length >= 1); assert.ok(rows.every(r => r.input.platform === 'twitch'));
 });
+
+test('approval-queue IO and HTTP never run while the council owner lock is held', async () => {
+  const base = memoryStore(), inner = memoryQueue(), { fn } = mockFetch();
+  let inTx = false, ioInTx = 0;
+  const store = { data: base.data, read: base.read, async transact(k, update) { inTx = true; try { return await base.transact(k, update); } finally { inTx = false; } } };
+  const queue = { rows: inner.rows, async insert(row) { if (inTx) ioInTx++; return inner.insert(row); }, async statuses(o, ids) { if (inTx) ioInTx++; return inner.statuses(o, ids); } };
+  const fetch = async (...a) => { if (inTx) ioInTx++; return fn(...a); };
+  const { report, state } = await runStreamerDiscovery({ env: ENV, now: NOW, fetch, store, queue, owner: 'o' });
+  assert.equal(report.status, 'completed', JSON.stringify(report.errors));
+  assert.equal(ioInTx, 0, 'no network or pending_actions IO inside the transaction');
+  assert.ok(inner.rows.size >= 2 && report.counts.queuedForApproval === inner.rows.size);
+  assert.ok([...inner.rows.values()].every(r => state.candidates.find(c => c.id === r.resourceId)?.approval?.pendingActionId === r.id));
+  // A second run reuses existing rows (idempotent) and keeps the recorded approvals.
+  const again = await runStreamerDiscovery({ env: ENV, now: NOW + 3_600_000, fetch, store, queue, owner: 'o' });
+  assert.equal(ioInTx, 0); assert.equal(again.report.counts.queuedForApproval, 0);
+});

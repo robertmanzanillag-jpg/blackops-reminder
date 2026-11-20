@@ -80,7 +80,7 @@ export function validateWorkerPaths(repoInput, configInput, nodeInput = process.
 }
 export async function preflightDatabase(config, Pool, assertProtocolReady) {
   if (typeof assertProtocolReady !== 'function') fail('PROTOCOL_VERIFIER_REQUIRED');
-  const pool = new Pool({ connectionString:config.DATABASE_URL, connectionTimeoutMillis:10000, statement_timeout:10000, max:1 });
+  const pool = new Pool({ connectionString:config.DATABASE_URL, connectionTimeoutMillis:10000, statement_timeout:10000, max:1, application_name:'blackops-office-pc:windows' });
   try {
     const result = await pool.query(`SELECT to_regclass('public.agent_office_cloud_jobs') AS jobs, to_regclass('public.office_agent_workers') AS workers, to_regclass('public.revenue_engine_state') AS council`);
     if (!result.rows[0]?.jobs || !result.rows[0]?.workers || !result.rows[0]?.council) fail('QUEUE_SCHEMA_MISSING');
