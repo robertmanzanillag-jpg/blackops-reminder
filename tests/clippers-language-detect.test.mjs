@@ -6,8 +6,8 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE } from '../shared/clippers-account-lanes.mjs';
-import { parseWhisperLanguage, whisperDetectArgs, detectSpeechLanguage } from '../script/clippers-streamer-cloud-render.mjs';
-import { runCloudPublisher, cloudPublishConfig, broadcasterLanguage } from '../script/clippers-streamer-cloud-worker.mjs';
+import { parseWhisperLanguage, whisperDetectArgs, detectSpeechLanguage, whisperConfigured } from '../script/clippers-streamer-cloud-render.mjs';
+import { runCloudPublisher, cloudPublishConfig, broadcasterLanguage, broadcasterLanguages } from '../script/clippers-streamer-cloud-worker.mjs';
 import { buildCreditCaption } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
 
@@ -85,6 +85,7 @@ function media(detections) {
     makeDir: async () => mkdtemp(path.join(tmpdir(), 'lang-')) };
 }
 const ENV = { CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: '', CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345' };
+const WENV = { ...ENV, CLIPPERS_WHISPER_BIN: 'whisper-cli', CLIPPERS_WHISPER_MODEL: 'ggml-base.bin' };
 const approvals = { async statuses(o, ids) { return new Map(ids.map(i => [i, 'approved'])); }, async markExecuted() {} };
 const asJson = (body, status = 200) => ({ ok: status < 400, status, async json() { return body; }, async text() { return JSON.stringify(body); } });
 
@@ -93,7 +94,7 @@ test('worker: unknown language -> whisper on the cut routes es to Miami, en to m
   const store = memoryStore(state([candidate('a', 'twitch:2', 'westcol'), candidate('b', 'twitch:1', 'kaicenat'), candidate('c', 'twitch:3', 'k4sen')]));
   const m = media({ 'twitch-clip:a': det('es', 0.87), 'twitch-clip:b': det('en', 0.95), 'twitch-clip:c': det('pt', 0.41), 'twitch-clip:d': det('ja', 0.95) });
   const mc = fakeMetricool();
-  const { report } = await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store, approvals, metricool: mc, stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  const { report } = await runCloudPublisher({ env: WENV, now: NOW, owner: 'o', store, approvals, metricool: mc, stager: stager(), fetch: async () => ({ status: 206 }), ...m });
   const dests = Object.fromEntries(mc.calls.schedule.map(c => [c.item.candidateId, c.item.destinationKey]));
   assert.equal(dests['twitch-clip:a'], MIAMI); assert.equal(dests['twitch-clip:b'], MEMES);
   assert.equal(mc.calls.schedule.length, 2);
@@ -107,10 +108,11 @@ test('worker: unknown language -> whisper on the cut routes es to Miami, en to m
   // Confident but not served (ja): never routed, evidence kept.
   const store2 = memoryStore(state([candidate('d', 'twitch:3', 'k4sen')]));
   const mc2 = fakeMetricool();
-  const r2 = await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store: store2, approvals, metricool: mc2, stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  const r2 = await runCloudPublisher({ env: WENV, now: NOW, owner: 'o', store: store2, approvals, metricool: mc2, stager: stager(), fetch: async () => ({ status: 206 }), ...m });
   assert.equal(mc2.calls.schedule.length, 0);
   assert.ok(r2.report.heldReasons.includes('lane_unrouted:language_not_served:ja'));
   assert.equal(store2.state.cloudPublish.clips['twitch-clip:d'].languageEvidence.detected, 'ja');
+  assert.equal(store2.state.cloudPublish.clips['twitch-clip:d'].status, 'held_language');
 });
 
 test('worker: Twitch broadcaster_language prior routes without downloading for detection; whisper off keeps it held', async () => {
@@ -135,6 +137,88 @@ test('worker: Twitch broadcaster_language prior routes without downloading for d
   const mc2 = fakeMetricool();
   const { report } = await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store: store2, approvals, metricool: mc2, stager: stager(), fetch: async () => ({ status: 206 }), ...media({}) });
   assert.equal(mc2.calls.schedule.length, 0);
-  assert.equal(store2.state.cloudPublish.clips['twitch-clip:q'].status, 'held_language');
+  const q = store2.state.cloudPublish.clips['twitch-clip:q'];
+  assert.equal(q.status, 'deferred'); assert.equal(q.attempts, 1, 'bounded by maxAttempts');
   assert.ok(report.heldReasons.includes('lane_unrouted:language_detect_whisper_not_configured'));
+});
+
+// ---------- Review fixes ----------
+const twitchFetch = (langs, log = []) => async url => {
+  const u = String(url); log.push(u);
+  if (u.startsWith('https://id.twitch.tv/')) return asJson({ access_token: 'tok' });
+  if (u.includes('/helix/channels')) { const ids = new URL(u).searchParams.getAll('broadcaster_id'); return asJson({ data: ids.filter(i => langs[i]).map(i => ({ broadcaster_id: i, broadcaster_language: langs[i] })) }); }
+  if (u.includes('/helix/users')) return asJson({ data: [{ id: '1', description: '' }] });
+  return { status: 206, ok: true };
+};
+const TENV = { ...ENV, TWITCH_CLIENT_ID: 'cid-real', TWITCH_CLIENT_SECRET: 'secret-real' };
+
+test('fix 1: lane pick failure writes evidence with a retryable status; unserved channel language is language_not_served', async () => {
+  const store = memoryStore(state([candidate('l', 'twitch:2', 'westcol')]));
+  const mc = fakeMetricool();
+  // Only memes destination configured: the Spanish lane has no connected destination.
+  const env = { ...TENV, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: MEMES };
+  await runCloudPublisher({ env, now: NOW, owner: 'o', store, approvals, metricool: mc, stager: stager(), fetch: twitchFetch({ 2: 'es' }), ...media({}) });
+  const clip = store.state.cloudPublish.clips['twitch-clip:l'];
+  assert.equal(mc.calls.schedule.length, 0);
+  assert.equal(clip.status, 'deferred'); assert.match(clip.reason, /^lane_destination_not_connected:/);
+  assert.equal(clip.languageEvidence.language, 'es');
+
+  const store2 = memoryStore(state([candidate('pt', 'twitch:3', 'k4sen')]));
+  const m2 = media({});
+  const r2 = await runCloudPublisher({ env: TENV, now: NOW, owner: 'o', store: store2, approvals, metricool: fakeMetricool(), stager: stager(), fetch: twitchFetch({ 3: 'pt' }), ...m2 });
+  assert.equal(store2.state.cloudPublish.clips['twitch-clip:pt'].status, 'language_not_served');
+  assert.ok(r2.report.heldReasons.includes('lane_unrouted:language_not_served:pt'));
+  assert.equal(m2.calls.download.length, 0);
+});
+
+test('fix 2: detection failure is failed with attempts (retried up to maxAttempts); low confidence stays held', async () => {
+  const store = memoryStore(state([candidate('f', 'twitch:1', 'kaicenat')]));
+  const m = media({ 'twitch-clip:f': { status: 'detection_failed', error: 'X' } });
+  for (let i = 0; i < 4; i++) await runCloudPublisher({ env: WENV, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  const clip = store.state.cloudPublish.clips['twitch-clip:f'];
+  assert.equal(clip.status, 'failed'); assert.equal(clip.reason, 'language_detect_detection_failed'); assert.equal(clip.attempts, 3);
+  assert.equal(m.calls.detect.length, 3, 'stops after maxAttempts');
+});
+
+test('fix 3: without whisper no download happens for detection', async () => {
+  const store = memoryStore(state([candidate('n', 'twitch:1', 'kaicenat')]));
+  const m = media({});
+  await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  assert.equal(m.calls.download.length, 0); assert.equal(m.calls.detect.length, 0);
+  assert.equal(whisperConfigured(WENV), true); assert.equal(whisperConfigured(ENV), false);
+});
+
+test('fix 4: early download failures count toward the tried cap', async () => {
+  const ids = Array.from({ length: 12 }, (_, i) => `e${i}`);
+  const store = memoryStore(state(ids.map(id => candidate(id, 'twitch:1', 'kaicenat'))));
+  const m = media({});
+  m.download = async ({ candidate: c }) => { m.calls.download.push(c.id); throw new Error('SOURCE_DOWNLOAD_FAILED'); };
+  await runCloudPublisher({ env: { ...WENV, CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN: '2' }, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  assert.equal(m.calls.download.length, 5, 'clipsPerRun + 3');
+});
+
+test('fix 5: whisper runs even with a known channel language; confident disagreement holds as language_conflict', async () => {
+  const store = memoryStore(state([candidate('x', 'twitch:2', 'westcol'), candidate('y', 'twitch:1', 'kaicenat')]));
+  const m = media({ 'twitch-clip:x': { status: 'detected', language: 'en', confidence: 0.92 }, 'twitch-clip:y': { status: 'detected', language: 'en', confidence: 0.9 } });
+  const mc = fakeMetricool();
+  const { report } = await runCloudPublisher({ env: { ...TENV, ...WENV }, now: NOW, owner: 'o', store, approvals, metricool: mc, stager: stager(), fetch: twitchFetch({ 2: 'es', 1: 'en' }), ...m });
+  const x = store.state.cloudPublish.clips['twitch-clip:x'];
+  assert.equal(x.status, 'held_language'); assert.equal(x.reason, 'language_conflict');
+  assert.deepEqual({ ...x.languageEvidence.conflict }, { channel: 'es', detected: 'en', confidence: 0.92 });
+  assert.ok(report.heldReasons.includes('lane_unrouted:language_conflict'));
+  assert.equal(mc.calls.schedule.length, 1); assert.equal(mc.calls.schedule[0].item.candidateId, 'twitch-clip:y');
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:y'].languageEvidence.source, 'broadcaster_language');
+});
+
+test('fix 6: one Twitch client per run, channel languages batched (<= 100 ids per Helix call)', async () => {
+  const log = [];
+  const ids = Array.from({ length: 150 }, (_, i) => String(i + 1));
+  const langs = await broadcasterLanguages({ ids, env: TENV, fetch: twitchFetch(Object.fromEntries(ids.map(i => [i, 'en'])), log) });
+  assert.equal(langs.size, 150);
+  assert.equal(log.filter(u => u.startsWith('https://id.twitch.tv/')).length, 1);
+  assert.equal(log.filter(u => u.includes('/helix/channels')).length, 2);
+  const log2 = [];
+  const store = memoryStore(state([candidate('b1', 'twitch:1', 'kaicenat'), candidate('b2', 'twitch:2', 'westcol')]));
+  await runCloudPublisher({ env: TENV, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: twitchFetch({ 1: 'en', 2: 'es' }, log2), ...media({}) });
+  assert.equal(log2.filter(u => u.includes('/helix/channels')).length, 1, 'one batched channels call for the run');
 });

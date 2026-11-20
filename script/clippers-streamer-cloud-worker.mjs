@@ -25,10 +25,10 @@ import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
-import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText, detectSpeechLanguage } from './clippers-streamer-cloud-render.mjs';
+import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText, detectSpeechLanguage, whisperConfigured } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
 import { emptyCloudPublish, cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
-import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS, resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE } from '../shared/clippers-account-lanes.mjs';
+import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS, resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE, normalizeLanguage, SERVED_LANGUAGES } from '../shared/clippers-account-lanes.mjs';
 
 const HOUR = 3_600_000;
 const MAX_POSTS = 600;
@@ -218,14 +218,26 @@ export async function liveDescriptionCheck({ candidate, env, fetch: fetchImpl })
 }
 
 /** Twitch channel broadcaster_language (Helix channels) as a cheap language prior; null when unknown/unavailable. */
-export async function broadcasterLanguage({ candidate, env, fetch: fetchImpl }) {
+export async function broadcasterLanguage({ candidate, env, fetch: fetchImpl, client = null }) {
   const [platform, id] = String(candidate?.creatorKey ?? '').split(':');
-  if (platform !== 'twitch' || !id || !real(env.TWITCH_CLIENT_ID) || !real(env.TWITCH_CLIENT_SECRET)) return null;
-  try {
-    const client = createTwitchClient({ fetch: fetchImpl, clientId: env.TWITCH_CLIENT_ID, clientSecret: env.TWITCH_CLIENT_SECRET });
-    const [channel] = await client.helix('channels', [['broadcaster_id', id]]);
-    return typeof channel?.broadcaster_language === 'string' ? channel.broadcaster_language.slice(0, 8) : null;
-  } catch { return null; }
+  if (platform !== 'twitch' || !id) return null;
+  return (await broadcasterLanguages({ ids: [id], env, fetch: fetchImpl, client })).get(id) ?? null;
+}
+
+/** Batched broadcaster_language lookup: one Twitch client, Helix channels with up to 100 broadcaster_id per call. */
+export async function broadcasterLanguages({ ids, env, fetch: fetchImpl, client = null }) {
+  const out = new Map();
+  const unique = [...new Set((ids ?? []).map(String).filter(Boolean))];
+  if (!unique.length) return out;
+  if (!client && (!real(env.TWITCH_CLIENT_ID) || !real(env.TWITCH_CLIENT_SECRET))) return out;
+  const twitch = client ?? createTwitchClient({ fetch: fetchImpl, clientId: env.TWITCH_CLIENT_ID, clientSecret: env.TWITCH_CLIENT_SECRET });
+  for (let i = 0; i < unique.length; i += 100) {
+    try {
+      const rows = await twitch.helix('channels', unique.slice(i, i + 100).map(id => ['broadcaster_id', id]));
+      for (const row of rows) if (row?.broadcaster_id && typeof row.broadcaster_language === 'string') out.set(String(row.broadcaster_id), row.broadcaster_language.slice(0, 8));
+    } catch { /* unavailable: no prior for this batch */ }
+  }
+  return out;
 }
 
 export function postItem({ candidate, destination, scheduledAt, caption, mediaUrl, mediaSha256, hookVariant, lane = null }) {
@@ -595,6 +607,10 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   const ids = queue.map(c => c.approval?.pendingActionId).filter(Boolean);
   const live = approvals && ids.length ? await approvals.statuses(owner, ids) : new Map();
   let processed = 0, tried = 0, botBlocked = false;
+  // One Twitch client per run; channel languages fetched in batches only for clips whose language is unknown.
+  const needsLanguage = c => config.lanesEnabled && routeCandidate(c, { creator: state.creators?.[c.creatorKey] ?? null, streamOwner: null }).reason === 'language_unknown';
+  const twitchLanguageIds = queue.filter(needsLanguage).map(c => String(c.creatorKey ?? '').split(':')).filter(([p, id]) => p === 'twitch' && id).map(([, id]) => id);
+  const channelLanguages = twitchLanguageIds.length ? await broadcasterLanguages({ ids: twitchLanguageIds, env, fetch: fetchImpl }) : new Map();
   const runStartedAt = clock();
   report.counts.platforms = config.platforms.join(',');
   const canStart = report.status !== 'held_missing_secrets' && (config.dryRun || canWrite);
@@ -631,35 +647,64 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     // Account lanes: exactly one account per clip (replaces the fan-out to every destination).
     let lanePick = null, pre = null, languageEvidence = null;
     const discardPre = async () => { if (pre?.workDir) await rm(pre.workDir, { recursive: true, force: true }).catch(() => undefined); pre = null; };
-    if (config.lanesEnabled && routeCandidate(candidate, { creator: state.creators?.[candidate.creatorKey] ?? null, streamOwner: null }).reason === 'language_unknown') {
-      // Clip/VOD language missing: channel broadcaster_language first, else whisper on the downloaded cut.
-      let resolved = resolveCandidateLanguage({ broadcasterLanguage: await broadcasterLanguage({ candidate, env, fetch: fetchImpl }), minConfidence: config.languageMinConfidence });
-      if (!resolved.language) {
+    const priorAttempts = ledger.clips[candidate.id]?.attempts ?? 0;
+    if (needsLanguage(candidate)) {
+      // Clip/VOD language missing: channel broadcaster_language prior, plus whisper on the cut when configured
+      // (run even with a known channel language so bilingual channels are caught; a confident disagreement holds).
+      const [platform, channelId] = String(candidate.creatorKey ?? '').split(':');
+      const channelLanguage = platform === 'twitch' ? channelLanguages.get(channelId) ?? null : null;
+      const prior = resolveCandidateLanguage({ broadcasterLanguage: channelLanguage, minConfidence: config.languageMinConfidence });
+      let resolved = prior;
+      if (whisperConfigured(env)) {
         try {
           const dir = await makeDir();
           pre = { workDir: dir, source: null };
           pre.source = await download({ candidate, workDir: dir, targetSec: config.clipSeconds, env });
         } catch (e) {
           await discardPre();
+          tried++; // counts toward the clipsPerRun + 3 cap
           report.counts.failed++; report.errors.push(`clip:${code(e)}`);
           if (code(e) === 'SOURCE_BOT_CHECK') botBlocked = true;
-          await setClip({ status: 'failed', attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, reason: code(e) });
+          await setClip({ status: 'failed', attempts: priorAttempts + 1, reason: code(e) });
           continue;
         }
         if (clock() - runStartedAt > config.runDeadlineMs) { await discardPre(); report.heldReasons.push('run_deadline_reached'); await setClip({ status: 'deferred', reason: 'run_deadline_reached' }); break; }
         const detection = await detectLanguage({ sourceFile: pre.source.file, workDir: pre.workDir, env, maxSec: Math.min(30, pre.source.cut?.duration ?? 30) });
-        resolved = resolveCandidateLanguage({ detection, minConfidence: config.languageMinConfidence });
-        languageEvidence = { source: 'whisper', status: detection.status, detected: detection.language ?? null, confidence: detection.confidence ?? null, error: detection.error ?? null, threshold: config.languageMinConfidence };
-      } else languageEvidence = { source: resolved.source, detected: resolved.language, confidence: null };
+        const heard = resolveCandidateLanguage({ detection, minConfidence: config.languageMinConfidence });
+        languageEvidence = { source: 'whisper', status: detection.status, detected: detection.language ?? null, confidence: detection.confidence ?? null, error: detection.error ?? null, threshold: config.languageMinConfidence,
+          ...(prior.language ? { channelLanguage: prior.language } : {}) };
+        if (prior.language && heard.language && heard.language !== prior.language) {
+          resolved = { language: null, reason: 'language_conflict' };
+          languageEvidence = { ...languageEvidence, conflict: { channel: prior.language, detected: heard.language, confidence: heard.confidence } };
+        } else if (prior.language) {
+          languageEvidence = { ...languageEvidence, source: 'broadcaster_language' };
+        } else resolved = heard;
+      } else if (prior.language) languageEvidence = { source: prior.source, detected: prior.language, confidence: null };
+      else { resolved = { language: null, reason: 'language_detect_whisper_not_configured' }; languageEvidence = { source: 'none', status: 'whisper_not_configured', detected: null, confidence: null }; }
       if (!resolved.language) {
         await discardPre();
         report.heldReasons.push(`lane_unrouted:${resolved.reason}`); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1;
-        report.counts.languageHeld = (report.counts.languageHeld ?? 0) + 1;
-        // Kept held (not retried: the same audio gives the same answer); evidence stays in the ledger.
-        await setClip({ status: 'held_language', reason: resolved.reason, languageEvidence });
+        if (['language_low_confidence', 'language_conflict'].includes(resolved.reason)) {
+          // Kept held (the same audio gives the same answer); evidence stays in the ledger.
+          report.counts.languageHeld = (report.counts.languageHeld ?? 0) + 1;
+          await setClip({ status: 'held_language', reason: resolved.reason, languageEvidence });
+        } else {
+          // Not configured / unknown: retried later, bounded by maxAttempts. Detection errors count as failed.
+          const status = resolved.reason === 'language_detect_detection_failed' ? 'failed' : 'deferred';
+          report.counts[status === 'failed' ? 'failed' : 'deferred']++;
+          await setClip({ status, reason: resolved.reason, languageEvidence, attempts: priorAttempts + 1 });
+        }
         continue;
       }
       languageEvidence = { ...languageEvidence, language: resolved.language };
+      if (!SERVED_LANGUAGES.includes(normalizeLanguage(resolved.language))) {
+        await discardPre();
+        report.heldReasons.push(`lane_unrouted:language_not_served:${resolved.language}`); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1;
+        // Whisper-heard unserved language stays held with evidence; a channel language we do not serve is final.
+        if (resolved.source === 'whisper') { report.counts.languageHeld = (report.counts.languageHeld ?? 0) + 1; await setClip({ status: 'held_language', reason: `language_not_served:${resolved.language}`, languageEvidence }); }
+        else await setClip({ status: 'language_not_served', reason: `language_not_served:${resolved.language}`, languageEvidence });
+        continue;
+      }
       report.counts[`language_${resolved.source}`] = (report.counts[`language_${resolved.source}`] ?? 0) + 1;
       candidate = { ...candidate, language: resolved.language, languageSource: resolved.source, languageConfidence: resolved.confidence };
     }
@@ -671,7 +716,15 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         const heldPick = laneTarget({ state, ledger: { ...freshLedger, holds: {} }, candidate, config, now });
         if (heldPick.ok && isHeld(freshLedger, heldPick.destination)) { lanePick = heldPick; heldTargets = [{ destination: heldPick.destination, index: 0, lane: heldPick }]; }
       }
-      if (!lanePick.ok) { await discardPre(); if (languageEvidence) await setClip({ languageEvidence }); report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
+      if (!lanePick.ok) {
+        await discardPre();
+        // Evidence is only written together with a status, so the queue filter retries transient lane misses.
+        if (languageEvidence) {
+          const r = String(lanePick.reason);
+          const notServed = /language_not_served:/.test(r);
+          await setClip(notServed ? { status: 'language_not_served', reason: r, languageEvidence } : { status: 'deferred', reason: r, languageEvidence });
+        }
+        report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
       plan.splice(0, plan.length, ...(heldTargets.length ? [] : [{ destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt }]));
       report.counts[`lane_${lanePick.lane}`] = (report.counts[`lane_${lanePick.lane}`] ?? 0) + 1;
     } else if (plan.length > 1) {
