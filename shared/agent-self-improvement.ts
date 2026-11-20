@@ -16,7 +16,8 @@
 
 import { addSkill, type CompanyState } from "./agent-company";
 import type { CouncilProposal } from "./agent-council";
-import type { VitalityEvidence } from "./agent-vitality";
+import { CLIPPERS_MEASURED, DAILY_ROLE_WORK_ROLES, INTERNAL_WORK_ROLES, type VitalityEvidence } from "./agent-vitality";
+import { FACTORY_AGENTS } from "./factory-office-agents";
 
 const ms = (value: unknown) => { const n = typeof value === "string" ? Date.parse(value) : NaN; return Number.isFinite(n) ? n : 0; };
 const isObj = (v: unknown): v is Record<string, any> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
@@ -31,13 +32,53 @@ export function roleWorkVitalityEvidence(jobs: unknown): VitalityEvidence[] {
     .map(job => ({ id: `rolework:${job.artifactId}`, agentId: job.role as string, at: job.completedAt as string, label: "Trabajo diario de la oficina completado con artefacto" }));
 }
 
-/** Roles whose latest role-work job today was blocked by a missing/invalid source: clock paused. */
+const HOLD_WINDOW_MS = 30 * 3600_000;
+type JobLike = { role?: unknown; status?: unknown; startedAt?: unknown };
+function latestByRole(jobs: unknown): Map<string, JobLike> {
+  const latest = new Map<string, JobLike>();
+  if (!Array.isArray(jobs)) return latest;
+  for (const job of jobs as JobLike[]) if (job && typeof job.role === "string" && (!latest.has(job.role) || ms(job.startedAt) >= ms(latest.get(job.role)!.startedAt))) latest.set(job.role, job);
+  return latest;
+}
+
+/** Roles whose latest role-work job was blocked by a missing/invalid source: clock paused. */
 export function roleWorkHolds(jobs: unknown, now: number): Record<string, string> {
-  if (!Array.isArray(jobs)) return {};
-  const latest = new Map<string, RoleWorkLike>();
-  for (const job of jobs as RoleWorkLike[]) if (job && typeof job.role === "string" && (!latest.has(job.role) || ms(job.startedAt) >= ms(latest.get(job.role)!.startedAt))) latest.set(job.role, job);
   const holds: Record<string, string> = {};
-  for (const [role, job] of latest) if (job.status === "blocked" && now - ms(job.startedAt) <= 30 * 3600_000) holds[role] = "fuente de datos ausente o sin registros";
+  for (const [role, job] of latestByRole(jobs)) if (job.status === "blocked" && now - ms(job.startedAt) <= HOLD_WINDOW_MS) holds[role] = "fuente de datos ausente o sin registros";
+  return holds;
+}
+
+/**
+ * Agents whose pipeline is off, unassigned or unreadable never lose vida for inactivity: the
+ * office downtime is not theirs. Data-driven (no env flags): a role with no job in ~30 h, a
+ * vacant/unsupported seat, a factory with no stage this week, a Clippers lane with no state.
+ */
+export function pipelineHolds(input: {
+  now: number; roleWorkJobs?: unknown; internalWorkJobs?: unknown; seats?: Record<string, { status?: string }>;
+  factoryLedger?: unknown; streamerState?: unknown; streamerRead?: boolean; scoutLastRunAt?: string | null;
+}): Record<string, string> {
+  const holds: Record<string, string> = { ...roleWorkHolds(input.roleWorkJobs, input.now) };
+  const recent = (job: JobLike | undefined) => Boolean(job && input.now - ms(job.startedAt) <= HOLD_WINDOW_MS);
+  const roleWork = latestByRole(input.roleWorkJobs), internal = latestByRole(input.internalWorkJobs);
+  for (const role of DAILY_ROLE_WORK_ROLES) {
+    const seat = input.seats?.[role]?.status;
+    if (seat === "vacant" || seat === "unsupported") holds[role] = "puesto vacante o sin adaptador de ejecución";
+    else if (!recent(roleWork.get(role))) holds[role] ??= "trabajo diario de oficina apagado o sin turno asignado";
+  }
+  for (const role of INTERNAL_WORK_ROLES) if (!recent(internal.get(role))) holds[role] = "trabajo interno apagado o sin turno asignado";
+  const ledger = isObj(input.factoryLedger) && Array.isArray(input.factoryLedger.processed) ? input.factoryLedger.processed : [];
+  if (!ledger.some((entry: any) => isObj(entry) && input.now - ms(entry.completedAt) <= 7 * 24 * 3600_000)) for (const agent of FACTORY_AGENTS) holds[agent.id] = "la fábrica no tuvo etapas esta semana";
+  const measured = CLIPPERS_MEASURED as readonly string[];
+  if (input.streamerRead === false) for (const id of measured) holds[id] = "estado de Clippers no disponible";
+  else {
+    const raw = isObj(input.streamerState) ? input.streamerState : null;
+    if (!raw || !isObj(raw.lastRun)) holds["clippers-streamers"] ??= "carril de streamers sin ejecuciones registradas";
+    const c = raw && isObj(raw.cloudPublish) ? raw.cloudPublish : null;
+    const last = c && isObj(c.lastRun) ? c.lastRun : null;
+    if (!last || ["disabled", "kill_switch"].includes(last.status) || input.now - ms(last.at) > 7 * 24 * 3600_000)
+      for (const id of measured.filter(id => id !== "clippers-streamers")) holds[id] ??= "publicador de Clippers en la nube apagado";
+  }
+  if (!input.scoutLastRunAt) holds["skills-scout"] = "sin primera revisión de releases";
   return holds;
 }
 
@@ -153,15 +194,21 @@ const brief = (title: string, goal: string, evidence: string[]) => [
  */
 export function deriveSelfImprovementProposals(input: {
   proposals: CouncilProposal[]; lessons: Array<{ key: string }>; roleWorkJobs?: unknown; clippersLessons?: ClippersLesson[]; now: number; names: Record<string, string>; exempt?: string[];
+  /** Cooldowns stamped on careers survive proposal pruning (see stampSelfImprovementCooldowns). */
+  company?: CompanyState;
 }): CouncilProposal[] {
   const iso = new Date(input.now).toISOString();
   const created: CouncilProposal[] = [];
   const all = () => [...input.proposals, ...created];
   const openCount = () => all().filter(p => p.key.startsWith(SELF_IMPROVEMENT_PREFIX) && OPEN.includes(p.status)).length;
+  const stamped = (agentId: string, key: string) => {
+    const at = (input.company?.careers[agentId]?.vitality as { proposedKeys?: Record<string, string> } | undefined)?.proposedKeys?.[key];
+    return Boolean(at && input.now - ms(at) < COOLDOWN_MS);
+  };
   const blocked = (key: string) => input.lessons.some(lesson => lesson.key === key) || all().some(p => p.key === key && (OPEN.includes(p.status) || input.now - ms(p.closedAt || p.createdAt) < COOLDOWN_MS));
   const nameOf = (id: string) => input.names[id] || id;
   const push = (agentId: string, key: string, title: string, description: string, evidence: string[], goal: string, label: string) => {
-    if (openCount() >= MAX_OPEN_SELF_IMPROVEMENT || blocked(key) || input.exempt?.includes(agentId)) return;
+    if (openCount() >= MAX_OPEN_SELF_IMPROVEMENT || blocked(key) || stamped(agentId, key) || input.exempt?.includes(agentId) || !input.names[agentId]) return;
     created.push({ key, kind: "lesson", owner: agentId, title, description, evidence, handoffBrief: brief(title, goal, evidence), createdAt: iso, status: "pending_submit",
       lesson: { ruleId: key, subject: agentId, label } });
   };
@@ -189,4 +236,18 @@ export function deriveSelfImprovementProposals(input: {
     }
   }
   return created;
+}
+
+/** Records each new automejora key on its owner's career, so the 14-day cooldown outlives pruned history. */
+export function stampSelfImprovementCooldowns(company: CompanyState, created: CouncilProposal[], now: number): CompanyState {
+  const iso = new Date(now).toISOString();
+  let careers = company.careers;
+  for (const proposal of created) {
+    if (!proposal.key.startsWith(SELF_IMPROVEMENT_PREFIX)) continue;
+    const career = careers[proposal.owner];
+    if (!career?.vitality) continue;
+    const keys = Object.entries({ ...(career.vitality.proposedKeys || {}), [proposal.key]: iso }).slice(-20);
+    careers = { ...careers, [proposal.owner]: { ...career, vitality: { ...career.vitality, proposedKeys: Object.fromEntries(keys) } } };
+  }
+  return careers === company.careers ? company : { ...company, careers };
 }

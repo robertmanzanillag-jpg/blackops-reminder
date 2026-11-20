@@ -47,7 +47,7 @@ test("vida roster lists every agent with real state, vida meter, academy lessons
   const text = await page.locator("body").innerText();
   assert.match(text, /1 trabajando · 0 en turno · 1 perdiendo vida · 1 con vida 0 · 1 en espera/);
   assert.match(text, /Vida 0 · revisión del CEO\/Robert/);
-  assert.match(text, /nadie se borra automáticamente/);
+  assert.match(text, /la inactividad nunca despide/);
   assert.match(text, /Academia Clippers \(Metricool\)/);
   assert.match(text, /Automejora pendiente de tu aprobación/);
   assert.equal(await page.getByLabel("Vida de Clippers · Streamers").getAttribute("value"), "86");

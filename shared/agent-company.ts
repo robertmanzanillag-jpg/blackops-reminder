@@ -433,7 +433,7 @@ export function advanceCompany(
 
     const exempt = input.exempt?.includes(agentId);
     // A new hire gets at least a day on the job before it can be fired again.
-    if (!exempt && career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
+    if (!exempt && career.battery === 0 && !inactivityProtected(career) && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
       const result = fireAndReplace({ careers, trainees, retiredCareers, events }, career, `Bateria en cero (${status.label}).`, input.roles, iso);
       ({ trainees, retiredCareers, events } = result);
       fired.push(result.fired);
@@ -442,6 +442,16 @@ export function advanceCompany(
     careers[agentId] = career;
   }
   return { state: { ...state, careers, trainees, retiredCareers, events: events.slice(0, MAX_EVENTS) }, fired };
+}
+
+/**
+ * Vida lost to inactivity (shared/agent-vitality.ts cadence decay) never leads to an automatic
+ * replacement: while any of it is unrecovered, or the vida-0 flag awaits the owner, a battery of 0
+ * stays a flag for the CEO/Robert. Errors alone (no inactivity debt) keep the existing rule.
+ */
+export function inactivityProtected(career: AgentCareer): boolean {
+  const v = career.vitality;
+  return Boolean(v && ((Number.isFinite(v.decayDebt) && (v.decayDebt as number) > 0) || v.flaggedAt));
 }
 
 /** Retires a career at battery zero and starts its replacement in the academy (same rules for every cause). */
@@ -467,6 +477,7 @@ function fireAndReplace(
     firedCount: career.firedCount + 1,
     hiredAt: iso,
     inTrainingUntilGeneration: nextGeneration,
+    vitality: undefined,
     memory: [{ at: iso, text: `Reemplaza a la generacion ${nextGeneration - 1}. Empieza en la academia.` }],
   };
   let trainees = current.trainees;
@@ -518,7 +529,7 @@ export function applyQualitySignals(
       memory: remember(existing.memory, iso, `${signal.text.slice(0, 140)} (${signal.points >= 0 ? "+" : ""}${Math.round(signal.points)} pts).`),
     };
     applied.push(signal.id);
-    if (career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
+    if (career.battery === 0 && !inactivityProtected(career) && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
       const result = fireAndReplace({ careers, trainees, retiredCareers, events }, career, `Bateria en cero por calidad (${signal.text.slice(0, 80)}).`, input.roles, iso);
       ({ trainees, retiredCareers, events } = result);
       fired.push(result.fired);

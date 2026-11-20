@@ -32,31 +32,48 @@ const MAX_CREDITED_IDS = 60;
 const EVIDENCE_WINDOW_MS = 7 * 24 * HOUR_MS;
 const MAX_MEMORY = 12;
 const MAX_EVENTS = 40;
+const MAX_PROPOSED_KEYS = 20;
 
 /** Roles with a daily office role-work job (server/office-role-snapshots.ts PENDING_OFFICE_ROLES). */
-const DAILY_ROLE_WORK = new Set(["code", "news", "legal", "github", "control", "revenue", "clippers", "portfolio", "automations", "dropshipping", "news:ny-news", "marketing-cmo", "news:miami-news", "blackroom-videos"]);
+export const DAILY_ROLE_WORK_ROLES = ["code", "news", "legal", "github", "control", "revenue", "clippers", "portfolio", "automations", "dropshipping", "news:ny-news", "marketing-cmo", "news:miami-news", "blackroom-videos"] as const;
+/** Roles with a daily internal planning job (server/office-internal-work.ts; "ceo" is a coordinator). */
+export const INTERNAL_WORK_ROLES = ["assistant", "radio"] as const;
+const DAILY_ROLE_WORK = new Set<string>(DAILY_ROLE_WORK_ROLES);
+const INTERNAL_WORK = new Set<string>(INTERNAL_WORK_ROLES);
 const FACTORY_IDS = new Set<string>(FACTORY_AGENTS.map(agent => agent.id));
-/** Clippers lanes without a deliverable of their own (no receipt kind is defined for them). */
-const CLIPPERS_NO_DELIVERABLE = new Set(["clippers-supervisor", "clippers-health"]);
-/** Coordinators: the CEO and the agent factory decide/hire; they have no output of their own to measure. */
-const COORDINATORS = new Set(["ceo", "agent-factory"]);
 const CLIPPERS_IDS = new Set<string>(CLIPPERS_AGENTS.map(agent => agent.id));
+/** Clippers lanes with a receipt feed (Mac ingest or the cloud streamer lane). Trends, supervisor and health have none. */
+export const CLIPPERS_MEASURED = ["clippers-streamers", "clippers-editor", "clippers-checker", "clippers-publisher", "clippers-analytics", "clippers-learning"] as const;
+const CLIPPERS_WITH_FEED = new Set<string>(CLIPPERS_MEASURED);
+const isKong = (id: string) => id === "kong" || id.startsWith("kong:") || id.startsWith("kong-city:") || ["kong-videos", "kong-metrics", "kong-supervisor"].includes(id);
 
-/** Expected cadence of verified output, or null when the agent has no deliverable to measure. */
+/**
+ * Expected cadence of verified output, or null when the agent has no verified evidence source
+ * to measure (coordinators, observers, agents whose work is not recorded anywhere yet). A null
+ * cadence never loses vida for inactivity; it still follows the existing error/approval rules.
+ */
 export function vitalityCadenceMs(agentId: string): number | null {
-  if (CLIPPERS_NO_DELIVERABLE.has(agentId) || COORDINATORS.has(agentId)) return null;
   if (agentId === "clippers-learning") return 7 * 24 * HOUR_MS;
-  if (CLIPPERS_IDS.has(agentId)) return 48 * HOUR_MS;
+  if (CLIPPERS_WITH_FEED.has(agentId)) return 48 * HOUR_MS;
+  if (CLIPPERS_IDS.has(agentId)) return null;
   if (FACTORY_IDS.has(agentId)) return 7 * 24 * HOUR_MS;
-  if (DAILY_ROLE_WORK.has(agentId)) return 26 * HOUR_MS;
-  return 72 * HOUR_MS;
+  if (DAILY_ROLE_WORK.has(agentId) || INTERNAL_WORK.has(agentId)) return 26 * HOUR_MS;
+  if (agentId === "skills-scout") return 72 * HOUR_MS;
+  if (agentId.startsWith("br-") || agentId.startsWith("blackroom-")) return 72 * HOUR_MS;
+  return null;
 }
 
 export type CareerVitality = {
-  /** Start of the current cadence clock (last verified output, hire, first sight or end of a hold). */
+  /** Start of the current cadence clock (last verified output or evaluation, hire, first sight, end of a hold or office downtime). */
   anchorAt: string;
   /** Missed windows already charged for the current anchor (so each window costs once). */
   missesApplied: number;
+  /** Last vitality tick: a gap longer than one cadence is office downtime and is never charged. */
+  lastTickAt?: string;
+  /** career.cyclesWorking already seen, so verified work that landed between rounds still counts. */
+  seenCyclesWorking?: number;
+  /** Vida removed by inactivity and not yet recovered by verified work. While > 0, vida 0 never fires. */
+  decayDebt?: number;
   lastVerifiedWorkAt?: string;
   lastVerifiedLabel?: string;
   /** Latest caller evidence already credited (ids and time), so a receipt never recovers twice. */
@@ -64,6 +81,9 @@ export type CareerVitality = {
   creditedIds: string[];
   holdReason?: string;
   flaggedAt?: string;
+  /** Cooldowns kept on the career (proposal history is pruned): vida-0 review and automejora keys. */
+  flagProposedAt?: string;
+  proposedKeys?: Record<string, string>;
 };
 
 /** `clockOnly`: output already scored by another rule (e.g. Black Room quality signals): moves the clock, no extra vida. */
@@ -72,16 +92,20 @@ export type VitalityEvidence = { id: string; agentId: string; at: string; label:
 const ms = (value: string | undefined) => { const n = value ? Date.parse(value) : NaN; return Number.isFinite(n) ? n : 0; };
 const remember = (memory: MemoryEntry[], at: string, text: string) => [{ at, text }, ...memory].slice(0, MAX_MEMORY);
 
-function parseVitality(value: unknown): CareerVitality | undefined {
+export function parseVitality(value: unknown): CareerVitality | undefined {
   const v = value as Partial<CareerVitality> | null | undefined;
   if (!v || typeof v !== "object" || !Number.isFinite(Date.parse(String(v.anchorAt))) || !Number.isSafeInteger(v.missesApplied) || (v.missesApplied as number) < 0) return undefined;
-  return { ...v, anchorAt: v.anchorAt!, missesApplied: v.missesApplied!, creditedIds: Array.isArray(v.creditedIds) ? v.creditedIds.filter(id => typeof id === "string").slice(-MAX_CREDITED_IDS) : [] } as CareerVitality;
+  const proposedKeys = v.proposedKeys && typeof v.proposedKeys === "object" && !Array.isArray(v.proposedKeys)
+    ? Object.fromEntries(Object.entries(v.proposedKeys).filter(([k, at]) => typeof k === "string" && typeof at === "string" && Number.isFinite(Date.parse(at))).slice(-MAX_PROPOSED_KEYS)) : undefined;
+  return { ...v, anchorAt: v.anchorAt!, missesApplied: v.missesApplied!, creditedIds: Array.isArray(v.creditedIds) ? v.creditedIds.filter(id => typeof id === "string").slice(-MAX_CREDITED_IDS) : [],
+    decayDebt: Number.isFinite(v.decayDebt) && (v.decayDebt as number) > 0 ? v.decayDebt : 0, ...(proposedKeys ? { proposedKeys } : {}) } as CareerVitality;
 }
+const clean = (v: CareerVitality) => Object.fromEntries(Object.entries(v).filter(([, value]) => value !== undefined)) as CareerVitality;
 
 /**
- * One vitality tick over the main company. `holds` maps agentId -> reason for agents blocked
- * only by setup (their clock pauses). `exempt` agents (paused, external, no work of their own)
- * and agents without a cadence are never touched.
+ * One vitality tick over the main company. `holds` maps agentId -> reason for agents whose
+ * pipeline is off or blocked only by setup (their clock pauses). `exempt` agents (paused,
+ * external, no work of their own) and agents without a cadence are never touched.
  */
 export function applyVitality(company: CompanyState, input: {
   now: number; evidence?: VitalityEvidence[]; holds?: Record<string, string>; exempt?: string[]; names?: Record<string, string>;
@@ -99,55 +123,65 @@ export function applyVitality(company: CompanyState, input: {
   }
   for (const [agentId, original] of Object.entries(company.careers)) {
     const cadence = vitalityCadenceMs(agentId);
-    if (cadence === null || input.exempt?.includes(agentId) || original.scoreReconciliation !== undefined) continue;
+    if (cadence === null || isKong(agentId) || input.exempt?.includes(agentId) || original.scoreReconciliation !== undefined) continue;
     const name = input.names?.[agentId] || agentId;
     let career: AgentCareer = { ...original };
     const previous = parseVitality(career.vitality);
-    let v: CareerVitality = previous ? { ...previous, creditedIds: [...previous.creditedIds] } : { anchorAt: iso, missesApplied: 0, creditedIds: [] };
+    let v: CareerVitality = previous ? { ...previous, creditedIds: [...previous.creditedIds] } : { anchorAt: iso, missesApplied: 0, creditedIds: [], decayDebt: 0, seenCyclesWorking: career.cyclesWorking };
     // The academy is study, not a missed turn.
-    if (career.inTrainingUntilGeneration) { careers[agentId] = { ...career, vitality: { ...v, anchorAt: iso, missesApplied: 0, holdReason: "academia" } }; continue; }
-
-    // 1) Verified output already scored elsewhere ("working" with distinct evidence) moves the clock.
+    if (career.inTrainingUntilGeneration) { careers[agentId] = { ...career, vitality: clean({ ...v, anchorAt: iso, missesApplied: 0, lastTickAt: iso, holdReason: "academia" }) }; continue; }
     const hired = ms(career.hiredAt);
-    if (career.lastState === "working" && career.lastEvaluatedAt && ms(career.lastEvaluatedAt) > ms(v.lastVerifiedWorkAt) && ms(career.lastEvaluatedAt) >= hired) {
-      v.lastVerifiedWorkAt = career.lastEvaluatedAt;
-      v.lastVerifiedLabel = "Trabajo verificado registrado en su carrera";
+    let worked = false;
+
+    // 1) Verified work already scored elsewhere ("working" + distinct evidence), even if a later
+    //    error in the same gap overwrote lastState: cyclesWorking only grows on verified work.
+    const seen = Number.isSafeInteger(v.seenCyclesWorking) ? v.seenCyclesWorking! : career.cyclesWorking;
+    if (career.cyclesWorking > seen && career.lastEvaluatedAt && ms(career.lastEvaluatedAt) >= hired) {
+      worked = true;
+      if (ms(career.lastEvaluatedAt) > ms(v.lastVerifiedWorkAt)) { v.lastVerifiedWorkAt = career.lastEvaluatedAt; v.lastVerifiedLabel = "Trabajo verificado registrado en su carrera"; }
     }
+    v.seenCyclesWorking = career.cyclesWorking;
     // 2) Caller evidence that no other rule scored: one recovery per cycle, each receipt once.
     const fresh = (evidenceBy.get(agentId) || [])
       .filter(item => ms(item.at) >= hired && !v.creditedIds.includes(item.id) && (!v.lastCreditedAt || ms(item.at) >= ms(v.lastCreditedAt)))
       .sort((a, b) => ms(a.at) - ms(b.at) || a.id.localeCompare(b.id));
     if (fresh.length) {
+      worked = true;
       const latest = fresh[fresh.length - 1];
       const before = career.battery;
       if (fresh.some(item => !item.clockOnly)) career.battery = Math.min(BATTERY_MAX, career.battery + VITALITY_RECOVERY);
       v.creditedIds = [...v.creditedIds, ...fresh.map(item => item.id)].slice(-MAX_CREDITED_IDS);
       v.lastCreditedAt = latest.at;
       if (ms(latest.at) > ms(v.lastVerifiedWorkAt)) { v.lastVerifiedWorkAt = latest.at; v.lastVerifiedLabel = latest.label.slice(0, 140); }
-      if (career.battery !== before) career.memory = remember(career.memory, iso, `Recupera vida: ${latest.label.slice(0, 100)} (+${career.battery - before}).`);
-      if (career.battery !== before) recovered.push(agentId);
+      if (career.battery !== before) { career.memory = remember(career.memory, iso, `Recupera vida: ${latest.label.slice(0, 100)} (+${career.battery - before}).`); recovered.push(agentId); }
     }
-    // 3) Cadence clock: the latest of verified work, hire, first sight, or the end of a hold.
-    const anchor = Math.max(ms(v.anchorAt), ms(v.lastVerifiedWorkAt), hired);
+    // Verified work repays the inactivity debt: from here a 0 is again the agent's own record.
+    if (worked) v.decayDebt = 0;
+    // 3) Cadence clock: latest of verified work, any evaluated outcome (an error already cost vida
+    //    in that window), hire, first sight, the end of a hold, or the end of office downtime.
+    const anchor = Math.max(ms(v.anchorAt), ms(v.lastVerifiedWorkAt), ms(career.lastEvaluatedAt), hired);
     if (anchor > ms(v.anchorAt)) v = { ...v, anchorAt: new Date(anchor).toISOString(), missesApplied: 0 };
     const hold = input.holds?.[agentId];
-    if (hold) {
-      v = { ...v, anchorAt: iso, missesApplied: 0, holdReason: hold.slice(0, 120) };
+    const downtime = v.lastTickAt !== undefined && input.now - ms(v.lastTickAt) > cadence;
+    if (hold || downtime) {
+      v = { ...v, anchorAt: iso, missesApplied: 0, holdReason: hold ? hold.slice(0, 120) : undefined };
     } else {
       if (v.holdReason) v = { ...v, holdReason: undefined };
       const missed = Math.max(0, Math.floor((input.now - ms(v.anchorAt)) / cadence));
-      const pending = missed - v.missesApplied;
-      if (pending > 0) {
+      // At most one window per tick: a backlog is never charged at once.
+      if (missed > v.missesApplied) {
         const before = career.battery;
-        career.battery = Math.max(0, career.battery - VITALITY_MISS.battery * pending);
-        career.points = Math.max(0, career.points - VITALITY_MISS.points * pending);
-        v.missesApplied = missed;
+        career.battery = Math.max(0, career.battery - VITALITY_MISS.battery);
+        career.points = Math.max(0, career.points - VITALITY_MISS.points);
+        v.missesApplied += 1;
         if (before !== career.battery) {
-          career.memory = remember(career.memory, iso, `Sin entregable verificado en ${Math.round(cadence / HOUR_MS)} h (${pending} ${pending === 1 ? "turno" : "turnos"}): -${before - career.battery} de vida.`);
+          v.decayDebt = (v.decayDebt || 0) + (before - career.battery);
+          career.memory = remember(career.memory, iso, `Sin entregable verificado en ${Math.round(cadence / HOUR_MS)} h: -${before - career.battery} de vida.`);
           decayed.push(agentId);
         }
       }
     }
+    v.lastTickAt = iso;
     // 4) Vida 0: flag once for the CEO/Robert. Never fired, replaced or deleted from here.
     if (career.battery === 0 && !v.flaggedAt) {
       v.flaggedAt = iso;
@@ -156,10 +190,19 @@ export function applyVitality(company: CompanyState, input: {
     } else if (career.battery > 0 && v.flaggedAt) {
       v.flaggedAt = undefined;
     }
-    const clean = Object.fromEntries(Object.entries(v).filter(([, value]) => value !== undefined)) as CareerVitality;
-    careers[agentId] = { ...career, vitality: clean };
+    careers[agentId] = { ...career, vitality: clean(v) };
   }
   return { state: { ...company, careers, events: events.slice(0, MAX_EVENTS) }, flagged, recovered, decayed };
+}
+
+/** Public view of a career: drops the receipt-id ledger (internal dedupe state, payload size). */
+export function publicCareerVitality(company: CompanyState): CompanyState {
+  const careers = Object.fromEntries(Object.entries(company.careers).map(([id, career]) => {
+    if (!career.vitality) return [id, career];
+    const { creditedIds: _ids, proposedKeys: _keys, seenCyclesWorking: _seen, ...rest } = career.vitality;
+    return [id, { ...career, vitality: rest as CareerVitality }];
+  }));
+  return { ...company, careers };
 }
 
 export type VitalityState = "trabajando" | "al_dia" | "atrasado" | "en_espera" | "en_academia" | "vida_cero" | "sin_entregable" | "sin_puntuar" | "sin_carrera";
@@ -182,7 +225,7 @@ export function vitalityGroup(agentId: string): string {
 
 /** Read-only roster of every registered main-company agent with its vida and real state. */
 export function vitalityView(company: CompanyState | undefined, input: { now: number; names: Record<string, string>; exempt?: string[]; workingWindowMs?: number }): VitalityRow[] {
-  const ids = [...new Set([...Object.keys(input.names), ...Object.keys(company?.careers || {})])];
+  const ids = [...new Set([...Object.keys(input.names), ...Object.keys(company?.careers || {})])].filter(id => !isKong(id));
   return ids.map((agentId): VitalityRow => {
     const name = input.names[agentId] || agentId;
     const career = company?.careers[agentId];
@@ -195,7 +238,7 @@ export function vitalityView(company: CompanyState | undefined, input: { now: nu
     const learned = (career.skills || []).slice(0, 4).map(skill => skill.title);
     const common = { ...base, vida: career.battery, points: career.points, generation: career.generation, lastVerifiedWorkAt: last, lastVerifiedLabel: v?.lastVerifiedLabel || null, learned };
     if (input.exempt?.includes(agentId)) return { ...common, state: "sin_puntuar", label: "Pausado, externo o sin trabajo propio: no gana ni pierde vida", nextLossAt: null, flagged: false };
-    if (cadence === null) return { ...common, state: "sin_entregable", label: "Coordina u observa; no tiene entregable propio que medir", nextLossAt: null, flagged: false };
+    if (cadence === null) return { ...common, state: "sin_entregable", label: "Coordina, observa o aún no tiene una fuente de entregables verificables: no pierde vida por inactividad", nextLossAt: null, flagged: false };
     if (career.inTrainingUntilGeneration) return { ...common, state: "en_academia", label: "En la academia: estudia, no pierde vida", nextLossAt: null, flagged: false };
     if (career.battery === 0) return { ...common, state: "vida_cero", label: "Vida en cero: revisión del CEO/Robert pendiente (no se borra)", nextLossAt: null, flagged: true };
     if (v?.holdReason) return { ...common, state: "en_espera", label: `En espera (${v.holdReason}): no pierde vida`, nextLossAt: null, flagged: false };
@@ -210,28 +253,33 @@ export function vitalityView(company: CompanyState | undefined, input: { now: nu
 
 const REPAIR_OPEN = ["pending_submit", "submitted", "not_submitted", "approved"];
 const FLAG_COOLDOWN_MS = 7 * 24 * HOUR_MS;
-export const MAX_OPEN_VIDA_FLAGS = 3;
+type Proposal = import("./agent-council").CouncilProposal;
+const VIDA_KEY = /^repair:(.+)#vida-cero-g(\d+)-/;
 
 /**
  * Vida 0 -> one owner review in the Trust Center (pending_actions), reusing the Mechanic's
- * "repair" proposal shape and its per-agent key prefix so the two never duplicate each other.
- * Approval only marks the PR-first brief as ready; nothing is fired, replaced or deleted.
+ * "repair" proposal shape, its per-agent key prefix and its open-repair cap, so the two never
+ * duplicate each other. `proposals` must include everything already created this round.
+ * The cooldown is stamped on the career (proposal history is pruned). Approval only marks the
+ * PR-first brief as ready; nothing is fired, replaced or deleted.
  */
-export function deriveVitalityFlagProposals(company: CompanyState, proposals: import("./agent-council").CouncilProposal[], now: number, names: Record<string, string> = {}, exempt: string[] = []): import("./agent-council").CouncilProposal[] {
+export function deriveVitalityFlagProposals(company: CompanyState, proposals: Proposal[], now: number, names: Record<string, string> = {}, exempt: string[] = [], maxOpenRepairs = 3): { proposals: Proposal[]; company: CompanyState } {
   const iso = new Date(now).toISOString();
-  const created: import("./agent-council").CouncilProposal[] = [];
+  const created: Proposal[] = [];
+  let careers = company.careers;
   const all = () => [...proposals, ...created];
-  const open = () => all().filter(p => p.key.includes("#vida-cero-") && REPAIR_OPEN.includes(p.status)).length;
+  const openRepairs = () => all().filter(p => p.kind === "repair" && REPAIR_OPEN.includes(p.status)).length;
   for (const career of Object.values(company.careers).sort((a, b) => a.agentId.localeCompare(b.agentId))) {
     const v = parseVitality(career.vitality);
-    if (!v?.flaggedAt || career.battery !== 0 || exempt.includes(career.agentId) || career.inTrainingUntilGeneration) continue;
-    if (open() >= MAX_OPEN_VIDA_FLAGS) break;
+    if (!v?.flaggedAt || career.battery !== 0 || isKong(career.agentId) || exempt.includes(career.agentId) || career.inTrainingUntilGeneration) continue;
+    if (openRepairs() >= maxOpenRepairs) break;
+    if (v.flagProposedAt && now - ms(v.flagProposedAt) < FLAG_COOLDOWN_MS) continue;
     const prefix = `repair:${career.agentId}#`;
     if (all().some(p => p.key.startsWith(prefix) && (REPAIR_OPEN.includes(p.status) || now - ms(p.closedAt || p.createdAt) < FLAG_COOLDOWN_MS))) continue;
     const name = names[career.agentId] || career.agentId;
     const evidence = [`Vida 0/100 desde ${v.flaggedAt}`, v.lastVerifiedWorkAt ? `Último entregable verificado: ${v.lastVerifiedWorkAt}` : "Sin entregable verificado registrado", `Turno esperado: ${Math.round((vitalityCadenceMs(career.agentId) || 0) / HOUR_MS)} h`];
     created.push({
-      key: `${prefix}vida-cero-${iso.slice(0, 10)}`, kind: "repair", owner: "ceo",
+      key: `${prefix}vida-cero-g${career.generation}-${iso.slice(0, 10)}`, kind: "repair", owner: "ceo",
       title: `Vida en cero: revisar a ${name}`,
       description: `${name} (${career.nickname}) se quedó sin vida porque no entregó trabajo verificado en sus turnos. El CEO pide tu revisión: reparar, reasignar o pausar. No se borra ni se reemplaza automáticamente.`,
       evidence,
@@ -243,8 +291,21 @@ export function deriveVitalityFlagProposals(company: CompanyState, proposals: im
       ].join("\n"),
       createdAt: iso, status: "pending_submit",
     });
+    careers = { ...careers, [career.agentId]: { ...career, vitality: clean({ ...v, flagProposedAt: iso }) } };
   }
-  return created;
+  return { proposals: created, company: careers === company.careers ? company : { ...company, careers } };
+}
+
+/** An unsubmitted vida-0 review whose agent recovered or was replaced no longer applies: close it. */
+export function closeStaleVitalityFlags(proposals: Proposal[], company: CompanyState, now: number): Proposal[] {
+  const iso = new Date(now).toISOString();
+  return proposals.map(p => {
+    const match = p.key.match(VIDA_KEY);
+    if (!match || !["pending_submit", "not_submitted", "submitted"].includes(p.status)) return p;
+    const career = company.careers[match[1]];
+    if (career && career.generation === Number(match[2]) && career.battery === 0) return p;
+    return { ...p, status: "rejected" as const, closedAt: iso, note: career && career.generation === Number(match[2]) ? "Ya no aplica: el agente recuperó vida con trabajo verificado." : "Ya no aplica: el puesto cambió de generación." };
+  });
 }
 
 /** Office desk status from a vitality row. Recent verified work is "on duty", never "executing now". */

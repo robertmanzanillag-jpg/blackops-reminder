@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { advanceCompany, emptyCompanyState, learnLessons, type CompanyState } from "../shared/agent-company";
-import { applyVitality, deriveVitalityFlagProposals, vitalityCadenceMs, vitalityLiveStatus, vitalityView, HOUR_MS, VITALITY_MISS, VITALITY_RECOVERY } from "../shared/agent-vitality";
-import { clippersAcademyLessons, deriveSelfImprovementProposals, learnClippersLessons, roleWorkHolds, roleWorkVitalityEvidence, streamerVitalityEvidence, MAX_OPEN_SELF_IMPROVEMENT } from "../shared/agent-self-improvement";
+import { advanceCompany, applyQualitySignals, emptyCompanyState, inactivityProtected, learnLessons, type CompanyState } from "../shared/agent-company";
+import { applyVitality, closeStaleVitalityFlags, deriveVitalityFlagProposals, vitalityCadenceMs, vitalityLiveStatus, vitalityView, HOUR_MS, VITALITY_MISS, VITALITY_RECOVERY } from "../shared/agent-vitality";
+import { clippersAcademyLessons, deriveSelfImprovementProposals, learnClippersLessons, pipelineHolds, roleWorkVitalityEvidence, stampSelfImprovementCooldowns, streamerVitalityEvidence, MAX_OPEN_SELF_IMPROVEMENT } from "../shared/agent-self-improvement";
 import { applyApprovedProposal, emptyCouncilState, parseCouncilState, type CouncilProposal } from "../shared/agent-council";
 import { createAgentCouncil, type CouncilDeps } from "../server/agent-council";
 import { CLIPPERS_AGENT_IDS } from "../shared/clippers-office-agents";
@@ -13,82 +13,130 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const hire = (ids: string[], now = T0): CompanyState =>
   advanceCompany(emptyCompanyState(), { now, roles: Object.fromEntries(ids.map(id => [id, id])), statuses: Object.fromEntries(ids.map(id => [id, { state: "available" as const, label: "registrado" }])) }).state;
 
-test("cadence: daily role work, factory weekly, clippers 48 h, coordinators and supervisors unmeasured", () => {
+const STEP = 15 * 60_000;
+/** Runs one vitality tick per council round (15 min) from `from` to `to`. */
+function tick(company: CompanyState, from: number, to: number, input: Omit<Parameters<typeof applyVitality>[1], "now"> = {}) {
+  let state = company; const decayed: string[] = []; const flagged: string[] = [];
+  for (let t = from; t <= to; t += STEP) { const r = applyVitality(state, { ...input, now: t }); state = r.state; decayed.push(...r.decayed); flagged.push(...r.flagged); }
+  return { state, decayed, flagged };
+}
+
+test("cadence only for agents with a verified evidence source", () => {
   assert.equal(vitalityCadenceMs("code"), 26 * HOUR_MS);
+  assert.equal(vitalityCadenceMs("radio"), 26 * HOUR_MS);
   assert.equal(vitalityCadenceMs("clippers-streamers"), 48 * HOUR_MS);
   assert.equal(vitalityCadenceMs("clippers-learning"), 7 * 24 * HOUR_MS);
   for (const id of FACTORY_AGENT_IDS) assert.equal(vitalityCadenceMs(id), 7 * 24 * HOUR_MS);
-  for (const id of ["clippers-supervisor", "clippers-health", "ceo", "agent-factory"]) assert.equal(vitalityCadenceMs(id), null);
+  for (const id of ["clippers-supervisor", "clippers-health", "clippers-trends", "ceo", "agent-factory", "cybersecurity", "app-qa", "kong:Venues"]) assert.equal(vitalityCadenceMs(id), null, id);
 });
 
-test("no verified output: first sight is free, then each missed window costs once (idempotent)", () => {
+test("no verified output: first sight is free, one window per tick, each window costs once", () => {
   let company = hire(["code"]);
-  company = applyVitality(company, { now: T0 }).state;
-  assert.equal(company.careers.code.battery, 80, "first sight never penalizes");
-  const later = T0 + 3 * 26 * HOUR_MS + 1000;
-  const once = applyVitality(company, { now: later });
-  assert.deepEqual(once.decayed, ["code"]);
-  assert.equal(once.state.careers.code.battery, 80 - 3 * VITALITY_MISS.battery);
-  const twice = applyVitality(once.state, { now: later + 60_000 });
-  assert.equal(twice.state.careers.code.battery, once.state.careers.code.battery, "the same windows never cost twice");
-  assert.equal(twice.state.careers.code.generation, 1);
-  assert.match(twice.state.careers.code.memory[0].text, /Sin entregable verificado/);
+  const r = tick(company, T0, T0 + 3 * 26 * HOUR_MS + STEP);
+  assert.equal(r.state.careers.code.battery, 80 - 3 * VITALITY_MISS.battery);
+  assert.equal(r.decayed.length, 3);
+  assert.equal(r.state.careers.code.vitality?.decayDebt, 9);
+  assert.equal(r.state.careers.code.generation, 1);
+  assert.match(r.state.careers.code.memory[0].text, /Sin entregable verificado/);
 });
 
-test("verified output recovers vida once per receipt and restarts the clock", () => {
+test("office downtime (no rounds for longer than one cadence) is never charged", () => {
+  const first = applyVitality(hire(["code"]), { now: T0 }).state;
+  const after = applyVitality(first, { now: T0 + 5 * 26 * HOUR_MS });
+  assert.deepEqual(after.decayed, []);
+  assert.equal(after.state.careers.code.battery, 80);
+  assert.equal(after.state.careers.code.vitality?.anchorAt, iso(T0 + 5 * 26 * HOUR_MS));
+});
+
+test("an error already scored in the window is not also a missed turn", () => {
   let company = applyVitality(hire(["code"]), { now: T0 }).state;
-  company = applyVitality(company, { now: T0 + 2 * 26 * HOUR_MS + 1 }).state;
+  company = tick(company, T0, T0 + 20 * HOUR_MS).state;
+  company = advanceCompany(company, { now: T0 + 20 * HOUR_MS, roles: {}, statuses: { code: { state: "error", label: "fallo", evidenceId: "run-1" } } }).state;
+  assert.equal(company.careers.code.battery, 70);
+  const r = tick(company, T0 + 20 * HOUR_MS + STEP, T0 + 40 * HOUR_MS);
+  assert.deepEqual(r.decayed, [], "clock restarted at the evaluated error");
+});
+
+test("vida 0 from inactivity never fires on a later error or negative signal; verified work restores the normal rule", () => {
+  let company = hire(["code"]);
+  company = tick(company, T0, T0 + 28 * 26 * HOUR_MS).state;
+  assert.equal(company.careers.code.battery, 0);
+  assert.ok(company.careers.code.vitality?.flaggedAt);
+  assert.equal(inactivityProtected(company.careers.code), true);
+  const t = T0 + 28 * 26 * HOUR_MS + STEP;
+  const errored = advanceCompany(company, { now: t, roles: { code: "Code" }, statuses: { code: { state: "error", label: "fallo", evidenceId: "run-x" } } });
+  assert.deepEqual(errored.fired, []);
+  assert.equal(errored.state.careers.code.generation, 1);
+  const signaled = applyQualitySignals(errored.state, [{ id: "q-1", agentId: "code", at: iso(t), points: -5, battery: -10, text: "rechazado" }], { now: t + 1, roles: {} });
+  assert.deepEqual(signaled.fired, []);
+  // Errors alone (no inactivity debt) keep the existing replacement rule.
+  const errorsOnly = { ...hire(["github"]), careers: { github: { ...hire(["github"]).careers.github, battery: 10 } } };
+  const fired = advanceCompany(errorsOnly, { now: T0 + 2 * 24 * HOUR_MS, roles: {}, statuses: { github: { state: "error", label: "fallo", evidenceId: "e1" } } });
+  assert.equal(fired.fired.length, 1);
+  assert.equal(fired.state.careers.github.vitality, undefined, "a successor starts with a fresh vida clock");
+});
+
+test("verified output recovers vida once per receipt; work that landed between rounds still counts", () => {
+  let company = tick(hire(["code"]), T0, T0 + 2 * 26 * HOUR_MS + STEP).state;
   const low = company.careers.code.battery;
-  const at = T0 + 2 * 26 * HOUR_MS + 10_000;
+  const at = T0 + 2 * 26 * HOUR_MS + 10 * 60_000;
   const evidence = roleWorkVitalityEvidence([{ id: "j1", role: "code", status: "completed", completedAt: iso(at), artifactId: "a".repeat(64) }, { id: "j2", role: "code", status: "blocked", completedAt: iso(at) }]);
   assert.equal(evidence.length, 1, "blocked work is never output");
-  const r1 = applyVitality(company, { now: at + 1000, evidence });
+  const r1 = applyVitality(company, { now: at + STEP, evidence });
   assert.equal(r1.state.careers.code.battery, low + VITALITY_RECOVERY);
-  const r2 = applyVitality(r1.state, { now: at + 2000, evidence });
+  assert.equal(r1.state.careers.code.vitality?.decayDebt, 0);
+  const r2 = applyVitality(r1.state, { now: at + 2 * STEP, evidence });
   assert.equal(r2.state.careers.code.battery, low + VITALITY_RECOVERY, "the same receipt never recovers twice");
-  assert.equal(r2.state.careers.code.vitality?.missesApplied, 0);
-  assert.equal(r2.state.careers.code.vitality?.anchorAt, iso(at));
-  // Work already scored by advanceCompany ("working" + distinct evidence) also restarts the clock.
+  // Work and then an error between two rounds: lastState is "error" but cyclesWorking grew.
   let factory = applyVitality(hire(["factory-builder"]), { now: T0 }).state;
-  factory = advanceCompany(factory, { now: T0 + 6 * 24 * HOUR_MS, roles: {}, statuses: { "factory-builder": { state: "working", label: "etapa", evidenceId: "stage-1" } } }).state;
-  const after = applyVitality(factory, { now: T0 + 8 * 24 * HOUR_MS });
-  assert.deepEqual(after.decayed, [], "verified stage 2 days ago: still inside the weekly window");
+  const w = T0 + 3 * HOUR_MS;
+  factory = advanceCompany(factory, { now: w, roles: {}, statuses: { "factory-builder": { state: "working", label: "etapa", evidenceId: "stage-1" } } }).state;
+  factory = advanceCompany(factory, { now: w + 60_000, roles: {}, statuses: { "factory-builder": { state: "error", label: "fallo", evidenceId: "stage-2" } } }).state;
+  const seen = applyVitality(factory, { now: w + STEP }).state;
+  assert.equal(seen.careers["factory-builder"].vitality?.lastVerifiedWorkAt, iso(w + 60_000));
 });
 
-test("holds, academy and exempt agents never lose vida", () => {
-  let company = applyVitality(hire(["control", "mechanic", "revenue"]), { now: T0 }).state;
+test("pipeline holds: role work off, vacant seat, idle factory, missing Clippers state; holds never lose vida", () => {
+  const now = T0 + 10 * 24 * HOUR_MS;
+  const holds = pipelineHolds({ now, roleWorkJobs: [{ role: "code", status: "completed", startedAt: iso(now - HOUR_MS) }, { role: "control", status: "blocked", startedAt: iso(now - HOUR_MS) }],
+    seats: { github: { status: "vacant" } }, factoryLedger: { processed: [] }, streamerState: null, streamerRead: true, scoutLastRunAt: null });
+  assert.equal(holds.code, undefined, "a role with a recent job is measured");
+  assert.match(holds.control, /fuente/);
+  assert.match(holds.github, /vacante/);
+  assert.match(holds.legal, /apagado/);
+  assert.match(holds["factory-builder"], /fábrica/);
+  assert.ok(holds["clippers-streamers"] && holds["clippers-publisher"]);
+  assert.match(holds["skills-scout"], /releases/);
+  assert.ok(pipelineHolds({ now, streamerRead: false })["clippers-editor"].includes("no disponible"));
+  let company = applyVitality(hire(["legal", "mechanic", "revenue"]), { now: T0 }).state;
   company = { ...company, careers: { ...company.careers, revenue: { ...company.careers.revenue, inTrainingUntilGeneration: 2 } } };
-  const later = T0 + 10 * 26 * HOUR_MS;
-  const holds = roleWorkHolds([{ id: "x", role: "control", status: "blocked", startedAt: iso(later - HOUR_MS) }], later);
-  assert.deepEqual(Object.keys(holds), ["control"]);
-  const r = applyVitality(company, { now: later, holds, exempt: ["mechanic"] });
-  assert.equal(r.state.careers.control.battery, 80);
-  assert.equal(r.state.careers.mechanic.battery, 80);
-  assert.equal(r.state.careers.revenue.battery, 80);
-  const row = vitalityView(r.state, { now: later, names: { control: "Control", mechanic: "Mecanico", revenue: "Revenue" }, exempt: ["mechanic"] });
-  assert.deepEqual(Object.fromEntries(row.map(x => [x.agentId, x.state])), { control: "en_espera", mechanic: "sin_puntuar", revenue: "en_academia" });
+  const r = tick(company, T0, T0 + 3 * 26 * HOUR_MS, { holds: { legal: holds.legal }, exempt: ["mechanic"] });
+  assert.deepEqual(r.decayed, []);
+  const rows = vitalityView(r.state, { now: T0 + 3 * 26 * HOUR_MS, names: { legal: "Legal", mechanic: "Mecanico", revenue: "Revenue" }, exempt: ["mechanic"] });
+  assert.deepEqual(Object.fromEntries(rows.map(x => [x.agentId, x.state])), { legal: "en_espera", mechanic: "sin_puntuar", revenue: "en_academia" });
 });
 
-test("vida 0 is flagged for the CEO/Robert once; never fired, replaced or deleted", () => {
-  let company = applyVitality(hire(["clippers-editor"]), { now: T0 }).state;
-  const zero = applyVitality(company, { now: T0 + 30 * 48 * HOUR_MS, names: { "clippers-editor": "Clippers · Editor" } });
-  const career = zero.state.careers["clippers-editor"];
-  assert.equal(career.battery, 0);
-  assert.equal(career.generation, 1, "no replacement");
-  assert.equal(zero.state.retiredCareers?.length ?? 0, 0);
-  assert.deepEqual(zero.flagged, ["clippers-editor"]);
-  assert.match(zero.state.events[0].text, /Vida en cero/);
-  assert.deepEqual(applyVitality(zero.state, { now: T0 + 31 * 48 * HOUR_MS }).flagged, [], "flag raised once");
-  const proposals = deriveVitalityFlagProposals(zero.state, [], T0 + 30 * 48 * HOUR_MS, { "clippers-editor": "Clippers · Editor" });
-  assert.equal(proposals.length, 1);
-  assert.equal(proposals[0].kind, "repair");
-  assert.match(proposals[0].key, /^repair:clippers-editor#vida-cero-/);
-  assert.match(proposals[0].description, /No se borra/);
-  assert.equal(deriveVitalityFlagProposals(zero.state, proposals.map(p => ({ ...p, status: "submitted" as const })), T0 + 31 * 48 * HOUR_MS).length, 0);
-  const view = vitalityView(zero.state, { now: T0 + 30 * 48 * HOUR_MS, names: { "clippers-editor": "Editor" } });
-  assert.equal(view[0].state, "vida_cero");
-  assert.equal(view[0].flagged, true);
-  assert.equal(vitalityLiveStatus(view[0], T0).problems?.[0], "Vida en cero: no entrega trabajo verificado");
+test("vida 0 review: one proposal per agent, shares the Mechanic cap, cooldown on the career, closed when stale", () => {
+  const company = tick(hire(["clippers-editor", "code"]), T0, T0 + 28 * 26 * HOUR_MS).state;
+  assert.equal(company.careers.code.battery, 0);
+  const now = T0 + 28 * 26 * HOUR_MS;
+  const first = deriveVitalityFlagProposals(company, [], now, { code: "Code" });
+  assert.deepEqual(first.proposals.map(p => p.key), [`repair:code#vida-cero-g1-${iso(now).slice(0, 10)}`], "clippers-editor (48 h) is not at 0 yet");
+  assert.equal(first.proposals[0].kind, "repair");
+  assert.match(first.proposals[0].description, /No se borra/);
+  assert.ok(first.company.careers.code.vitality?.flagProposedAt);
+  assert.equal(deriveVitalityFlagProposals(first.company, [], now + HOUR_MS).proposals.length, 0, "cooldown survives pruned history");
+  const mechanic = { key: "repair:code#2026-11-19", kind: "repair" as const, owner: "mechanic", title: "", description: "", evidence: [], handoffBrief: "", createdAt: iso(now), status: "pending_submit" as const };
+  assert.equal(deriveVitalityFlagProposals(company, [mechanic], now).proposals.length, 0, "no duplicate of the Mechanic's repair");
+  assert.equal(deriveVitalityFlagProposals(company, [], now, {}, [], 0).proposals.length, 0, "shared open-repair cap");
+  const recovered = { ...first.company, careers: { ...first.company.careers, code: { ...first.company.careers.code, battery: 6 } } };
+  const closed = closeStaleVitalityFlags(first.proposals, recovered, now + HOUR_MS);
+  assert.equal(closed[0].status, "rejected");
+  assert.match(closed[0].note || "", /Ya no aplica/);
+  assert.equal(closeStaleVitalityFlags(first.proposals, first.company, now)[0].status, "pending_submit");
+  const view = vitalityView(company, { now, names: { code: "Code" } });
+  assert.equal(view.find(r => r.agentId === "code")?.state, "vida_cero");
+  assert.equal(vitalityLiveStatus(view.find(r => r.agentId === "code"), now).problems?.[0], "Vida en cero: no entrega trabajo verificado");
 });
 
 const streamerState = (at: number) => ({
@@ -147,7 +195,7 @@ test("Clippers academy: Metricool lessons (hooks, creators) become academia skil
 test("automejora: proposals need owner approval, are bounded, deduped, and approval records the improvement", () => {
   const lessons = clippersAcademyLessons(streamerState(T0));
   const jobs = ["2026-11-16", "2026-11-17", "2026-11-18"].map((slot, i) => ({ id: `j${i}`, role: "code", slot, status: "completed", startedAt: `${slot}T10:00:00.000Z`, audit: { diagnostics: ["PR_STALE"] } }));
-  const created = deriveSelfImprovementProposals({ proposals: [], lessons: [], roleWorkJobs: jobs, clippersLessons: lessons, now: T0, names: { code: "Code" } });
+  const created = deriveSelfImprovementProposals({ proposals: [], lessons: [], roleWorkJobs: jobs, clippersLessons: lessons, now: T0, names: { code: "Code", "clippers-editor": "Editor", "clippers-streamers": "Streamers" } });
   assert.equal(created.length, MAX_OPEN_SELF_IMPROVEMENT, "at most 3 open");
   assert.ok(created.every(p => p.kind === "lesson" && p.status === "pending_submit" && p.key.startsWith("automejora:")));
   const all = deriveSelfImprovementProposals({ proposals: [], lessons: [], roleWorkJobs: jobs, clippersLessons: [], now: T0, names: { code: "Code" } });
@@ -155,7 +203,10 @@ test("automejora: proposals need owner approval, are bounded, deduped, and appro
   assert.equal(all[0].key, "automejora:code:PR_STALE");
   assert.match(all[0].handoffBrief, /PR-first/);
   assert.equal(deriveSelfImprovementProposals({ proposals: all, lessons: [], roleWorkJobs: jobs, now: T0, names: {} }).length, 0, "one per key");
-  assert.equal(deriveSelfImprovementProposals({ proposals: [], lessons: [], roleWorkJobs: jobs.slice(0, 2), now: T0, names: {} }).length, 0, "needs 3 distinct days");
+  assert.equal(deriveSelfImprovementProposals({ proposals: [], lessons: [], roleWorkJobs: jobs.slice(0, 2), now: T0, names: { code: "Code" } }).length, 0, "needs 3 distinct days");
+  // Cooldown stamped on the career survives pruned proposal history.
+  const stampedCompany = stampSelfImprovementCooldowns(applyVitality(hire(["code"]), { now: T0 }).state, all, T0);
+  assert.equal(deriveSelfImprovementProposals({ proposals: [], lessons: [], roleWorkJobs: jobs, now: T0 + 24 * HOUR_MS, names: { code: "Code" }, company: stampedCompany }).length, 0);
   // Approval through the existing flow: lesson -> skill "Mejora aprobada".
   let council = { ...emptyCouncilState(), proposals: all as CouncilProposal[] };
   council = applyApprovedProposal(council, "automejora:code:PR_STALE", T0);
@@ -190,6 +241,8 @@ test("council round: every agent gets a vida row, cloud Clippers work recovers i
   assert.equal(streamers.vida, 80 + VITALITY_RECOVERY);
   assert.equal(view.vitality.find(r => r.agentId === "clippers-supervisor")!.state, "sin_entregable");
   assert.ok(view.clippersAcademy.lessons.length >= 3);
+  const publicCompany = (await council.view() as any).company;
+  assert.equal(publicCompany.careers["clippers-streamers"].vitality.creditedIds, undefined, "receipt ledger is not served");
   const state = parseCouncilState(stored);
   assert.ok((state.company.careers["clippers-editor"].skills || []).some(s => s.source === "academia"));
   assert.ok(submitted.some(p => p.key.startsWith("automejora:clippers-hook:")), "automejora goes to the Trust Center");
@@ -200,5 +253,5 @@ test("clock-only evidence (already scored elsewhere) restarts the clock without 
   const at = T0 + 70 * HOUR_MS;
   const r = applyVitality(company, { now: at + 1000, evidence: [{ id: "blackroom:q1", agentId: "br-editor", at: iso(at), label: "aprobado", clockOnly: true }] });
   assert.equal(r.state.careers["br-editor"].battery, 80);
-  assert.deepEqual(applyVitality(r.state, { now: at + 71 * HOUR_MS }).decayed, [], "clock restarted at the approval");
+  assert.deepEqual(tick(r.state, at + STEP, at + 71 * HOUR_MS).decayed, [], "clock restarted at the approval");
 });

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useCouncil } from "@/components/agents-building/agents-building";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { VitalityRow, VitalityState } from "@shared/agent-vitality";
 import type { ClippersLesson } from "@shared/agent-self-improvement";
 import { SELF_IMPROVEMENT_PREFIX } from "@shared/agent-self-improvement";
@@ -53,7 +54,7 @@ export function AgentVitalityRoster({ groups, title = "Vida del equipo", testId 
       </div>
     </div>
     <p className="mt-1 text-xs text-muted-foreground" data-testid={`${testId}-summary`}>{count("trabajando")} trabajando · {count("al_dia")} en turno · {count("atrasado")} perdiendo vida · {count("vida_cero")} con vida 0 · {count("en_espera")} en espera de configuración</p>
-    <p className="mt-1 text-[11px] text-muted-foreground">Regla: sin entregable verificado en su turno pierde 3 de vida por turno; cada ronda con trabajo verificado recupera vida. Con vida 0 el CEO pide tu revisión; nadie se borra automáticamente. Esperar configuración o estar en la academia no resta vida.</p>
+    <p className="mt-1 text-[11px] text-muted-foreground">Regla: sin entregable verificado en su turno pierde 3 de vida por turno; cada ronda con trabajo verificado recupera vida. Con vida 0 el CEO pide tu revisión; la inactividad nunca despide ni borra a nadie. Esperar configuración, una fuente apagada, la academia o la oficina caída no restan vida.</p>
     {byGroup.map(([group, items]) => <div key={group} className="mt-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</p>
       <ul className="mt-1 space-y-1.5">{items.map((row) => <li key={row.agentId} data-testid={`vitality-${row.agentId}`} className="rounded border border-white/10 p-2">
@@ -80,16 +81,18 @@ export function AgentVitalityRoster({ groups, title = "Vida del equipo", testId 
   </section>;
 }
 
-/** Office (la empresa) entry point: one button that opens the full roster. */
+/** Office (la empresa) entry point: one button that opens the full roster (Radix dialog: focus trap, Escape, focus return). */
 export function AgentVitalityButton() {
-  const [open, setOpen] = useState(false);
-  return <>
-    <button type="button" data-testid="office-open-vitality" onClick={() => setOpen(true)} className="rounded-xl border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100">Vida del equipo</button>
-    {open && <div role="dialog" aria-modal="true" aria-label="Vida del equipo" className="fixed inset-0 z-[260] flex items-start justify-center overflow-y-auto bg-black/70 p-4" onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>
-      <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-slate-950 p-4 text-white">
-        <div className="mb-2 flex justify-end"><button type="button" autoFocus onClick={() => setOpen(false)} className="rounded px-2 py-1 text-xs hover:bg-white/10">Cerrar</button></div>
-        <AgentVitalityRoster testId="office-vitality-roster" />
-      </div>
-    </div>}
-  </>;
+  return <Dialog>
+    <DialogTrigger asChild>
+      <button type="button" data-testid="office-open-vitality" className="rounded-xl border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100">Vida del equipo</button>
+    </DialogTrigger>
+    <DialogContent className="z-[250] max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogHeader>
+        <DialogTitle>Vida del equipo</DialogTitle>
+        <DialogDescription>Todos los agentes registrados con su vida y su último entregable verificado.</DialogDescription>
+      </DialogHeader>
+      <AgentVitalityRoster testId="office-vitality-roster" title="Agentes" />
+    </DialogContent>
+  </Dialog>;
 }
