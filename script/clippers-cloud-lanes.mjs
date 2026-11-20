@@ -104,7 +104,7 @@ export const defaultRunners = {
       heldReasons: [...blockers, ...(r.status === 'completed_with_uncertain_outcomes' ? ['youtube_upload_outcome_uncertain'] : [])], errors: [],
       counts: { youtube_uploaded: Number(r.publishing?.uploaded ?? 0), youtube_packaged: Number(r.packaging?.packaged ?? 0) } };
   },
-  async marketplace({ workspaceRoot, env, dryRun }) {
+  async marketplace({ workspaceRoot, env, dryRun, run }) {
     const { runClipperFreeLocalWorker } = await import('./clippers-free-local-worker.mjs');
     // Selected-env file (0600) in a private temp config root: the same contract the Mac uses, so child scripts
     // (Drive upload, Metricool autopilot + its cross-account ledger guard) get exactly the allowlisted keys.
@@ -118,7 +118,11 @@ export const defaultRunners = {
       await writeFile(path.join(configRoot, '.env'), `${lines.join('\n')}\n`, { mode: 0o600 });
       const scrub = Object.fromEntries(Object.keys(env).filter(k => /^(OFFICE_|METRICOOL_|GOOGLE_|CLIPPERS_)/.test(k)).map(k => [k, '']));
       const r = await runClipperFreeLocalWorker({ projectRoot: REPO_ROOT, workspaceRoot, configRoot, env: { ...scrub, CLIPPERS_CONFIG_ROOT: configRoot },
-        childEnv: { CLIPPERS_CONFIG_ROOT: configRoot, ...(has(env, 'CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS') ? { CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS: env.CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS } : {}) } });
+        // CLIPPERS_RUNTIME=cloud: this runner is the single Metricool writer (shared/clippers-metricool-writer.mjs);
+        // the child env is scrubbed, so GITHUB_ACTIONS never reaches the autopilot and the marker must be explicit.
+        childEnv: { CLIPPERS_CONFIG_ROOT: configRoot, CLIPPERS_RUNTIME: 'cloud',
+          ...Object.fromEntries(['CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS', 'CLIPPERS_MARKETPLACE_LANE_DAILY_QUOTA'].filter(k => has(env, k)).map(k => [k, env[k]])) },
+        ...(run ? { run } : {}) });
       const blockers = r.configurationBlockers ?? [];
       // Metricool off by design (owner flag) stops the chain at "delivery": informational, not a block.
       const byDesign = r.failedStage === 'delivery' && blockers.length > 0 && blockers.every(isInformational);

@@ -12,7 +12,8 @@ import { runClippersWeeklyScheduling, parseWeeklySchedulingArgs } from '../scrip
 import { buildClippersOrchestraReport } from '../script/clippers-orchestra-report.mjs';
 import { renderClippersPortfolio, confirmedRenderReceipt } from '../script/clippers-portfolio-render.mjs';
 import { runClippersPortfolioPrepare, publicDriveUrl } from '../script/clippers-portfolio-prepare.mjs';
-// These tests exercise the write paths themselves: opt in like an Actions runner (shared/clippers-metricool-writer.mjs).
+// Many fixtures here rely on the process env default; they exercise the write paths, so opt in like an Actions
+// runner (shared/clippers-metricool-writer.mjs). The Mac refusal itself is covered in clippers-metricool-writer.test.mjs.
 process.env.CLIPPERS_RUNTIME = 'cloud';
 const exec=promisify(execFile),NOW=new Date('2026-11-18T15:00:00Z'),target=DESTINATIONS[0];
 const WINDOW={startDate:'2026-11-18',endDate:'2026-11-22'},SHA='a'.repeat(64),CONFIG='config/clippers-daily-learning',REPORT='reports/clippers-daily-learning';

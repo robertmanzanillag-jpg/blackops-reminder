@@ -9,8 +9,6 @@ import test from 'node:test';
 import { runClippersDailyLearning } from '../script/clippers-daily-learning.mjs';
 import { confirmedRenderReceipt, renderClippersPortfolio } from '../script/clippers-portfolio-render.mjs';
 import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
-// These tests exercise the write paths themselves: opt in like an Actions runner (shared/clippers-metricool-writer.mjs).
-process.env.CLIPPERS_RUNTIME = 'cloud';
 
 const exec = promisify(execFile);
 const engineSha = value => createHash('sha256').update(value).digest('hex');
@@ -126,14 +124,14 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
   const scopedMediaLedger = 'reports/clippers-daily-learning/portfolio-media-receipts.json';
   await write(scopedMediaLedger, [{ ...publicReceipt, brandId: DESTINATIONS[1].brandId, account: DESTINATIONS[1].account }]);
   await write('reports/metricool-public-media-receipts.json', [publicReceipt]);
-  const mismatch = await runClippersDailyLearning({ workspaceRoot: root, now, adapter: {
+  const mismatch = await runClippersDailyLearning({ workspaceRoot: root, now, env: { CLIPPERS_RUNTIME: 'cloud' }, adapter: {
     preflight() { throw new Error('cross-account upload receipt must never reach the provider'); },
   } });
   assert.equal(mismatch.destinations[0].eligible, 0, 'a render is not approved by a different destination or legacy upload receipt');
   await write('reports/clippers-daily-learning/state.json', { schemaVersion: 1, day: null,
     deliveries: [], observations: [], history: [], versions: {} });
   await write(scopedMediaLedger, [publicReceipt]);
-  const report = await runClippersDailyLearning({ workspaceRoot: root, now, adapter: {
+  const report = await runClippersDailyLearning({ workspaceRoot: root, now, env: { CLIPPERS_RUNTIME: 'cloud' }, adapter: {
     preflight: async () => {},
     crossAccountPreflight: async () => ({ checkedDays: [] }),
     schedule: async (_destination, verified) => {

@@ -38,7 +38,7 @@ const sha = v => createHash('sha256').update(String(v)).digest('hex');
 const iso = ms => new Date(ms).toISOString();
 const code = (e, d = 'ERROR') => String(e?.message ?? d).replace(/https?:\/\/\S+/g, '[url]').replace(/[^A-Za-z0-9_:.-]+/g, '_').slice(0, 80);
 export const DEFAULT_SLOTS = Object.freeze(['11:00', '13:30', '16:00', '18:30', '21:00']);
-export const PRE_WRITE_ERRORS = new Set(['destination_publish_permission_missing', 'destination_identity_unverified', 'destination_not_allowlisted', 'metricool_credentials_unavailable', 'metricool_slot_duplicate_or_daily_cap', 'metricool_schedule_time_unverified']);
+export const PRE_WRITE_ERRORS = new Set(['destination_publish_permission_missing', 'destination_identity_unverified', 'destination_not_allowlisted', 'metricool_credentials_unavailable', 'metricool_slot_duplicate_or_daily_cap', 'metricool_schedule_time_unverified', 'cloud_owned_brand_mac_write_refused']);
 export const TRANSIENT_LANE_MISS = /^(?:lane_)?(?:no_free_slots|destination_held|lane_destination_not_connected)(?::|$)/;
 const UNCERTAIN = new Set(['pending_write', 'verification_pending']);
 export const CLOUD_PUBLISH_SECRET_NAMES = Object.freeze(['METRICOOL_USER_TOKEN', 'METRICOOL_USER_ID']);
