@@ -312,15 +312,14 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       // Drafts count too: a draft waiting for owner approval holds its slot, caption and media.
       const rows = await schedule(destination, localDay(new Date(item.scheduledAt)), false, item.countDrafts === true);
       if (rows.some(row => !scheduledTime(row))) throw Error('metricool_schedule_time_unverified');
-      const duplicate = rows.some(row => {
-        return localHour(scheduledTime(row)) === localHour(item.scheduledAt) || row.text === item.caption ||
-          providerMedia(row) === item.mediaUrl;
-      });
+      // Content match (same caption or media) wins over everything: the owner rule is never repeat a clip.
+      const contentDuplicate = rows.some(row => row.text === item.caption || providerMedia(row) === item.mediaUrl);
+      const hourClash = rows.some(row => localHour(scheduledTime(row)) === localHour(item.scheduledAt));
       const limit = Number.isSafeInteger(item.dailyLimit) ? Math.max(1, Math.min(SCALED_DAILY_LIMIT, item.dailyLimit)) : DAILY_LIMIT;
-      if (duplicate || rows.length >= limit) {
-        // Same public code for every caller; `detail` lets the streamer worker skip a full day instead of retrying hours.
+      if (contentDuplicate || hourClash || rows.length >= limit) {
+        // Same public code for every caller; `detail` tells the streamer worker to stop (content), skip the day (cap) or try another hour.
         const e = new Error('metricool_slot_duplicate_or_daily_cap');
-        e.detail = rows.length >= limit ? 'daily_cap' : 'slot_duplicate';
+        e.detail = contentDuplicate ? 'slot_duplicate_content' : rows.length >= limit ? 'daily_cap' : 'slot_duplicate';
         e.dayRows = rows.length; e.dayLimit = limit;
         throw e;
       }

@@ -813,7 +813,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             c.posts.push({ ...item, attemptedAt: iso(clock()) });
             return null;
           });
-          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') { report.counts.blocked++; gateBlocked = blocked; } at = null; break; }
+          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') report.counts.blocked++; gateBlocked = blocked; at = null; break; }
           let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
           try {
             await metricool.preflight(p.destination, item);
@@ -825,6 +825,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             reason = code(e);
             // Nothing was written: drop the post and its media-ledger claim.
             await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
+            if (reason === 'metricool_slot_duplicate_or_daily_cap' && e?.detail === 'slot_duplicate_content') {
+              // Same caption/media already on this account: never repeat a clip, no other hour, no next day.
+              gateBlocked = 'metricool_duplicate_content'; report.counts.blocked++;
+              report.heldReasons.push(`metricool_duplicate_content:${p.destination.brandId}:${p.destination.network}`); at = null; break;
+            }
             if (reason === 'metricool_slot_duplicate_or_daily_cap') {
               tried.add(at);
               // Metricool's day is already at the cap (drafts count, e.g. another pipeline's drafts): skip the whole day.
@@ -836,7 +841,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
               if (!at || attempt === 2) { report.counts.deferred++; report.counts.slotExhausted = (report.counts.slotExhausted ?? 0) + 1; dropReason = `metricool_no_free_slot:${p.destination.brandId}:${p.destination.network}:${slotMiss}`; report.heldReasons.push(dropReason); at = null; break; }
               continue;
             }
-            report.counts.deferred++; report.heldReasons.push(`destination_held:${p.destination.brandId}:${reason}`); at = null; break;
+            report.counts.deferred++; dropReason = `destination_held:${p.destination.brandId}:${reason}`; report.heldReasons.push(dropReason); at = null; break;
           }
           try {
             const found = await metricool.schedule(p.destination, item);
@@ -848,7 +853,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           await update((s, c) => { const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl }); if (status === 'deferred') dropClaim(c, item); });
           if (status === 'scheduled') { scheduled++; report.counts.scheduled++; }
           else if (status === 'verification_pending') { pending++; report.counts.verificationPending++; }
-          else report.counts.deferred++;
+          else { report.counts.deferred++; dropReason = `destination_held:${p.destination.brandId}:${reason}`; report.heldReasons.push(dropReason); }
           break;
         }
       }
@@ -876,7 +881,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       if (!scheduled && !pending && !gateBlocked && !queuedOnly && !dropReason) {
         // Rendered but nothing written or queued: always name it (deferred/held reasons above, or this catch-all).
         dropReason = plan.length ? 'rendered_not_scheduled:no_write_attempt' : 'rendered_not_scheduled:no_target';
-        if (!report.heldReasons.some(r => r.startsWith('destination_held:'))) { report.heldReasons.push(dropReason); report.counts.deferred++; }
+        report.heldReasons.push(dropReason); report.counts.deferred++;
       }
       await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked ?? dropReason, mediaAsset });
       if (scheduled && candidate.approval?.pendingActionId && approvals?.markExecuted) {
