@@ -47,6 +47,8 @@ permissions:
 # secret can be changed from here. 'true' by default so the owner does not have to edit the secret.
 env:
   FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: ${{ vars.FACTORY_AUTO_ADMIT_SYSTEM_ORDERS || 'true' }}
+  # Optional owner override of the daily draft-PR cap (1..10); empty keeps the private config value.
+  FACTORY_DRAFT_PRS_PER_DAY: ${{ vars.FACTORY_DRAFT_PRS_PER_DAY || '' }}
 
 jobs:
   office-once:
