@@ -236,6 +236,29 @@ test('preflight slot conflict moves to the next slot; destination hold defers wi
   assert.ok(fbFirst.report.heldReasons.some(r => r.startsWith('destination_held:6591612:destination_publish_permission_missing')));
 });
 
+test('Metricool daily cap (drafts from another pipeline) skips the day; no free slot is reported, never a silent drop', async () => {
+  const capErr = () => Object.assign(new Error('metricool_slot_duplicate_or_daily_cap'), { detail: 'daily_cap', dayRows: 10, dayLimit: 5 });
+  const today = new Date(NOW).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const dayOf = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  // Today full: one rejection, then the next pick is tomorrow (not another hour today).
+  const m = fakeMetricool({ preflight: async (d, item) => { if (dayOf(item.scheduledAt) === today) throw capErr(); } });
+  const ok = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store: memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')])), approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.equal(ok.report.counts.scheduled, 1);
+  assert.equal(m.calls.preflight.length, 2, 'a full day is skipped in one step');
+  assert.notEqual(dayOf(m.calls.schedule[0].scheduledAt), today);
+  // Every day full: rendered, nothing written, explicit reason + count.
+  const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')]));
+  const full = fakeMetricool({ preflight: async () => { throw capErr(); } });
+  const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: full, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.equal(report.counts.rendered, 1); assert.equal(report.counts.scheduled, 0);
+  assert.equal(full.calls.schedule.length, 0);
+  assert.equal(report.counts.slotExhausted, 1); assert.equal(report.counts.deferred, 1);
+  const reason = report.heldReasons.find(r => r.startsWith('metricool_no_free_slot:'));
+  assert.ok(reason && reason.endsWith(':daily_cap:10/5'), reason);
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].status, 'deferred');
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].reason, reason);
+});
+
 test('missing Metricool secrets hold publishing; dry run renders without Metricool', async () => {
   const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')])), media = fakeMedia();
   const held = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_LANES_ENABLED: 'false' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch, ...media });

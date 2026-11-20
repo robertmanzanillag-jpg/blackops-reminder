@@ -317,7 +317,13 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
           providerMedia(row) === item.mediaUrl;
       });
       const limit = Number.isSafeInteger(item.dailyLimit) ? Math.max(1, Math.min(SCALED_DAILY_LIMIT, item.dailyLimit)) : DAILY_LIMIT;
-      if (duplicate || rows.length >= limit) throw new Error('metricool_slot_duplicate_or_daily_cap');
+      if (duplicate || rows.length >= limit) {
+        // Same public code for every caller; `detail` lets the streamer worker skip a full day instead of retrying hours.
+        const e = new Error('metricool_slot_duplicate_or_daily_cap');
+        e.detail = rows.length >= limit ? 'daily_cap' : 'slot_duplicate';
+        e.dayRows = rows.length; e.dayLimit = limit;
+        throw e;
+      }
     },
     /**
      * Read-only cross-account guard: the same caption or media must not be scheduled, drafted or published on any
