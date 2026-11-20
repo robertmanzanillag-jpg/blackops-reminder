@@ -167,6 +167,36 @@ function metricsFrom(row, destination) {
 }
 const schedulerId = row => String(row?.id ?? row?.uuid ?? '');
 
+// Facebook account-action errors: the Page cannot publish until the person does something in the Facebook
+// app (identity confirmation, security checkpoint, re-login). Not a code failure and never retried.
+const FACEBOOK_OWNER_ACTION = /confirm your identity|verify your identity|identity (?:confirmation|verification)|checkpoint|security check|open the facebook app|log ?in again|session has (?:been invalidated|expired)|account (?:is )?(?:restricted|disabled|locked)|verifica(?:r)? tu identidad|confirma(?:r)? tu identidad/i;
+/** Owner-action reason code for a Facebook provider detailedStatus, or null. */
+export function facebookOwnerActionReason(detailedStatus) {
+  const text = String(detailedStatus ?? '');
+  if (!FACEBOOK_OWNER_ACTION.test(text)) return null;
+  return /identi/i.test(text) ? 'facebook_identity_confirmation_required' : 'facebook_account_action_required';
+}
+/**
+ * Provider health for one destination from raw scheduler rows (any status, including ERROR):
+ * the latest owner-action error and the latest PUBLISHED row for that network.
+ */
+export function providerHealthFromRows(rows, destination) {
+  let ownerAction = null, published = null;
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (row?.blogId != null && String(row.blogId) !== String(destination.brandId)) continue;
+    const target = Array.isArray(row?.providers) ? row.providers.find(p => p?.network === destination.network) : null;
+    if (!target) continue;
+    const status = String(target.status ?? row.status ?? '').toLowerCase();
+    const at = scheduledTime(row) ?? providerTimestamp(target.publishedAt ?? row.publishedAt);
+    if (!at) continue;
+    if (status === 'error' || status === 'failed') {
+      const reason = destination.network === 'facebook' ? facebookOwnerActionReason(target.detailedStatus ?? row.detailedStatus) : null;
+      if (reason && (!ownerAction || at > ownerAction.at)) ownerAction = { reason, at, id: schedulerId(row) };
+    } else if (['published', 'posted'].includes(status) && (!published || at > published.at)) published = { at, id: schedulerId(row) };
+  }
+  return { ownerAction, published };
+}
+
 export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
   if (typeof token !== 'string' || token.length < 12 || !/^\d+$/.test(String(userId))) throw new Error('metricool_credentials_unavailable');
   const headers = { 'X-Mc-Auth': token, accept: 'application/json' };
@@ -249,6 +279,16 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
   }
   return {
     destinationSettings,
+    /** Read-only: raw scheduler rows for the given local days -> providerHealthFromRows. */
+    async providerHealth(destination, days) {
+      if (!findDestination(destination)) throw new Error('destination_not_allowlisted');
+      const rows = [];
+      for (const day of days) rows.push(...list(await get('/api/v2/scheduler/posts', {
+        blogId: destination.brandId, integrationSource: 'MCP',
+        start: day + 'T00:00:00', end: day + 'T23:59:59', timezone: TIME_ZONE, extendedRange: false,
+      })));
+      return providerHealthFromRows(rows, destination);
+    },
     // Read-only whole-account analysis. These observations never become controlled experiments.
     async accountAnalytics(destination, now = new Date()) {
       if (!findDestination(destination)) throw new Error('destination_not_allowlisted');

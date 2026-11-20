@@ -24,6 +24,7 @@ import { STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, parseStreamerState,
 import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption, clipLengthAllowed, detectClipProhibition, STREAMER_CLIP_MAX_SECONDS } from '../shared/clippers-streamer-policy.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
+export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
 import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, CLIP_SECONDS } from '../shared/clippers-account-lanes.mjs';
@@ -80,6 +81,10 @@ export function cloudPublishConfig(env = process.env) {
     maxAttempts: 3,
     runDeadlineMs: int(env.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES, 20, 5, 25) * 60_000,
     destinations,
+    // Gradual release of Facebook copies queued while the Page was on owner-action hold.
+    heldReleasePerRun: int(env.CLIPPERS_STREAMER_CLOUD_HELD_RELEASE_PER_RUN, 1, 0, 5),
+    // Owner flag: ISO time at which Robert confirmed the Facebook identity check; clears older holds.
+    holdResolvedAt: Number.isFinite(Date.parse(env.CLIPPERS_FACEBOOK_HOLD_RESOLVED_AT ?? '')) ? new Date(Date.parse(env.CLIPPERS_FACEBOOK_HOLD_RESOLVED_AT)).toISOString() : null,
     missing: CLOUD_PUBLISH_SECRET_NAMES.filter(n => !real(env[n])),
     unknownDestinations: requested.filter(k => !keys.has(k)).map(k => k.replace(/[^0-9a-z:_-]/gi, '').slice(0, 60)),
   };
@@ -129,11 +134,41 @@ export function nextSlot({ now, config, destination, index = 0, posts = [], skip
 }
 
 // ---------- State ----------
-export function emptyCloudPublish() { return { version: 1, clips: {}, posts: [], learning: null, lastRun: null }; }
+export function emptyCloudPublish() { return { version: 1, clips: {}, posts: [], learning: null, lastRun: null, holds: {}, heldQueue: [] }; }
 export function cloudPublishOf(state) {
   const c = state?.cloudPublish;
-  return c?.version === 1 && Array.isArray(c.posts) && c.clips && typeof c.clips === 'object' ? c : emptyCloudPublish();
+  if (!(c?.version === 1 && Array.isArray(c.posts) && c.clips && typeof c.clips === 'object')) return emptyCloudPublish();
+  if (!c.holds || typeof c.holds !== 'object' || Array.isArray(c.holds)) c.holds = {};
+  if (!Array.isArray(c.heldQueue)) c.heldQueue = [];
+  return c;
 }
+
+// ---------- Per-brand per-network owner-action hold ----------
+export const HOLD_OWNER_ACTION = 'held_owner_action';
+export const HOLD_OWNER_NOTE = 'Facebook pide verificar identidad en la app';
+export const isHeld = (ledger, destination) => ledger.holds?.[destinationKey(destination)]?.status === HOLD_OWNER_ACTION;
+/**
+ * Pure hold transition for one destination. health = providerHealth result; ownerResolvedAt = owner flag/endpoint.
+ * Returns the next hold record (or the unchanged one) plus what happened.
+ */
+export function nextHold(hold, health, { now, ownerResolvedAt = null }) {
+  const held = hold?.status === HOLD_OWNER_ACTION;
+  if (held) {
+    const resolved = [ownerResolvedAt, hold.ownerResolvedAt].filter(Boolean).find(t => Date.parse(t) > Date.parse(hold.since));
+    if (resolved) return { hold: { status: 'active', clearedAt: iso(now), clearedBy: 'owner_resolved', lastReason: hold.reason }, change: 'cleared' };
+    if (health?.published && Date.parse(health.published.at) > Date.parse(hold.since)) {
+      return { hold: { status: 'active', clearedAt: iso(now), clearedBy: 'provider_published', lastReason: hold.reason }, change: 'cleared' };
+    }
+    return { hold, change: null };
+  }
+  const oa = health?.ownerAction;
+  if (!oa) return { hold, change: null };
+  // An error older than the last clear, or older than a later successful publication, is history.
+  if (hold?.clearedAt && Date.parse(oa.at) <= Date.parse(hold.clearedAt)) return { hold, change: null };
+  if (health.published && Date.parse(health.published.at) > Date.parse(oa.at)) return { hold, change: null };
+  return { hold: { status: HOLD_OWNER_ACTION, reason: oa.reason, since: oa.at, detectedAt: iso(now), evidenceId: oa.id || null, note: HOLD_OWNER_NOTE }, change: 'held' };
+}
+function localDaysAround(now) { const today = localDay(new Date(now)); return [localDay(new Date(now - 24 * HOUR)), today].filter((d, i, a) => a.indexOf(d) === i); }
 
 /**
  * The public staging asset may be deleted only when no write for the clip is uncertain and every scheduled
@@ -142,6 +177,7 @@ export function cloudPublishOf(state) {
  */
 export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
   const posts = ledger.posts.filter(p => p.candidateId === candidateId);
+  if ((ledger.heldQueue ?? []).some(q => q.candidateId === candidateId)) return false; // queued copy still needs the media
   if (posts.some(p => UNCERTAIN.has(p.status))) return false;
   return posts.filter(p => p.status === 'scheduled').every(p =>
     (p.confirmedMediaUrl && p.confirmedMediaUrl !== assetUrl) || now >= Date.parse(p.scheduledAt) + 2 * HOUR);
@@ -351,7 +387,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   // A growth-only pass (read-only analytics) runs even while publishing is off; the kill switch still stops it.
   const config = { ...cloudPublishConfig(env), ...(growthOnly ? { enabled: true } : {}) };
   const ns = STREAMER_STATE_NAMESPACE(owner);
-  const report = { at: iso(now), status: 'completed', heldReasons: [], errors: [], counts: { rendered: 0, scheduled: 0, verificationPending: 0, deferred: 0, blocked: 0, failed: 0, reconciled: 0, observed: 0, assetsRemoved: 0 }, dryRun: config.dryRun, paidSpendUsd: 0, aiSpendUsd: 0 };
+  const report = { at: iso(now), status: 'completed', heldReasons: [], errors: [], counts: { rendered: 0, scheduled: 0, heldQueued: 0, heldReleased: 0, verificationPending: 0, deferred: 0, blocked: 0, failed: 0, reconciled: 0, observed: 0, assetsRemoved: 0 }, dryRun: config.dryRun, paidSpendUsd: 0, aiSpendUsd: 0 };
   if (!config.enabled) return { report: { ...report, status: 'disabled' }, skipped: true };
   if (config.killSwitch) return { report: { ...report, status: 'kill_switch' }, skipped: true };
   report.heldReasons.push(...config.unknownDestinations.map(k => `destination_not_allowlisted:${k}`));
@@ -419,6 +455,91 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     }
   }
   const learning = await update((s, c) => (c.learning = computeLearning(c.posts, { now })));
+
+  // 1b) Owner-action holds (e.g. Facebook "Confirm your identity"): read-only provider probe, one per network.
+  if (metricool?.providerHealth && !config.missing.length) {
+    const watched = DESTINATIONS.filter(d => d.network === 'facebook' && (config.destinations.some(x => destinationKey(x) === destinationKey(d)) || ledger0.holds?.[destinationKey(d)]));
+    for (const d of watched) {
+      try {
+        const health = await metricool.providerHealth(d, localDaysAround(now));
+        const key = destinationKey(d);
+        const change = await update((s, c) => {
+          const r = nextHold(c.holds[key], health, { now, ownerResolvedAt: config.holdResolvedAt });
+          if (r.change) c.holds[key] = r.hold;
+          return r.change;
+        });
+        if (change) report.holdChanges = [...(report.holdChanges ?? []), `${key}:${change}`];
+      } catch (e) { report.heldReasons.push(`metricool_read:${code(e)}`); }
+    }
+  }
+  {
+    const c = cloudPublishOf(parseStreamerState(await store.read(ns)));
+    report.ownerHolds = Object.entries(c.holds).filter(([, h]) => h?.status === HOLD_OWNER_ACTION)
+      .map(([destination, h]) => ({ destination, status: h.status, reason: h.reason, since: h.since, note: h.note ?? HOLD_OWNER_NOTE, queued: c.heldQueue.filter(q => q.destinationKey === destination).length }));
+  }
+
+  // 1c) Gradual release of queued copies for destinations whose hold cleared (pacing via nextSlot + preflight).
+  if (canWrite) {
+    const c0 = cloudPublishOf(parseStreamerState(await store.read(ns)));
+    const expired = c0.heldQueue.filter(q => now - Date.parse(q.queuedAt) > config.maxSourceAgeHours * HOUR).map(q => q.id);
+    if (expired.length) await update((s, c) => { c.heldQueue = c.heldQueue.filter(q => !expired.includes(q.id)); });
+    let released = 0;
+    for (const q of c0.heldQueue.filter(q => !expired.includes(q.id))) {
+      if (released >= config.heldReleasePerRun) break;
+      const destination = findDestination(q.destination);
+      if (!destination || isHeld(c0, destination) || !config.destinations.some(x => destinationKey(x) === destinationKey(destination))) continue;
+      const fresh = cloudPublishOf(parseStreamerState(await store.read(ns)));
+      const mediaUrl = fresh.clips[q.candidateId]?.mediaAsset?.url;
+      const drop = () => update((s, c) => { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); });
+      if (!mediaUrl || !await verifyPublicMedia(mediaUrl, fetchImpl)) { await drop(); report.heldReasons.push('held_release:media_unavailable'); continue; }
+      // Lane copies keep the lane's per-account slots/cap; the 1k auto-publish gate is re-evaluated now.
+      const plan = q.lane ? accountSchedule(fresh, destination, now) : null;
+      const slotConfig = plan ? { ...config, slots: plan.slots, dailyCap: plan.cap } : config;
+      const scheduledAt = nextSlot({ now, config: slotConfig, destination, index: q.index ?? 0, posts: fresh.posts });
+      if (!scheduledAt) { report.heldReasons.push('held_release:no_free_slots'); break; }
+      const lane = q.lane ? { ...q.lane, dailyLimit: plan.cap,
+        draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now })) } : null;
+      const item = postItem({ candidate: { id: q.candidateId, creatorKey: q.creatorKey }, destination, scheduledAt, caption: q.caption, mediaUrl, mediaSha256: q.mediaSha256, hookVariant: q.hookVariant, lane });
+      if (!lane) item.draft = true; // queued without lane fields (lanes off): owner approves it as a draft, whatever the current lane mode
+      const blocked = await update((s, c) => {
+        const cand = s.candidates.find(x => x.id === q.candidateId);
+        const reason = cand ? publishGate(s, cand) : 'candidate_missing';
+        if (reason) { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return reason; }
+        const prior = c.posts.find(x => x.id === item.id);
+        if (prior && prior.status !== 'deferred') { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return 'already_attempted'; }
+        if (lane) { // Same one-file-one-account check + claim as the main write path, inside this transaction.
+          const others = mediaEntriesOf({ ...c, posts: c.posts.filter(x => x.id !== item.id) }).filter(e => !(e.candidateId === q.candidateId && e.destinationKey === item.destinationKey));
+          const conflict = mediaConflict(others, { segment: item.segment, mediaSha256: item.mediaSha256, candidateId: q.candidateId, destinationKey: item.destinationKey });
+          if (conflict) { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return conflict.reason; }
+          c.mediaLedger = [...(Array.isArray(c.mediaLedger) ? c.mediaLedger : []).filter(e => !(e.candidateId === q.candidateId && e.destinationKey === item.destinationKey)),
+            mediaEntry({ candidate: cand, segment: item.segment, mediaSha256: item.mediaSha256, destinationKey: item.destinationKey, at: iso(clock()) })].slice(-5000);
+        }
+        c.posts = c.posts.filter(x => x.id !== item.id);
+        c.posts.push({ ...item, attemptedAt: iso(clock()), releasedFromHold: true });
+        return null;
+      });
+      if (blocked) { report.heldReasons.push(`held_release_gate:${blocked}`); continue; }
+      try {
+        await metricool.preflight(destination, item);
+        if (lane) {
+          if (!metricool.crossAccountPreflight) throw new Error('cross_account_check_unavailable');
+          await metricool.crossAccountPreflight(destination, item);
+        }
+      } catch (e) { // Keep it queued; a later run retries the slot (nothing was written): drop post + claim.
+        await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
+        report.heldReasons.push(`held_release_deferred:${code(e)}`); break;
+      }
+      let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
+      try { const found = await metricool.schedule(destination, item); status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null; }
+      catch (e) { reason = code(e); status = PRE_WRITE_ERRORS.has(reason) ? 'deferred' : 'verification_pending'; }
+      await update((s, c) => {
+        const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl });
+        if (status !== 'deferred') c.heldQueue = c.heldQueue.filter(y => y.id !== q.id); else dropClaim(c, item);
+      });
+      if (status === 'scheduled') report.counts.scheduled++; else if (status === 'verification_pending') report.counts.verificationPending++; else { report.counts.deferred++; break; }
+      released++; report.counts.heldReleased++;
+    }
+  }
 
   // 2) Remove staged media once no write for that clip is still uncertain; sweep leftovers after 48 h.
   if (stager && !config.dryRun) {
@@ -490,22 +611,35 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       report.counts.deferred++; continue;
     }
     // Destination slots from our own (fresh) ledger; Metricool preflight stays authoritative across lanes.
-    const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
+    const ledgerNow = cloudPublishOf(parseStreamerState(await store.read(ns)));
+    const posts = ledgerNow.posts;
+    // Held destinations (owner action pending) are left out of the Metricool post; their copy is queued locally.
+    // Never more than one account per clip: a copy is queued only when the single picked target is held.
+    let heldTargets = [];
     const plan = config.destinations.map((d, index) => ({ destination: d, index, scheduledAt: nextSlot({ now, config, destination: d, index, posts }) }))
+      .filter(p => !isHeld(ledgerNow, p.destination))
       .filter(p => p.scheduledAt && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(p.destination) && x.status !== 'deferred'));
     // Account lanes: exactly one account per clip (replaces the fan-out to every destination).
     let lanePick = null;
     if (config.lanesEnabled) {
       const freshLedger = cloudPublishOf(parseStreamerState(await store.read(ns)));
       lanePick = laneTarget({ state, ledger: freshLedger, candidate, config, now });
+      if (!lanePick.ok && String(lanePick.reason).startsWith('lane_destination_held:')) {
+        // Every destination of this lane is on owner-action hold: pick as if unheld, render, queue that one copy.
+        const heldPick = laneTarget({ state, ledger: { ...freshLedger, holds: {} }, candidate, config, now });
+        if (heldPick.ok && isHeld(freshLedger, heldPick.destination)) { lanePick = heldPick; heldTargets = [{ destination: heldPick.destination, index: 0, lane: heldPick }]; }
+      }
       if (!lanePick.ok) { report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
-      plan.splice(0, plan.length, { destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt });
+      plan.splice(0, plan.length, ...(heldTargets.length ? [] : [{ destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt }]));
       report.counts[`lane_${lanePick.lane}`] = (report.counts[`lane_${lanePick.lane}`] ?? 0) + 1;
     } else if (plan.length > 1) {
       // Lanes off: still one account per clip (never the old fan-out); posts are forced to drafts below.
       plan.splice(1);
+    } else if (!plan.length) {
+      const first = config.destinations.findIndex(d => isHeld(ledgerNow, d) && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(d) && x.status !== 'deferred'));
+      if (first >= 0 && config.destinations.every(d => isHeld(ledgerNow, d))) heldTargets = [{ destination: config.destinations[first], index: first, lane: null }];
     }
-    if (!plan.length) { report.heldReasons.push('no_free_slots'); break; }
+    if (!plan.length && !heldTargets.length) { report.heldReasons.push('no_free_slots'); break; }
     tried++;
     let { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
     if (lanePick?.killedHooks?.includes(hookVariant)) { hookVariant = hookVariant === 'title' ? 'teaser' : 'title'; hookMode = 'killed_arm_swap'; }
@@ -598,12 +732,28 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           break;
         }
       }
+      if (heldTargets.length && !gateBlocked) {
+        await update((s, c) => {
+          for (const h of heldTargets) {
+            const key = destinationKey(h.destination);
+            const id = `held-${sha(`${candidate.id}|${key}`).slice(0, 24)}`;
+            if (c.heldQueue.some(q => q.id === id) || c.posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === key && x.status !== 'deferred')) continue;
+            const lane = h.lane ? { lane: h.lane.lane, language: h.lane.language, streamKey: h.lane.streamKey,
+              segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }), dailyLimit: h.lane.dailyLimit, draft: h.lane.draft, countDrafts: true, allowDuetStitch: true } : null;
+            c.heldQueue.push({ id, candidateId: candidate.id, creatorKey: candidate.creatorKey, destination: { ...h.destination }, destinationKey: key, index: h.index,
+              caption, mediaSha256: rendered.sha256, hookVariant, queuedAt: iso(clock()), status: HOLD_OWNER_ACTION, lane, draft: lane ? lane.draft : true });
+            report.counts.heldQueued++;
+          }
+          c.heldQueue = c.heldQueue.slice(-100);
+        });
+      }
       // Metricool copied the media once the receipt is verified: remove the public staging asset now.
       let mediaAsset = asset;
       if (stagedAssetRemovable(cloudPublishOf(parseStreamerState(await store.read(ns))), candidate.id, asset.url, clock())) {
         await stager.remove(asset.id).then(() => { mediaAsset = null; report.counts.assetsRemoved++; }).catch(e => report.errors.push(`asset_remove:${code(e)}`));
       }
-      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : 'deferred', reason: gateBlocked, mediaAsset });
+      const queuedOnly = !scheduled && !pending && !gateBlocked && heldTargets.length > 0;
+      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked, mediaAsset });
       if (scheduled && candidate.approval?.pendingActionId && approvals?.markExecuted) {
         const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts.filter(x => x.candidateId === candidate.id).map(x => ({ destination: x.destinationKey, scheduledAt: x.scheduledAt, status: x.status, metricoolId: x.metricoolId }));
         await approvals.markExecuted(owner, candidate.approval.pendingActionId, { handoff: 'clippers_streamer_cloud', posts, externalCalls: posts.length }).catch(e => report.errors.push(`approval_update:${code(e)}`));

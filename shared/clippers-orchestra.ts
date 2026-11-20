@@ -10,6 +10,8 @@ export type ClippersRoleEvidence = {
   evidenceAt: string | null; activeUntil: string | null; lastRunAt: string | null; heartbeatAt: string | null; nextDueAt: string | null;
   runId: string | null; evidenceIds: string[]; outputs: Record<string, number>;
   heldReasons: string[]; lifePenaltyExempt: boolean; career: ClippersCareerView; outcomes?: ClippersVerifiedOutcome[];
+  /** Owner notes (an action only the owner can take, e.g. a Facebook identity check). Not a failure. */
+  ownerNotes?: string[];
 };
 export type ClippersMetricAgeBucket = { windowHours: 24 | 72 | 168; samples: number; actualAgeHoursMin: number | null; actualAgeHoursMax: number | null; latestObservedAt: string | null; views: number; likes: number | null; comments: number | null; shares: number | null };
 export type ClippersAccountView = {
@@ -100,11 +102,12 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
   }
   if(!Array.isArray(v.roles)||v.roles.length!==9||new Set(v.roles.map((r:any)=>r?.id)).size!==9)return null;
   for(const r of v.roles){
-    if(!keys(r,['id','stage','state','evidenceAt','activeUntil','lastRunAt','heartbeatAt','nextDueAt','runId','evidenceIds','outputs','heldReasons','lifePenaltyExempt','career',...(r.outcomes===undefined?[]:['outcomes'])]) ||
+    if(!keys(r,['id','stage','state','evidenceAt','activeUntil','lastRunAt','heartbeatAt','nextDueAt','runId','evidenceIds','outputs','heldReasons','lifePenaltyExempt','career',...(r.outcomes===undefined?[]:['outcomes']),...(r.ownerNotes===undefined?[]:['ownerNotes'])]) ||
       !roleStages.includes(r.stage)||r.id!==`clippers-${r.stage}`||!['working','completed','held','idle','stale','disconnected'].includes(r.state)||
       ![r.evidenceAt,r.lastRunAt,r.heartbeatAt].every(at=>nullableTime(at,now)) || !nullableTime(r.activeUntil,now+2*3600000) ||
       !nullableTime(r.nextDueAt,now+3*86400000) || !(r.runId===null||code(r.runId)) || !codes(r.evidenceIds) || !codes(r.heldReasons) ||
       typeof r.lifePenaltyExempt!=='boolean' || !record(r.outputs)||Object.keys(r.outputs).length>20 || !Object.entries(r.outputs).every(([k,n])=>code(k)&&count(n)))return null;
+    if(r.ownerNotes!==undefined&&(!Array.isArray(r.ownerNotes)||r.ownerNotes.length>5||r.ownerNotes.some((n:any)=>typeof n!=='string'||!n.length||n.length>160)))return null;
     if(r.outcomes!==undefined&&(!Array.isArray(r.outcomes)||r.outcomes.length>100||r.outcomes.some((o:any)=>!keys(o,['evidenceId','completedAt','outcome','reason','artifactSha256'])||!code(o.evidenceId)||!time(o.completedAt,now)||!['verified_deliverable','attributable_failure'].includes(o.outcome)||!code(o.reason)||!(/^[a-f0-9]{64}$/).test(o.artifactSha256))))return null;
     const c=r.career;
     if(!keys(c,['registered','generation','points','battery','inTraining','hiredAt','skillIds','lastEvidenceId']) || typeof c.registered!=='boolean'||typeof c.inTraining!=='boolean'||
