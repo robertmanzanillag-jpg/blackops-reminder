@@ -1,8 +1,9 @@
 # Clippers streamer pages (cloud)
 
 The NY News (6595747) and Miami News (6591612) Metricool brands are now streamer clip pages.
-Page names come from the repository variable `CLIPPERS_CITY_PAGE_NAMES`, for example
-`{"6591612":{"name":"<Miami page name>"},"6595747":{"name":"<NYC page name>"}}`. No name is hardcoded.
+Default page names: Miami (6591612) is "Clipwave Miami" (suggested handle `@clipwave.mia`) and NYC (6595747) is
+"Clipwave NYC" (suggested handle `@clipwave.nyc`). The repository variable `CLIPPERS_CITY_PAGE_NAMES` overrides them per brand, for example
+`{"6591612":{"name":"Clipwave Miami","handle":"@clipwave.mia"}}`. Brands left out keep the default.
 The local-news Metricool sender is retired (`CLIPPERS_LOCAL_NEWS_SENDER_ENABLED` must be `"true"` to resume it).
 Its ledgers stay on disk and are read-only.
 

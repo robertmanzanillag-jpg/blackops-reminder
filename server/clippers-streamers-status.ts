@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { parseClippersOrchestraStatus, type ClippersOrchestraStatus } from '../shared/clippers-orchestra';
 import { LEGACY_DISCOVERY_CREATORS as LEGACY_SOURCES } from '../shared/clippers-priority-creators.mjs';
 import type { SelfHealObservedAudit } from './office-self-heal';
-import { parseTakedown } from '../shared/clippers-streamer-policy.mjs';
+import { parseTakedown, DEFAULT_CITY_PAGE_NAMES } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createPendingActionsQueue } from '../script/clippers-streamer-discovery.mjs';
 import { getCurrentUserId, getSystemUserId } from './user-context';
 
@@ -146,7 +146,8 @@ export function cloudFallbackReport(raw: string | null, at: number): ClippersOrc
   const state = parseStreamerState(raw);
   if (!state.lastRun) return null;
   const generatedAt = new Date(at).toISOString();
-  const cityName = (brandId: string) => (state.cityPages ?? []).find((p: any) => p.brandId === brandId && p.name)?.name as string | undefined;
+  const cityName = (brandId: string) => (state.cityPages ?? []).find((p: any) => p.brandId === brandId && p.name)?.name as string | undefined
+    ?? DEFAULT_CITY_PAGE_NAMES[brandId]?.name;
   const role = (stage: typeof STAGES[number]) => ({ id: `clippers-${stage}` as const, stage, state: 'disconnected' as const, evidenceAt: null, activeUntil: null, lastRunAt: null,
     heartbeatAt: null, nextDueAt: null, runId: null, evidenceIds: [], outputs: {}, heldReasons: ['mac_worker_offline'], lifePenaltyExempt: true,
     career: { registered: false, generation: null, points: null, battery: null, inTraining: false, hiredAt: null, skillIds: [], lastEvidenceId: null } });

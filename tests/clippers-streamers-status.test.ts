@@ -82,6 +82,10 @@ test('Mac off: orchestra view falls back to the cloud streamer state (valid cont
   assert.equal(s.state, 'held'); assert.ok(s.heldReasons.includes('missing_secret:TWITCH_CLIENT_ID')); assert.ok(!s.heldReasons.includes('mac_worker_offline'));
   assert.equal(fb.roles.find(r => r.stage === 'editor')!.state, 'disconnected');
   assert.ok(fb.accounts.some(a => a.label.startsWith('Miami Streamers')));
+  // No cityPages stored (older state): Clipwave defaults label the office.
+  const def = cloudFallbackReport(stateWith({ at: '2026-11-19T14:30:00.000Z', status: 'ok', heldReasons: [], errors: [], counts: { candidates: 0 } }), AT)!;
+  assert.ok(def.accounts.some(a => a.label.startsWith('Clipwave Miami')));
+  assert.equal(def.disconnectedDestinations[0].label, 'Clipwave NYC');
   // Through the real read(): no Mac envelope stored -> cloud fallback instead of null.
   const data = new Map<string, string>([['clippers-streamers:o', raw]]);
   const orchestra = createClippersOrchestraState({ owner: () => 'o', now: () => AT, store: async () => ({ read: async (k: string) => data.get(k) ?? null, transact: async () => '' }) });

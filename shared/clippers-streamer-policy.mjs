@@ -104,12 +104,17 @@ export function captionHasCredit(caption, handle, sourceUrl) {
 
 /**
  * CLIPPERS_CITY_PAGE_NAMES: JSON {"<metricoolBrandId>": {"name": "...", "city": "miami"|"new-york"}}.
- * Names are owner-chosen (TBD); nothing is hardcoded. Unknown brand ids are rejected.
+ * When unset, the Clipwave defaults below are used; the env var overrides them per brand. Unknown brand ids are rejected.
  */
 export const CITY_PAGE_BRANDS = Object.freeze({ '6591612': 'miami', '6595747': 'new-york' });
+export const DEFAULT_CITY_PAGE_NAMES = Object.freeze({
+  '6591612': Object.freeze({ name: 'Clipwave Miami', handle: '@clipwave.mia' }),
+  '6595747': Object.freeze({ name: 'Clipwave NYC', handle: '@clipwave.nyc' }),
+});
 export function parseCityPageNames(raw) {
-  const out = Object.fromEntries(Object.entries(CITY_PAGE_BRANDS).map(([brandId, city]) => [brandId, { brandId, city, name: null, status: 'name_pending_owner' }]));
-  if (!raw || !String(raw).trim()) return { pages: Object.values(out), heldReasons: ['city_page_names_not_configured'] };
+  const out = Object.fromEntries(Object.entries(CITY_PAGE_BRANDS).map(([brandId, city]) => [brandId,
+    { brandId, city, name: DEFAULT_CITY_PAGE_NAMES[brandId].name, handle: DEFAULT_CITY_PAGE_NAMES[brandId].handle, status: 'named', source: 'default' }]));
+  if (!raw || !String(raw).trim()) return { pages: Object.values(out), heldReasons: [] };
   let parsed;
   try { parsed = JSON.parse(raw); } catch { return { pages: Object.values(out), heldReasons: ['city_page_names_invalid_json'] }; }
   const held = [];
@@ -118,7 +123,8 @@ export function parseCityPageNames(raw) {
     if (!out[brandId]) { held.push(`city_page_brand_not_allowed:${brandId.replace(/[^0-9]/g, '').slice(0, 12)}`); continue; }
     const name = clean(value?.name, 60);
     if (!name) { held.push(`city_page_name_missing:${brandId}`); continue; }
-    out[brandId] = { ...out[brandId], name, status: 'named' };
+    const handle = clean(value?.handle, 40);
+    out[brandId] = { ...out[brandId], name, ...(handle ? { handle } : {}), status: 'named', source: 'env' };
   }
   return { pages: Object.values(out), heldReasons: held };
 }

@@ -25,11 +25,15 @@ test('policy order: takedown > known list > description > allowed', () => {
   assert.equal(parseTakedown({ reason: 'x', receivedAt: '2026-11-19T10:00:00.000Z' }, NOW), null);
 });
 
-test('caption always credits @handle and links the source; city names come from config only', () => {
+test('caption always credits @handle and links the source; city names default to Clipwave, env overrides', () => {
   const c = buildCreditCaption({ handle: 'TheGrefg', platform: 'twitch', sourceUrl: 'https://clips.twitch.tv/Abc', title: 'Locura' });
   assert.ok(captionHasCredit(c, 'TheGrefg', 'https://clips.twitch.tv/Abc'));
   assert.throws(() => buildCreditCaption({ handle: 'a', platform: 'twitch', sourceUrl: 'http://x', title: '' }));
-  assert.deepEqual(parseCityPageNames('').heldReasons, ['city_page_names_not_configured']);
+  const defaults = parseCityPageNames('');
+  assert.deepEqual(defaults.heldReasons, []);
+  assert.deepEqual(defaults.pages.map(p => [p.name, p.handle, p.source]), [['Clipwave Miami', '@clipwave.mia', 'default'], ['Clipwave NYC', '@clipwave.nyc', 'default']]);
+  const partial = parseCityPageNames('{"6595747":{"name":"NYC Clips"}}');
+  assert.deepEqual(partial.pages.map(p => p.name), ['Clipwave Miami', 'NYC Clips']);
   const named = parseCityPageNames(ENV.CLIPPERS_CITY_PAGE_NAMES);
   assert.deepEqual(named.pages.map(p => p.name), ['Miami Streamers', 'NYC Streamers']);
   assert.match(parseCityPageNames('{"6431692":{"name":"KONG"}}').heldReasons[0], /city_page_brand_not_allowed/);
