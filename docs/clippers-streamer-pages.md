@@ -85,3 +85,21 @@ restores the legacy fan-out.
 - **Growth loop (cloud):** job `growth` in `clippers-streamers-publish.yml` daily at 08:00 NY (and every 6 h inside the
   publish job): kill a creator / hook / hour with median < 300 after 6 posts; > 10k views in 24 h -> 3 more clips from
   that stream/creator on that account within 24 h and promote the hour; > 100k -> double that creator's share.
+
+## Word-by-word captions (cloud) and the Mac lanes on the shared ledger
+
+- **Cloud captions.** `clippers-streamers-publish.yml` builds whisper.cpp `v1.8.7` (commit `48f628a8`, cmake, static) and
+  downloads the multilingual `ggml-base.bin` (SHA-1 from the upstream models README; optional extra SHA-256 pin in the
+  repository variable `CLIPPERS_WHISPER_MODEL_SHA256` — the run logs the observed SHA-256). Both are cached with
+  `actions/cache`. Only the rendered 15-35 s cut is transcribed, with `-l es` for Clipwave Miami and `-l en` for the
+  other lanes. Best effort: on any failure the clip still renders and the clip ledger records
+  `captions: transcription_failed | whisper_not_configured | no_speech | word_by_word` (+ `captionsError`).
+  Turn off with `CLIPPERS_WHISPER_ENABLED=false`.
+- **Mac lanes.** `clippers-metricool-autopilot.mjs`, `clippers-daily-learning.mjs` and `clippers-weekly-scheduler.mjs`
+  call `script/clippers-mac-ledger-guard.mjs` right before every Metricool write. It refuses (fail closed) a clip whose
+  source/segment/file hash is already on another account, a stream owned by another account, a creator routed to
+  another lane, or a caption/language that does not match the account (es only on Clipwave Miami). The Metricool
+  cross-brand calendar check always runs. With `OFFICE_DATABASE_URL` + `OFFICE_OWNER_ID` in the Mac config root's
+  env file the claim is written to the same Postgres ledger the cloud worker reads; without them a local ledger
+  (`clippers_workspace/reports/clippers-media-ledger.json`) is used and mirrored on the next run that has the database.
+  `CLIPPERS_LEDGER_REQUIRE_DATABASE=true` makes the database mandatory.

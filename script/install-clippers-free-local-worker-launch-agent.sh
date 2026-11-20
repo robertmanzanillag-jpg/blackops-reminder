@@ -124,6 +124,10 @@ REQUIRED_RUNTIME_FILES=(
   script/clippers-orchestra-analytics.mjs
   script/clippers-orchestra-relay.mjs
   script/clippers-selected-env.mjs
+  script/clippers-mac-ledger-guard.mjs
+  script/clippers-streamer-cloud-worker.mjs
+  script/clippers-streamer-discovery.mjs
+  shared/clippers-account-lanes.mjs
 )
 for relative in "${REQUIRED_RUNTIME_FILES[@]}"; do
   [[ -f "$RUNTIME_ROOT/$relative" && -r "$RUNTIME_ROOT/$relative" ]] || {

@@ -145,17 +145,36 @@ export function peakStartFromEbur128(stderr, { available, targetSec, leadSec = 1
   return Math.round(Math.max(0, Math.min(best.t - leadSec, available - targetSec)) * 10) / 10;
 }
 
-/** whisper.cpp JSON (-ml 1 -oj) -> [{ text, from, to }] in seconds, relative to the cut. */
+export const CAPTION_MAX_WORD_SECONDS = 1.2;
+export const CAPTION_MIN_WORD_SECONDS = 0.15;
+/**
+ * whisper.cpp JSON (-ml 1 -sow -oj) -> [{ text, from, to }] in seconds, relative to the cut.
+ * The WAV handed to whisper is already the cut (ffmpeg -ss start -t duration), so offsets start at 0; `start`
+ * only matters when a caller transcribed a longer file. Non-speech tags ([Music], (risas)) are dropped, each word
+ * is shown at most 1.2 s, never overlaps the next word, and nothing extends past the clip end.
+ */
 export function wordsFromWhisperJson(json, { start = 0, duration = Infinity } = {}) {
   const rows = Array.isArray(json?.transcription) ? json.transcription : [];
   const out = [];
   for (const r of rows) {
-    const text = clean(r?.text, 24).replace(/[^\p{L}\p{N}'’!?$%-]+/gu, '');
+    const rawText = String(r?.text ?? '').trim();
+    if (!rawText || /^[[(*♪].*[\])*♪]$/u.test(rawText)) continue;
+    const text = clean(rawText, 24).replace(/[^\p{L}\p{N}'’!?¿¡$%-]+/gu, '');
     const from = Number(r?.offsets?.from) / 1000 - start, to = Number(r?.offsets?.to) / 1000 - start;
     if (!text || !Number.isFinite(from) || !Number.isFinite(to) || to <= 0 || from >= duration) continue;
-    out.push({ text: text.toUpperCase(), from: Math.max(0, from), to: Math.min(duration, Math.max(to, from + 0.15)) });
+    const f = Math.max(0, from);
+    out.push({ text: text.toUpperCase(), from: f, to: Math.min(duration, f + CAPTION_MAX_WORD_SECONDS, Math.max(to, f + CAPTION_MIN_WORD_SECONDS)) });
   }
-  return out.slice(0, MAX_CAPTION_WORDS);
+  out.sort((a, b) => a.from - b.from);
+  for (let i = 0; i < out.length - 1; i++) if (out[i].to > out[i + 1].from) out[i].to = Math.max(out[i].from + 0.05, out[i + 1].from);
+  return out.filter(w => w.to > w.from).map(w => ({ ...w, from: Math.round(w.from * 100) / 100, to: Math.round(w.to * 100) / 100 })).slice(0, MAX_CAPTION_WORDS);
+}
+
+/** whisper-cli args for one clip: per-account language (es for Clipwave Miami, en otherwise), one word per segment. */
+export function whisperArgs({ model, wav, outBase, language = 'en', threads = 4 }) {
+  const lang = /^([a-z]{2}|auto)$/.test(String(language)) ? String(language) : 'auto';
+  const t = Math.max(1, Math.min(8, Math.trunc(Number(threads)) || 4));
+  return ['-m', model, '-f', wav, '-l', lang, '-t', String(t), '-ml', '1', '-sow', '-oj', '-np', '-of', outBase];
 }
 
 /** Rendered output check: exact 1080x1920 video, audio present, 3 s <= duration <= 60 s (+0.5 tolerance). */
@@ -277,7 +296,7 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
 }
 
 /** Render the vertical edit and validate it. Returns { file, sha256, durationSec }. */
-export async function renderVerticalClip({ sourceFile, workDir, duration, hook, credit, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', runner = run, peakFirst = false, env = process.env }) {
+export async function renderVerticalClip({ sourceFile, workDir, duration, hook, credit, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', runner = run, peakFirst = false, env = process.env, language = 'en' }) {
   const probeIn = JSON.parse((await runner(ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type:format=duration', '-of', 'json', sourceFile], { timeoutMs: 60_000 })).stdout);
   if (!probeIn.streams?.some(s => s.codec_type === 'audio')) throw new Error('SOURCE_WITHOUT_AUDIO');
   if (!probeIn.streams?.some(s => s.codec_type === 'video')) throw new Error('SOURCE_WITHOUT_VIDEO');
@@ -291,7 +310,7 @@ export async function renderVerticalClip({ sourceFile, workDir, duration, hook, 
   await writeFile(creditFile, clean(credit, 80), 'utf8');
   const output = path.join(workDir, 'render.mp4');
   // Peak-first: start ~1 s before the loudest moment (scream / punchline / reaction).
-  let start = 0, captions = 'none';
+  let start = 0, captions = 'none', captionsError = null;
   if (peakFirst && Number.isFinite(available) && available > d + 0.5) {
     try {
       const { stderr } = await runner(ffmpeg, ['-hide_banner', '-nostdin', '-i', sourceFile, '-vn', '-af', 'ebur128=framelog=verbose', '-f', 'null', '-'], { timeoutMs: 180_000 });
@@ -305,15 +324,16 @@ export async function renderVerticalClip({ sourceFile, workDir, duration, hook, 
     try {
       const wav = path.join(workDir, 'speech.wav');
       await runner(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', ...(start > 0 ? ['-ss', start.toFixed(2)] : []), '-i', sourceFile, '-t', d.toFixed(2), '-vn', '-ac', '1', '-ar', '16000', wav], { timeoutMs: 120_000 });
-      await runner(whisperBin, ['-m', whisperModel, '-f', wav, '-ml', '1', '-oj', '-of', path.join(workDir, 'speech')], { timeoutMs: 300_000 });
+      // Only the 15-35 s cut is transcribed (the WAV above), never the whole source.
+      await runner(whisperBin, whisperArgs({ model: whisperModel, wav, outBase: path.join(workDir, 'speech'), language, threads: env.CLIPPERS_WHISPER_THREADS }), { timeoutMs: 180_000 });
       const parsed = wordsFromWhisperJson(JSON.parse(await readFile(path.join(workDir, 'speech.json'), 'utf8')), { duration: d });
       for (const [i, w] of parsed.entries()) { const file = path.join(workDir, `w${i}.txt`); await writeFile(file, w.text, 'utf8'); words.push({ ...w, file }); }
       captions = words.length ? 'word_by_word' : 'no_speech';
-    } catch { captions = 'transcription_failed'; }
+    } catch (e) { words.length = 0; captions = 'transcription_failed'; captionsError = String(e?.message ?? e).replace(/[^A-Za-z0-9_:.-]+/g, '_').slice(0, 60); }
   } else captions = 'whisper_not_configured';
   await runner(ffmpeg, ffmpegRenderArgs({ input: sourceFile, output, hookFile, creditFile, fontFile, duration: d, start, words }), { timeoutMs: 600_000 });
   const probe = JSON.parse((await runner(ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type,width,height:format=duration', '-of', 'json', output], { timeoutMs: 60_000 })).stdout);
   const check = validateRenderProbe(probe);
   if (!check.ok) throw new Error(check.errors[0].toUpperCase());
-  return { file: output, sha256: await sha256File(output), durationSec: check.durationSec, sizeBytes: (await stat(output)).size, cutStart: start, captions };
+  return { file: output, sha256: await sha256File(output), durationSec: check.durationSec, sizeBytes: (await stat(output)).size, cutStart: start, captions, captionsError, captionLanguage: captions === 'word_by_word' ? language : null };
 }

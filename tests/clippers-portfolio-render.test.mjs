@@ -133,6 +133,7 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
   await write(scopedMediaLedger, [publicReceipt]);
   const report = await runClippersDailyLearning({ workspaceRoot: root, now, adapter: {
     preflight: async () => {},
+    crossAccountPreflight: async () => ({ checkedDays: [] }),
     schedule: async (_destination, verified) => {
       assert.equal(verified.renderProof.manifestSha, candidate.manifestSha);
       assert.equal(verified.mediaSha256, candidate.outputSha256);

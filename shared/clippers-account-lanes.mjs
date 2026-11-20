@@ -102,7 +102,9 @@ export function sourceSegment(candidate, cut = null) {
 export function streamKeyOf(candidate) {
   return candidate?.vodId ? `twitch-vod:${String(candidate.vodId).replace(/[^0-9A-Za-z_-]/g, '')}` : String(candidate?.id ?? '').slice(0, 140);
 }
-const overlaps = (a, b) => a.key === b.key && Math.abs((a.start ?? 0) - (b.start ?? 0)) < SEGMENT_OVERLAP_SECONDS;
+// A segment with an unknown start (start == null, e.g. a Mac render whose cut offset was not recorded) overlaps
+// every segment of the same source: the conservative reading for "one source clip -> one account".
+const overlaps = (a, b) => a.key === b.key && (a.start == null || b.start == null || Math.abs(a.start - b.start) < SEGMENT_OVERLAP_SECONDS);
 
 /**
  * Conflict for a new post: an existing ledger entry with the same file hash or an overlapping source segment.

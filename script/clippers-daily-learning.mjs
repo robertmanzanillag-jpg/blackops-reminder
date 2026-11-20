@@ -11,6 +11,7 @@ import {
   createPortfolioMetricool, DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
   exactPost, findDestination, localDay, providerTimestamp, canonicalDestinationKey, canonicalAccount, valueForDestination,
 } from './clippers-portfolio-metricool.mjs';
+import { createMacLedgerGuard, macLedgerEnv } from './clippers-mac-ledger-guard.mjs';
 
 import { approvedWeeklyAuthorization, approvedEditorialSourceProof, weeklyDeliveryCollision } from './clippers-weekly-policy.mjs';
 
@@ -341,7 +342,7 @@ function exportedVersionState(state) {
     };
   });
 }
-export async function runClippersDailyLearning({ workspaceRoot, now = new Date(), env = process.env, adapter } = {}) {
+export async function runClippersDailyLearning({ workspaceRoot, now = new Date(), env = process.env, adapter, ledgerGuard } = {}) {
   if (!(now instanceof Date) || !Number.isFinite(+now)) throw new Error('invalid_cycle_time');
   workspaceRoot = await realpath(path.resolve(workspaceRoot || env.CLIPPERS_WORKSPACE_ROOT || 'clippers_workspace'));
   const reportDir = path.join(workspaceRoot, 'reports', 'clippers-daily-learning');
@@ -443,10 +444,14 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
         }
         try { await adapter.preflight(destination, item); }
         catch { blockers.add('metricool_preflight_blocked'); continue; }
+        // Shared cross-account ledger (same as the cloud publisher): one clip -> one account, fail closed.
+        ledgerGuard ??= createMacLedgerGuard({ env: macLedgerEnv(env), workspaceRoot, metricool: adapter });
+        const reservation = await ledgerGuard.reserve(destination, item);
+        if (!reservation.ok) { blockers.add(`cross_account_ledger:${reservation.reason}`); continue; }
         let creatorAssignmentSha256;
         try { creatorAssignmentSha256 = await creatorRouting?.assign(item); }
         catch { blockers.add('creator_assignment_unavailable'); }
-        const record = { ...item, ...(creatorAssignmentSha256 ? {creatorAssignmentSha256} : {}), createdAt: now.toISOString(), status: 'verification_pending', costUsd: 0 };
+        const record = { ...item, ...(creatorAssignmentSha256 ? {creatorAssignmentSha256} : {}), ledgerEvidence: reservation.evidence, createdAt: now.toISOString(), status: 'verification_pending', costUsd: 0 };
         state.deliveries.push(record);
         await save(statePath, state);
         try {
