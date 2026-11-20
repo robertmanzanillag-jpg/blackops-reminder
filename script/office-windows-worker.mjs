@@ -52,7 +52,7 @@ export function parseWorkerConfig(raw) {
   }
   if(config.OFFICE_CAPABILITY_TRAINING_ENABLED==='true'){
     const calls=Number(config.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY);
-    if(!Number.isSafeInteger(calls)||calls<1||calls>28||!config.OPENAI_SHARED_CREDIT_CONFIG||config.OPENAI_SHARED_CREDITS_REQUIRED!=='true'||config.OFFICE_ROLE_WORK_ENABLED!=='true')fail('CAPABILITY_TRAINING_LIMITS_REQUIRED');
+    if(!Number.isSafeInteger(calls)||calls<1||calls>56||!config.OPENAI_SHARED_CREDIT_CONFIG||config.OPENAI_SHARED_CREDITS_REQUIRED!=='true'||config.OFFICE_ROLE_WORK_ENABLED!=='true')fail('CAPABILITY_TRAINING_LIMITS_REQUIRED');
   }
   if(config.OFFICE_WEB_SOURCES_ENABLED==='true'){
     let origin;try{origin=new URL(config.OFFICE_WEB_SOURCE_ORIGIN);}catch{fail('WEB_SOURCE_ORIGIN_INVALID');}
