@@ -412,6 +412,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
         evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };
     },
     async schedule(destination, item) {
+      if (destination.network !== 'facebook' && !tiktokTitle(item.caption)) throw new Error('tiktok_title_missing');
       // Cloud is the only writer for the Clippers brands (shared/clippers-metricool-writer.mjs).
       const refused = metricoolWriteRefusal(destination?.brandId, env);
       if (refused) throw new Error(refused);
@@ -419,7 +420,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
       const networkOptions = destination.network === 'facebook'
         ? { facebookData: { type: 'REEL' } }
-        : { tiktokData: { privacyOption: 'PUBLIC_TO_EVERYONE', autoAddMusic: false,
+        : { tiktokData: { title: tiktokTitle(item.caption), privacyOption: 'PUBLIC_TO_EVERYONE', autoAddMusic: false,
           commercialContentThirdParty: item.thirdPartyCommercial === true,
           ...(item.allowDuetStitch === true ? { disableComment: false, disableDuet: false, disableStitch: false } : {}) } };
       // Draft mode: the post waits in Metricool for owner approval (no auto-publish).
@@ -476,4 +477,11 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
         timing: providerObservedAt ? 'provider_observation_time' : 'retrieved_at_only', source: 'metricool_post_analytics' } : null;
     },
   };
+}
+
+/** Metricool requires a TikTok title: first non-empty caption line, URLs removed, max 80 code points. */
+export function tiktokTitle(caption) {
+  const line = String(caption ?? '').split(/\r?\n/).map(l => l.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim()).find(Boolean) || '';
+  const chars = [...line];
+  return chars.length <= 80 ? line : chars.slice(0, 79).join('').trimEnd() + '…';
 }
