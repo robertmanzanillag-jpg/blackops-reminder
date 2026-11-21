@@ -238,7 +238,7 @@ export async function getGoogleDriveOAuthStatus(userId: string) {
   const envConnected = Boolean(getGoogleDriveRefreshTokenFromEnv());
   const replitConnectorAvailable = hasReplitGoogleConnectorEnv();
   const replitConnectorConnected = !envConnected && replitConnectorAvailable
-    ? await hasConnectedReplitGoogleConnector()
+    ? await hasConnectedReplitGoogleConnector("google-drive")
     : false;
   const configured = Boolean(envConnected || replitConnectorAvailable || hasGoogleDriveOAuthClientConfig());
   let token = null;
