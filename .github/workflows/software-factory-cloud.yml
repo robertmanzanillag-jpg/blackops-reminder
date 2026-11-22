@@ -90,6 +90,8 @@ jobs:
           SOFTWARE_FACTORY_STORAGE_BACKEND: postgres
           AGENT_COUNCIL_STORAGE: postgres
           OPENAI_SHARED_CREDITS_REQUIRED: "true"
+          # Nonsecret reviewed price catalog; missing/expired entries keep paid admission held.
+          FACTORY_API_PRICING_CONFIG: ${{ vars.FACTORY_API_PRICING_CONFIG }}
           DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL }}
           DEFAULT_USER_ID: ${{ secrets.FACTORY_OWNER_ID }}
           SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID }}
