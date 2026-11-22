@@ -1567,7 +1567,24 @@ export async function analyzeGithubAppRepos(
         }
 
         const probeResult = await probe(urlToCheck);
-        if (!probeResult.ok) {
+        const httpStatus = probeResult.statusCode;
+        const requiresAuth = probeResult.error === "authentication_required"
+          && httpStatus !== undefined
+          && ((httpStatus >= 200 && httpStatus < 400) || httpStatus === 401 || httpStatus === 403);
+        if (!probeResult.ok && requiresAuth) {
+          status = status === "fail" ? status : "warn";
+          notes.push("Homepage pendiente de comprobación autenticada");
+          findings.push(createFinding(
+            syntheticApp,
+            "github-scout",
+            "GitHub deploy",
+            "medium",
+            "Homepage de repo requiere comprobación autenticada",
+            `${repo.full_name} apunta a ${urlToCheck}. Respondió la página de acceso (HTTP ${httpStatus}) y la comprobación de la página del repo queda pendiente.`,
+            "Verificar con una sesión autorizada y mantener la protección de acceso.",
+            urlToCheck
+          ));
+        } else if (!probeResult.ok) {
           status = "fail";
           notes.push(`Homepage fallo: ${probeResult.statusCode || probeResult.error || "sin status"}`);
           findings.push(createFinding(
