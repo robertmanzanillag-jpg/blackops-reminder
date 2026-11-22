@@ -23,11 +23,13 @@ const median = values => {
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
+// Reviewed finals have distinct provenance; legacy raw-source attribution is not their observer.
+const legacyAttribution = post => post?.origin !== 'owner_authorized_external_review';
 const bucket = (seed) => parseInt(createHash('sha256').update(String(seed)).digest('hex').slice(0, 8), 16) / 0xffffffff;
 
 /** Posts whose observation is usable for comparison (same 24-48 h window, real views). */
 export function observedPosts(posts = []) {
-  return posts.filter(p => p?.observation && Number.isSafeInteger(p.observation.views) && p.observation.views >= 0 &&
+  return posts.filter(p => legacyAttribution(p) && p?.observation && Number.isSafeInteger(p.observation.views) && p.observation.views >= 0 &&
     Number.isFinite(p.observation.ageHours) && p.observation.ageHours >= OBSERVATION_WINDOW.minHours && p.observation.ageHours < OBSERVATION_WINDOW.maxHours &&
     HOOK_VARIANTS.includes(p.hookVariant) && typeof p.destinationKey === 'string');
 }
@@ -94,6 +96,7 @@ const nyHour = at => Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Americ
 
 /** Latest known views for a ledger post: matched account analytics row (same account, published within 15 min of the slot) or the 24-48 h observation. */
 export function latestViews(post, accountPosts = []) {
+  if (!legacyAttribution(post)) return null;
   const at = Date.parse(post.observation?.publishedAt ?? post.scheduledAt);
   const match = accountPosts.find(r => (post.observation?.platformPostId && r.id === post.observation.platformPostId) || Math.abs(Date.parse(r.publishedAt) - at) <= 15 * 60_000);
   if (match && Number.isSafeInteger(match.views)) return { views: match.views, ageHours: Number.isFinite(match.actualAgeHours) ? match.actualAgeHours : (Date.parse(match.observedAt ?? '') - Date.parse(match.publishedAt)) / HOUR_MS, platformPostId: match.id, publishedAt: match.publishedAt };
@@ -104,7 +107,8 @@ const HOUR_MS = 3_600_000;
 
 export function computeGrowth({ posts = [], accountPosts = {}, previous = null, now = Date.now(), override = new Set() }) {
   const out = { evaluatedAt: new Date(now).toISOString(), accounts: {}, kills: [], breakouts: [], doubled: [], decisions: [] };
-  const recent = posts.filter(p => p && typeof p.destinationKey === 'string' && ['scheduled', 'published'].includes(p.status) && now - Date.parse(p.scheduledAt) <= GROWTH_WINDOW_DAYS * DAY && Date.parse(p.scheduledAt) <= now);
+  const legacyPosts = posts.filter(legacyAttribution);
+  const recent = legacyPosts.filter(p => p && typeof p.destinationKey === 'string' && ['scheduled', 'published'].includes(p.status) && now - Date.parse(p.scheduledAt) <= GROWTH_WINDOW_DAYS * DAY && Date.parse(p.scheduledAt) <= now);
   const keys = new Set([...Object.keys(accountPosts), ...recent.map(p => canonicalDestinationKey(p.destinationKey))]);
   for (const key of keys) {
     const rows = (accountPosts[key] ?? []).filter(r => Number.isSafeInteger(r?.views) && now - Date.parse(r.publishedAt) <= 7 * DAY);
@@ -134,7 +138,7 @@ export function computeGrowth({ posts = [], accountPosts = {}, previous = null, 
       if (views > BREAKOUT_VIEWS_24H && Number.isFinite(ageHours) && ageHours <= 24) {
         const prior = (previous?.breakouts ?? []).find(b => b.postId === p.id);
         const detectedAt = prior?.detectedAt ?? out.evaluatedAt;
-        const done = posts.filter(x => x.id !== p.id && canonicalDestinationKey(x.destinationKey) === key && (x.streamKey && x.streamKey === p.streamKey || x.creatorKey === p.creatorKey) && Date.parse(x.attemptedAt ?? x.scheduledAt) >= Date.parse(detectedAt)).length;
+        const done = legacyPosts.filter(x => x.id !== p.id && canonicalDestinationKey(x.destinationKey) === key && (x.streamKey && x.streamKey === p.streamKey || x.creatorKey === p.creatorKey) && Date.parse(x.attemptedAt ?? x.scheduledAt) >= Date.parse(detectedAt)).length;
         const remaining = Math.max(0, BREAKOUT_FOLLOWUP_CLIPS - done);
         out.breakouts.push({ postId: p.id, destinationKey: key, creatorKey: p.creatorKey, streamKey: p.streamKey ?? null, slotHour: nyHour(p.scheduledAt), views, detectedAt, until: new Date(Date.parse(detectedAt) + DAY).toISOString(), remaining });
         out.decisions.push(`breakout:${key}:${p.creatorKey}`);
