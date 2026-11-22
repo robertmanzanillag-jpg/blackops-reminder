@@ -1,3 +1,4 @@
+import { registerReviewedDerivativeRoutes } from './clippers-reviewed-derivative-routes';
 import type { Express, Request } from 'express';
 import { createHash } from 'node:crypto';
 import { parseClippersOrchestraStatus, type ClippersOrchestraStatus } from '../shared/clippers-orchestra';
@@ -93,6 +94,7 @@ async function defaultRejectPending(owner: string, candidateIds: string[], reaso
 }
 
 export function registerClippersStreamerRoutes(app: Pick<Express, 'get' | 'post'>, options: { isOwner?: (req: Request) => boolean; store?: () => Promise<Store>; owner?: () => string; now?: () => number; rejectPending?: RejectPending } = {}) {
+  registerReviewedDerivativeRoutes(app, { store: options.store, owner: options.owner, now: options.now });
   const isOwner = options.isOwner ?? ((req: Request) => getCurrentUserId(req) === getSystemUserId());
   const store = options.store ?? (async () => (await import('./agent-council-store')).getCouncilStore());
   const owner = options.owner ?? getSystemUserId;

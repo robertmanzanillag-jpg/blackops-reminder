@@ -290,6 +290,22 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
   }
   return {
     destinationSettings,
+    /** Complete, read-only provenance reconciliation input; unknown networks/rows must hold admission. */
+    async reviewedDerivativeCalendar({fromDay,throughDay}) {
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(fromDay??'')||!/^\d{4}-\d{2}-\d{2}$/.test(throughDay??'')||!Number.isFinite(Date.parse(fromDay))||!Number.isFinite(Date.parse(throughDay))||throughDay<fromDay||Date.parse(throughDay)-Date.parse(fromDay)>31*86400000)throw Error('derivative_baseline_scope_invalid');
+      const result=[];
+      for(const brandId of [...new Set(DESTINATIONS.map(d=>d.brandId))]) {
+        const rows=list(await get('/api/v2/scheduler/posts',{blogId:brandId,start:fromDay+'T00:00:00',end:throughDay+'T23:59:59',timezone:TIME_ZONE,extendedRange:false}));
+        if(rows.length>=500)throw Error('derivative_baseline_unverified');
+        for(const row of rows){
+          if(!row||!Array.isArray(row.providers)||!row.providers.length||!row.uuid||!row.id||!scheduledTime(row)||(row.blogId!=null&&String(row.blogId)!==String(brandId))||typeof row.text!=='string'||!providerMedia(row))throw Error('derivative_baseline_unverified');
+          for(const p of row.providers){const d=DESTINATIONS.find(d=>d.brandId===brandId&&d.network===p?.network);if(!d)throw Error('derivative_baseline_network_unmapped');
+            result.push({id:String(row.id),uuid:String(row.uuid),destinationKey:destinationKey(d),scheduledAt:scheduledTime(row),caption:row.text,mediaUrl:providerMedia(row),confirmedNonPublishingDraft:confirmedNonPublishingDraft(row,d.network)});
+          }
+        }
+      }
+      return result;
+    },
     /** Read-only: raw scheduler rows for the given local days -> providerHealthFromRows. */
     async providerHealth(destination, days) {
       if (!findDestination(destination)) throw new Error('destination_not_allowlisted');
@@ -451,6 +467,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
         publicationDate: { dateTime: item.scheduledAt.slice(0, 19), timezone: 'UTC' },
         text: item.caption, media: [item.mediaUrl], ...networkOptions,
       };
+      if(item.beforeWrite !== undefined){if(typeof item.beforeWrite!=='function')throw Error('metricool_before_write_invalid');await item.beforeWrite();}
       await mcp('createScheduledPost', {
         blogId: String(destination.brandId), date: item.scheduledAt,
         info: JSON.stringify(post),
@@ -466,7 +483,8 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       const row = matches.length === 1 ? matches[0] : null;
       if (!row || !schedulerId(row)) return null;
       const media = await verifiedMedia(fetcher, row, item);
-      return media ? { id: schedulerId(row), mediaUrl: media } : null;
+      if(item.requireUuid===true&&!(typeof row.uuid==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(row.uuid)))return null;
+      return media ? { id: schedulerId(row), mediaUrl: media, ...(item.requireUuid===true?{uuid:row.uuid}:{}) } : null;
     },
     async publication(destination, item, now = new Date()) {
       const rows = await schedule(destination, localDay(new Date(item.scheduledAt)));

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T11:11:15.467Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-count-receipt-nov22`
+Generated: 2026-11-22T11:46:51.264Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1344 | 1225 | 5058 | 633 | 28993 |
+| 1362 | 1243 | 5145 | 638 | 29237 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,28 +28,28 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 359 | 354 | test:359 |
-| `server` | 299 | 292 | server:299 |
+| `tests` | 365 | 360 | test:365 |
+| `server` | 301 | 294 | server:301 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
-| `script` | 151 | 136 | script:151 |
-| `docs` | 89 | 84 | docs:89 |
+| `script` | 154 | 139 | script:154 |
+| `docs` | 91 | 86 | docs:91 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `shared` | 48 | 44 | shared:48 |
+| `shared` | 51 | 47 | shared:51 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `script/office-api-budget-v6` | 10 | 8 | script:10 |
+| `tests/fixtures` | 10 | 8 | test:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
-| `tests/fixtures` | 9 | 7 | test:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `script/office-api-budget-v7-integrity` | 3 | 3 | script:3 |
 | `client/public` | 16 | 2 | other:16 |
+| `tests/helpers` | 2 | 2 | test:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `shared/models` | 1 | 1 | shared:1 |
 | `tests/harness` | 1 | 1 | test:1 |
-| `tests/helpers` | 1 | 1 | test:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `.github` | 1 | 0 | other:1 |
 
@@ -63,6 +63,7 @@ Package: `rest-express`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/clippers-orchestra`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/blackroom-team-routes.ts`: `/api/blackroom-team`, `/api/blackroom-team/:id/action/:action`, `/api/blackroom-team/:id/run`, `/api/blackroom-team/:id/status`
 - `server/clippers-orchestra-routes.ts`: `/api/clippers/orchestra/status`
+- `server/clippers-reviewed-derivative-routes.ts`: `/api/clippers/reviewed-derivatives`, `/api/clippers/reviewed-derivatives/approve`, `/api/clippers/reviewed-derivatives/propose`, `/api/clippers/reviewed-derivatives/review`, `/api/clippers/reviewed-derivatives/revoke`
 - `server/clippers-streamers-status.ts`: `/api/clippers/streamers/holds/resolved`, `/api/clippers/streamers/status`, `/api/clippers/streamers/takedown`, `/api/clippers/streamers/takedown/removed`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/kong-mirror-routes.ts`: `/api/kong-mirror/:key/:decision`, `/api/kong-mirror/:key/chat`, `/api/kong-mirror/agents/switch`, `/api/kong-mirror/images/:imageKey`, `/api/kong-mirror/reports`
@@ -179,6 +180,7 @@ Package: `rest-express`
 - `tests/clippers-orchestra-endpoint.test.ts`
 - `tests/clippers-orchestra.test.ts`
 - `tests/clippers-owned-source-scripts.test.ts`
+- `tests/clippers-reviewed-derivative-routes.test.ts`
 - `tests/clippers-runtime-status.test.ts`
 - `tests/clippers-streamer-pending-actions-postgres.test.ts`
 - `tests/clippers-streamers-status.test.ts`
@@ -433,6 +435,7 @@ Package: `rest-express`
 - `script/clippers-creator-selection.mjs` (script; 73 symbols, 1 imports)
 - `script/clippers-daily-learning.mjs` (script; 113 symbols, 12 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 102 symbols, 8 imports)
+- `script/clippers-derivative-campaign.mjs` (script; 12 symbols, 1 imports)
 - `script/clippers-drive-workspace.mjs` (script; 59 symbols, 6 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 46 symbols, 6 imports)
@@ -454,7 +457,6 @@ Package: `rest-express`
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 130 symbols, 10 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

@@ -378,6 +378,12 @@ export function createGithubReleaseStager({ token, repo, fetch: fetchImpl = glob
         { method: 'POST', headers: { 'content-type': 'video/mp4', 'content-length': String(bytes.length) }, body: bytes }, [201]);
       return { id: asset.id, url: asset.browser_download_url, createdAt: asset.created_at ?? new Date().toISOString() };
     },
+    async findAsset(name) {
+      const r=await ensure();const assets=await api(`https://api.github.com/repos/${repo}/releases/${r.id}/assets?per_page=100`);
+      if(!Array.isArray(assets)||assets.length>=100)throw Error('DERIVATIVE_STAGING_LIST_UNVERIFIED');
+      const matches=assets.filter(a=>a.name===name);if(matches.length>1)throw Error('DERIVATIVE_STAGING_LIST_UNVERIFIED');const a=matches[0];
+      return a?{id:a.id,url:a.browser_download_url,createdAt:a.created_at,name:a.name}:null;
+    },
     async remove(assetId) {
       try { await api(`https://api.github.com/repos/${repo}/releases/assets/${Number(assetId)}`, { method: 'DELETE' }, [204]); return true; }
       catch (e) { if (e.status === 404) return true; throw e; }
@@ -454,7 +460,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       if (!s) throw new Error('STREAMER_STATE_INVALID');
       s.cloudPublish = cloudPublishOf(s);
       out = await change(s, s.cloudPublish);
-      s.cloudPublish.posts = s.cloudPublish.posts.slice(-MAX_POSTS);
+      const protectedPosts=s.cloudPublish.posts.filter(p=>p.origin==='owner_authorized_external_review'||UNCERTAIN.has(p.status));
+      const ordinary=s.cloudPublish.posts.filter(p=>!protectedPosts.includes(p));
+      s.cloudPublish.posts=[...ordinary.slice(-MAX_POSTS),...protectedPosts];
       return JSON.stringify(s);
     });
     return out;
@@ -463,6 +471,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   // 1) Reconcile uncertain writes (read-only; never resend) and collect 24-48 h analytics.
   if (metricool && !config.missing.length) {
     for (const post of ledger0.posts) {
+      if(post.origin==='owner_authorized_external_review')continue; // A distinct lane owns these exact final-file receipts.
       try {
         if (['verification_pending', 'pending_write'].includes(post.status)) {
           const found = await metricool.confirmSchedule(post.destination, post);
@@ -866,6 +875,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         for (let attempt = 0; attempt < 3 && at; attempt++) {
           const item = postItem({ candidate, destination: p.destination, scheduledAt: at, caption, mediaUrl: asset.url, mediaSha256: rendered.sha256, hookVariant,
             lane: lanePick ? { ...lanePick, segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }) } : null });
+          item.byteLength=Number.isSafeInteger(rendered.sizeBytes)?rendered.sizeBytes:null;
           if (!lanePick) item.draft = true; // lanes off: single account, owner approves every post
           // Fresh gate + durable "pending_write" BEFORE the write (a crash can never authorise a resend).
           const blocked = await update((s, c) => {
@@ -1027,6 +1037,11 @@ async function main() {
   const outIndex = args.indexOf('--dry-run-output');
   const { report, skipped } = await runCloudPublisher({ env: process.env, owner, store, approvals: createApprovalLedger(query), metricool, stager,
     outputDir: outIndex >= 0 ? path.resolve(args[outIndex + 1] ?? 'clippers-dry-run') : null, minIntervalMs, growthOnly });
+  if (!growthOnly) {
+    const { runReviewedDerivatives } = await import('./clippers-reviewed-derivative-worker.mjs');
+    const derivativeReport = await runReviewedDerivatives({owner,store,metricool,stager,config});
+    console.log(JSON.stringify({reviewedDerivative:derivativeReport}));
+  }
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
   console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, captions: report.captions ?? null, learning: report.learning ?? null,
     growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish, autoPublishMode: a.autoPublishMode }])), decisions: report.growth.decisions.length } : null }));

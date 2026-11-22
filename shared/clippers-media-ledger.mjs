@@ -16,6 +16,6 @@ export function cloudPublishOf(state) {
 export function mediaEntriesOf(c) {
   const explicit = Array.isArray(c?.mediaLedger) ? c.mediaLedger : [];
   const fromPosts = (c?.posts ?? []).filter(p => !['deferred', 'not_found', 'blocked'].includes(p.status))
-    .map(p => ({ candidateId: p.candidateId, sourceId: p.sourceId ?? p.candidateId ?? null, streamKey: p.streamKey ?? null, segment: p.segment ?? null, mediaSha256: p.mediaSha256 ?? null, destinationKey: canonicalDestinationKey(p.destinationKey), lane: p.lane ?? null }));
-  return [...explicit, ...fromPosts];
+    .map(p => ({ candidateId: p.candidateId, sourceId: p.sourceId ?? p.candidateId ?? null, streamKey: p.streamKey ?? null, segment: p.segment ?? null, physicalSource:p.physicalSource??null, mediaSha256: p.mediaSha256 ?? null, destinationKey: canonicalDestinationKey(p.destinationKey), lane: p.lane ?? null }));
+  return [...explicit, ...(Array.isArray(c?.reviewedDerivativeClaims)?c.reviewedDerivativeClaims:[]), ...fromPosts];
 }

@@ -818,3 +818,12 @@ test('planner quota excludes only verified draft receipts while preserving their
     assert.ok(at.startsWith('2026-11-20T16:'), status);
   }
 });
+
+test('raw housekeeping preserves derivative/unknown reservations and never reconciles a distinct final-file lane as raw',async()=>{
+ const derivative={id:'reviewed-unknown',origin:'owner_authorized_external_review',candidateId:'twitch-vod:999:physical',destinationKey:destinationKey(DESTINATIONS[0]),scheduledAt:new Date(NOW-10*3600000).toISOString(),status:'verification_pending'};
+ const unknown={id:'raw-unknown',candidateId:'twitch-clip:Old',destination:DESTINATIONS[0],destinationKey:destinationKey(DESTINATIONS[0]),scheduledAt:new Date(NOW+3600000).toISOString(),status:'pending_write'};
+ const ordinary=Array.from({length:650},(_,i)=>({id:'ordinary-'+i,status:'not_found',scheduledAt:new Date(NOW-86400000).toISOString()}));
+ const store=memoryStore(baseState([],{cloudPublish:{version:1,clips:{},posts:[derivative,unknown,...ordinary],holds:{},heldQueue:[],reviewedDerivativeClaims:[{claimId:'reviewed-unknown',candidateId:derivative.candidateId,destinationKey:derivative.destinationKey,segment:{key:'twitch-vod:999',start:null}}]}}));const metricool=fakeMetricool();
+ await runCloudPublisher({env:ON,now:NOW,owner:'o',store,approvals:approvals({}),metricool,stager:fakeStager(),fetch:okFetch});
+ assert.ok(store.state.cloudPublish.posts.some(p=>p.id==='reviewed-unknown'));assert.equal(metricool.calls.confirm.some(p=>p.id==='reviewed-unknown'),false);assert.equal(store.state.cloudPublish.reviewedDerivativeClaims.length,1);
+});
