@@ -39,7 +39,7 @@ export function collectBuildProvenance(root = process.cwd()): BuildProvenance {
     let bytes = 0;
     for (const path of paths) {
       const full = resolve(root, path), stat = lstatSync(full);
-      if (!stat.isFile() || stat.size > 2 * 1024 * 1024 || (bytes += stat.size) > 64 * 1024 * 1024) return unverifiedBuildProvenance("source_unavailable");
+      if (!stat.isFile() || stat.size > 4 * 1024 * 1024 || (bytes += stat.size) > 64 * 1024 * 1024) return unverifiedBuildProvenance("source_unavailable");
       const contents = readFileSync(full);
       hash.update(path).update("\0").update(String(contents.length)).update("\0").update(contents).update("\0");
     }
