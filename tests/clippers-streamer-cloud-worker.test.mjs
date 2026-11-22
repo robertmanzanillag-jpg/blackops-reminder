@@ -1,3 +1,4 @@
+import { fixtureGrants } from './helpers/clippers-source-authorization-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -7,10 +8,11 @@ import path from 'node:path';
 import { buildCreditCaption, captionHasCredit, parseTakedown } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
 import { DESTINATIONS, destinationKey, findDestination, exactPost, canonicalDestinationKey, canonicalAccount, valueForDestination, createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
-import { stagedAssetRemovable, parseSlots, cloudPublishConfig, wallClockToIso, nextSlot, publishGate, runCloudPublisher, clipCaption, postItem, createGithubReleaseStager, liveDescriptionCheck } from '../script/clippers-streamer-cloud-worker.mjs';
+import { stagedAssetRemovable, parseSlots, cloudPublishConfig, wallClockToIso, nextSlot, publishGate, runCloudPublisher as runCloudPublisherImpl, clipCaption, postItem, createGithubReleaseStager, liveDescriptionCheck } from '../script/clippers-streamer-cloud-worker.mjs';
 import { selectCutWindow, wrapLines, ffmpegRenderArgs, ytDlpDownloadArgs, ytDlpInfoArgs, validateRenderProbe, childEnv, renderVerticalClip, makeWorkDir, hookText, creditText, BUNDLED_FONT } from '../script/clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor } from '../script/clippers-streamer-cloud-learning.mjs';
 
+const runCloudPublisher = args => runCloudPublisherImpl({ ...args, clock: args.clock ?? (() => args.now ?? Date.now()) });
 const NOW = Date.parse('2026-11-19T14:00:00.000Z'); // 09:00 New York (EST)
 // Legacy fan-out mode (lanes off); the account-lane mode is covered by tests/clippers-account-lanes.test.mjs.
 const ON = { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_LANES_ENABLED: 'false', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345' };
@@ -23,7 +25,7 @@ function candidate(id, creatorKey, handle, extra = {}) {
     caption: buildCreditCaption({ handle, platform: 'twitch', sourceUrl, title: `Locura de ${handle}` }), ...extra };
 }
 function baseState(candidates, extra = {}) {
-  return { version: 1, updatedAt: null, lastRun: null, takedowns: [], signals: [], candidates,
+  return { version: 1, updatedAt: null, lastRun: null, takedowns: [], signals: [], candidates, sourceAuthorizations: fixtureGrants(candidates, NOW),
     creators: {
       'twitch:100': { key: 'twitch:100', platform: 'twitch', handle: 'thegrefg', creatorGroupId: null, policy: { status: 'allowed_unless_prohibited', source: 'channel_description_checked' } },
       'twitch:200': { key: 'twitch:200', platform: 'twitch', handle: 'rubius', creatorGroupId: null, policy: { status: 'prohibited', source: 'channel_description' } },
@@ -121,7 +123,7 @@ test('render/download args: no shell, bundled font, impersonation first for YouT
 test('publish gate: prohibited, takedown, unchecked creator, missing credit, live stream', () => {
   const ok = candidate('a', 'twitch:100', 'thegrefg');
   const state = baseState([ok]);
-  assert.equal(publishGate(state, ok), null);
+  assert.equal(publishGate(state, ok, { now: NOW }), null);
   assert.equal(publishGate(state, candidate('b', 'twitch:200', 'rubius')), 'creator_prohibited');
   assert.equal(publishGate(state, candidate('c', 'twitch:300', 'nuevo')), 'creator_policy_not_checked');
   assert.equal(publishGate({ ...state, takedowns: [parseTakedown({ creatorKey: 'twitch:100', reason: 'DMCA', receivedAt: '2026-11-19T10:00:00.000Z' }, NOW)] }, ok), 'takedown');
@@ -539,4 +541,85 @@ test('optional YT_DLP_PROXY: only YouTube downloads use it, invalid values are i
   const tw = ytDlpDownloadArgs({ url: 'https://clips.twitch.tv/x', platform: 'twitch', start: 0, duration: 30, outTemplate: '/tmp/x/source.%(ext)s', impersonate: null, proxy });
   assert.equal(tw.includes('--proxy'), false);
   assert.equal(ytDlpInfoArgs({ url: 'https://clips.twitch.tv/x', impersonate: null }).includes('--proxy'), false);
+});
+
+
+test('rights: legacy auto-approved candidate is held before any download and resumes after a verified grant', async () => {
+  const c = candidate('rights', 'twitch:100', 'thegrefg');
+  const state = baseState([c]); delete state.sourceAuthorizations;
+  const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia();
+  const args = { env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-rights': 'approved' }), metricool: m, stager, fetch: okFetch, ...media };
+  const held = await runCloudPublisher(args);
+  assert.equal(media.calls.download.length, 0); assert.equal(m.calls.schedule.length, 0);
+  assert.equal(store.state.cloudPublish.clips[c.id].status, 'deferred');
+  assert.ok(held.report.heldReasons.includes('rights_authorization_missing'));
+  const next = store.state; next.sourceAuthorizations = fixtureGrants([c], NOW); store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(next));
+  await runCloudPublisher(args);
+  assert.equal(m.calls.schedule.length, 1);
+});
+
+test('rights: a grant revoked during download stops render; revocation during preflight stops the actual write', async () => {
+  for (const phase of ['download', 'preflight', 'replace_source_download']) {
+    const c = candidate(phase, 'twitch:100', 'thegrefg'), store = memoryStore(baseState([c]));
+    const revoke = () => { const s = store.state; s.sourceAuthorizations[c.id].status = 'revoked'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); };
+    const media = fakeMedia();
+    const m = fakeMetricool({ preflight: phase === 'preflight' ? async () => revoke() : async () => {} });
+    const download = async input => { const r = await media.download(input); if (phase === 'download') revoke(); if (phase === 'replace_source_download') { const s = store.state; s.candidates[0].sourceUrl += '-replacement'; s.sourceAuthorizations[c.id].sourceUrl = s.candidates[0].sourceUrl; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); } return r; };
+    const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ [`pa-${phase}`]: 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...media, download });
+    assert.equal(m.calls.schedule.length, 0, phase);
+    assert.equal(media.calls.render.length, phase !== 'preflight' ? 0 : 1);
+    assert.ok(report.heldReasons.includes(phase === 'replace_source_download' ? 'rights_source_mismatch' : 'rights_authorization_inactive'));
+    assert.equal(store.state.cloudPublish.posts.length, 0, 'no phantom write intent remains');
+  }
+});
+
+
+test('rights: held release revalidates the exact source, destination and publication window, retaining a retryable queue', async () => {
+  for (const mutation of ['missing', 'destination', 'window', 'revoke_in_preflight', 'expire_in_preflight', 'replace_source_in_preflight', 'legacy_source_missing']) {
+    const c = candidate(`held-${mutation}`, 'twitch:100', 'thegrefg');
+    const state = baseState([c]);
+    const d = DESTINATIONS.find(d => d.network === 'facebook'); const key = destinationKey(d);
+    const grant = state.sourceAuthorizations[c.id];
+    if (mutation === 'missing') delete state.sourceAuthorizations;
+    if (mutation === 'destination') grant.destinations = ['6431685:tiktok:streamersus'];
+    if (mutation === 'window') grant.validUntil = new Date(NOW + 3600000).toISOString();
+    state.cloudPublish = { version: 1, posts: [], holds: {}, clips: { [c.id]: { status: 'held_owner_action', mediaAsset: { id: 1, url: 'https://github.com/o/r/releases/download/t/held.mp4' } } },
+      heldQueue: [{ id: 'held-example', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: key, caption: c.caption, mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
+    if (mutation === 'legacy_source_missing') delete state.cloudPublish.heldQueue[0].sourceUrl;
+    const store = memoryStore(state); let clockNow = NOW;
+    const m = fakeMetricool({ preflight: async () => {
+      if (mutation === 'revoke_in_preflight') { const s = store.state; s.sourceAuthorizations[c.id].status = 'revoked'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); }
+      if (mutation === 'replace_source_in_preflight') { const s = store.state; s.candidates[0].sourceUrl += '-replacement'; s.sourceAuthorizations[c.id].sourceUrl = s.candidates[0].sourceUrl; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); }
+      if (mutation === 'expire_in_preflight') clockNow = Date.parse(grant.validUntil);
+    } });
+    const result = await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, clock: () => clockNow, owner: 'o', store,
+      approvals: approvals({}), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() });
+    assert.equal(m.calls.schedule.length, 0, mutation);
+    assert.equal(store.state.cloudPublish.heldQueue.length, 1, mutation);
+    assert.equal(store.state.cloudPublish.posts.length, 0, mutation);
+    assert.ok(result.report.heldReasons.some(s => s.startsWith('held_release_gate:rights_')), mutation);
+  }
+});
+
+
+test('rights: changing the candidate source and granting its replacement during preflight cannot authorize the old render', async () => {
+  const c = candidate('source-replaced', 'twitch:100', 'thegrefg'), store = memoryStore(baseState([c]));
+  const m = fakeMetricool({ preflight: async () => { const s = store.state; s.candidates[0].sourceUrl += '-replacement'; s.sourceAuthorizations[c.id].sourceUrl = s.candidates[0].sourceUrl; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); } });
+  const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-source-replaced': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() });
+  assert.equal(m.calls.schedule.length, 0); assert.ok(report.heldReasons.includes('rights_source_mismatch'));
+});
+
+
+test('rights: repeated post-render permission holds do not consume the failure budget; a later grant resumes', async () => {
+  const c = candidate('retry-rights', 'twitch:100', 'thegrefg'), store = memoryStore(baseState([c]));
+  let revoke = true;
+  const m = fakeMetricool({ preflight: async () => { if (revoke) { const s = store.state; s.sourceAuthorizations[c.id].status = 'revoked'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); } } });
+  const args = { env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-retry-rights': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() };
+  for (let i = 0; i < 4; i++) {
+    const s = store.state; s.sourceAuthorizations[c.id].status = 'approved'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s));
+    await runCloudPublisher(args);
+    assert.equal(store.state.cloudPublish.clips[c.id].attempts, 0);
+  }
+  revoke = false; const s = store.state; s.sourceAuthorizations[c.id].status = 'approved'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s));
+  await runCloudPublisher(args); assert.equal(m.calls.schedule.length, 1);
 });

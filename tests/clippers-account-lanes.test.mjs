@@ -1,3 +1,4 @@
+import { fixtureGrants } from './helpers/clippers-source-authorization-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
@@ -5,12 +6,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { LANES, routeCandidate, sourceSegment, mediaConflict, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, isWeekend, parseAutopublishOverride, overrideLaneIds, DEFAULT_LANES_AUTOPUBLISH_OVERRIDE } from '../shared/clippers-account-lanes.mjs';
 import { computeGrowth, growthWeight } from '../script/clippers-streamer-cloud-learning.mjs';
-import { runCloudPublisher, laneTarget, cloudPublishConfig, overrideApplies } from '../script/clippers-streamer-cloud-worker.mjs';
+import { runCloudPublisher as runCloudPublisherImpl, laneTarget, cloudPublishConfig, overrideApplies } from '../script/clippers-streamer-cloud-worker.mjs';
 import { peakStartFromEbur128, wordsFromWhisperJson, ffmpegRenderArgs } from '../script/clippers-streamer-cloud-render.mjs';
 import { createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
 import { captionHasCredit, buildCreditCaption } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
 
+const runCloudPublisher = args => runCloudPublisherImpl({ ...args, clock: args.clock ?? (() => args.now ?? Date.now()) });
 const NOW = Date.parse('2026-11-19T14:00:00.000Z'); // Thursday 09:00 New York
 const MEMES = '6431685:tiktok:streamersus', SPORT = '6431687:tiktok:streamersclipusa', MIAMI = '6591612:tiktok:news305miami';
 
@@ -130,7 +132,7 @@ function candidate(id, creatorKey, handle, extra = {}) {
 }
 const checked = { status: 'allowed_unless_prohibited', source: 'channel_description_checked' };
 function state(candidates, cloudPublish) {
-  return { version: 1, updatedAt: null, lastRun: null, takedowns: [], signals: [], candidates, ...(cloudPublish ? { cloudPublish } : {}),
+  return { version: 1, updatedAt: null, lastRun: null, takedowns: [], signals: [], candidates, sourceAuthorizations: fixtureGrants(candidates, NOW), ...(cloudPublish ? { cloudPublish } : {}),
     creators: { 'twitch:1': { key: 'twitch:1', handle: 'kaicenat', displayName: 'Kai Cenat', creatorGroupId: 'kai-cenat', policy: checked },
       'twitch:2': { key: 'twitch:2', handle: 'westcol', displayName: 'Westcol', creatorGroupId: 'westcol', policy: checked },
       'twitch:3': { key: 'twitch:3', handle: 'k4sen', displayName: 'k4sen', creatorGroupId: 'k4sen', policy: checked } } };

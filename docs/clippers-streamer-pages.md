@@ -8,7 +8,7 @@ The local-news Metricool sender is retired (`CLIPPERS_LOCAL_NEWS_SENDER_ENABLED`
 Its ledgers stay on disk and are read-only.
 
 ## Clip policy
-- A creator is clipped unless they explicitly prohibit it: Twitch user description, YouTube channel description,
+- Downloading or publishing requires positive owner-reviewed rights for the exact source, including audio; see the authorization section below. A prohibition always blocks it: Twitch user description, YouTube channel description,
   `KNOWN_PROHIBITED_CREATORS`, or a takedown (`shared/clippers-streamer-policy.mjs`, Spanish and English patterns).
   Twitch panels are not exposed by the Helix API, so they are not checked automatically. Add them to the known list by hand.
 - Every caption credits `@handle` and links the source. Clips are short (60 s or less) and edited. Full streams and VODs are never posted.
@@ -21,7 +21,7 @@ Its ledgers stay on disk and are read-only.
 | Discovery | `.github/workflows/clippers-streamers.yml` → `script/clippers-streamer-discovery.mjs` | Twitch Helix (app token): top live, top categories, last-24 h clips. YouTube Data API: channel snippets, uploads, trending gaming. About 30–60 units per run, and `search.list` is never used. |
 | State | PostgreSQL `agent_council_state`, namespace `clippers-streamers:<owner>` | Uses the existing council store. No new table. |
 | Approval | `pending_actions` (`clippers.streamer_clip_publish`) | Shows in the existing pending-actions panel. `CLIPPERS_STREAMER_AUTO_PUBLISH=true` pre-approves rows. It is off by default. |
-| Download | Cloud: `.github/workflows/clippers-streamers-publish.yml` → `script/clippers-streamer-cloud-worker.mjs` | Only approved rows (`approved`/`executed`). `yt-dlp` (`bin/yt-dlp`, or pip with `CLIPPERS_YTDLP_FROM_PIP=true`) downloads only the needed section. YouTube tries `--impersonate chrome` first (curl-cffi). Twitch clips are picked from the official Helix clip metadata. |
+| Download | Cloud: `.github/workflows/clippers-streamers-publish.yml` → `script/clippers-streamer-cloud-worker.mjs` | Only approved rows (`approved`/`executed`) with separate positive rights evidence. `yt-dlp` (`bin/yt-dlp`, or pip with `CLIPPERS_YTDLP_FROM_PIP=true`) downloads only the needed section. YouTube tries `--impersonate chrome` first (curl-cffi). Twitch clips are picked from the official Helix clip metadata. |
 | Render | Cloud: `script/clippers-streamer-cloud-render.mjs` | ffmpeg only, with no shell, ImageMagick, zsh or BSD `stat`. The output is 1080×1920 with a blurred fill, the hook text and the `Créditos: @handle` credit burned in using the bundled `assets/fonts/DejaVuSans-Bold.ttf`, plus loudness normalization. It is at most 60 s (`CLIPPERS_STREAMER_CLIP_SECONDS`, default 45). Long YouTube videos are cut at the "most replayed" heatmap peak. ffprobe checks size, audio and duration. |
 | Publish | Existing Metricool adapter `script/clippers-portfolio-metricool.mjs` | The policy is checked again at publish time: the stored policy, a live re-read of the creator's description, takedowns, the known list, the credit and the 60 s limit. It is checked once more inside the owner lock right before each write. The media is staged as a temporary asset on the `clippers-media-staging` prerelease of this repository and deleted only once Metricool holds its own SHA-verified copy or the slot is 2 h past. It is never deleted while a write is uncertain, and leftovers are swept after 48 h. The adapter verifies the destination identity and publish permission, enforces the daily cap of 5 and checks for slot, caption and media duplicates before each write. A write with an uncertain outcome is never sent again: it is reconciled read-only. |
 | Learning | Same job, `script/clippers-streamer-cloud-learning.mjs` | Reads Metricool post analytics 24–48 h after the slot. It runs an A/B test on the burned hook (`title` vs `teaser`) per destination with the existing `evaluateExperiments`, and orders creators by relative median views. |
@@ -134,3 +134,49 @@ hold lane merges on top of lanes:
   env file the claim is written to the same Postgres ledger the cloud worker reads; without them a local ledger
   (`clippers_workspace/reports/clippers-media-ledger.json`) is used and mirrored on the next run that has the database.
   `CLIPPERS_LEDGER_REQUIRE_DATABASE=true` makes the database mandatory.
+
+
+## Positive rights authorization (required before enabling publication)
+
+A channel description without a prohibition, a public clip URL, credit, a scheduler approval,
+`AUTO_PUBLISH`, and a lane override **do not establish rights**. Discovery may continue to research
+these candidates, but the cloud worker holds downloads, renders, public staging and Metricool writes
+until the trusted owner's streamer-state ledger has a positive source authorization. No environment
+variable bypasses this requirement. Existing records without this evidence remain retryable holds.
+
+The ledger is `sourceAuthorizations[candidateId]` in the existing owner-scoped streamer state.
+The v1 record has these required fields:
+
+- `schemaVersion: 1`, `status: "approved"`, and `basis: "owned" | "licensed" | "permission"`.
+- Exact `candidateId`, `sourceUrl`, `creatorKey`, and a nonempty `rightsHolder`.
+- `review: { actor: "owner", id, at }`, recording the actual owner review and its real timestamp.
+- `evidence: { reference, sha256 }`, linking to the reviewed ownership/license/permission document
+  in the private evidence vault, with the exact document digest. Do not put private documents in git.
+- `scope` explicitly permits `video`, `audio`, `editing`, `commercialSocial`, `wholeSource`, and
+  `publicMediaStaging`. Every value must be `true`. GitHub release staging is public, so a license
+  limited to a social account without this delivery permission is insufficient for this transport.
+- `validFrom` and `validUntil` are timestamps with a zone; the current operation and the actual
+  publication slot must fall inside `[validFrom, validUntil)`.
+- `destinations` lists exact canonical `brandId:network:account` keys, without wildcards.
+
+Only a trusted owner/operator may record or revoke this state after examining the actual rights
+and all audio/music. A candidate's own metadata and automatic discovery approval cannot populate
+it. This change intentionally adds **no public grant endpoint**, no automatic grant importer and no
+permission by inference. An operator must use the existing approved owner maintenance path; if that
+path/evidence is unavailable, keep publication paused. The record is an auditable statement by the
+owner, not a cryptographic assertion that the worker can independently authenticate a license.
+Narrow segment-only rights are not accepted as whole-source permissions. The owned-content lane
+remains separate; original motivational videos must not be disguised as Twitch/YouTube candidates.
+Existing destination/slot/media/engine-bound editorial grants are not automatically converted.
+
+The worker checks source rights before downloading (including language detection), before rendering,
+before public staging, inside the write-intent transaction, and again after asynchronous provider
+preflights immediately before the actual send. Held Facebook releases use the same checks and retain
+rights-held queue items for later valid authorization. The final read does not make a remote API call
+atomic with a future owner revocation; the existing single cloud writer/concurrency rule still applies.
+Never retry an uncertain prior send just because its rights grant subsequently changes.
+
+This gate does not prove five publications per account per day. Rights supply, Facebook identity,
+actual provider limits and the existing brand-wide quota accounting must be reconciled separately;
+five scheduled or draft rows are not five published videos. Keep the kill switch on until the exact
+reviewed code, current rights evidence and pending-write reconciliation are verified.
