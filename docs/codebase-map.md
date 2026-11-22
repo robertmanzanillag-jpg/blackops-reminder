@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T14:03:55.448Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-external-attribution-fence-nov22`
+Generated: 2026-11-22T14:46:43.508Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-campaign-leaf-depth-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1387 | 1265 | 5282 | 647 | 29611 |
+| 1389 | 1267 | 5286 | 647 | 29621 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,7 +28,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 375 | 370 | test:375 |
+| `tests` | 376 | 371 | test:376 |
 | `server` | 304 | 297 | server:304 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 160 | 143 | script:160 |
@@ -38,8 +38,8 @@ Package: `rest-express`
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
+| `tests/fixtures` | 11 | 9 | test:11 |
 | `script/office-api-budget-v6` | 10 | 8 | script:10 |
-| `tests/fixtures` | 10 | 8 | test:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `tests/helpers` | 4 | 4 | test:4 |

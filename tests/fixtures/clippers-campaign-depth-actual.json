@@ -1,0 +1,281 @@
+{
+  "description": "Compact path-preserving reconstruction of actual public RSC JSON. UI leaf value redacted; unrelated siblings/data/text excluded. Not a live eligibility grant.",
+  "active": {
+    "provenance": {
+      "sourceUrl": "https://contentrewards.com/c/campaigns/a5c63fad-cd53-4b81-9305-4a2d1696872a",
+      "sourceHtmlSha256": "659cb6ff4680650e6ca309c6da3f2a7b58747b9f66253abdd1a1211ca9db681b",
+      "capturedAt": "2026-11-22T14:42:07.265Z",
+      "sourceByteLength": 247711,
+      "primitiveLeafPath": [
+        3,
+        "children",
+        1,
+        3,
+        "children",
+        3,
+        "children",
+        3,
+        "children",
+        5,
+        3,
+        "children",
+        3,
+        "children",
+        3,
+        "notFound",
+        0,
+        1,
+        3,
+        "children",
+        2,
+        3,
+        "children",
+        2,
+        3,
+        "children",
+        0,
+        3,
+        "children",
+        2,
+        3,
+        "children",
+        0,
+        3,
+        "children",
+        0,
+        3,
+        "children",
+        0,
+        3,
+        "d"
+      ],
+      "primitiveLeafDepth": 41,
+      "maxObjectDepth": 40,
+      "queryObjectDepth": 4
+    },
+    "id": "a5c63fad-cd53-4b81-9305-4a2d1696872a",
+    "headers": {
+      "date": "Sun, 22 Nov 2026 14:42:07 GMT",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "age": null,
+      "x-cache": "Miss from cloudfront"
+    },
+    "acceptingSpan": true,
+    "frames": [
+      [
+        null,
+        null,
+        null,
+        {
+          "children": [
+            null,
+            [
+              null,
+              null,
+              null,
+              {
+                "children": [
+                  null,
+                  null,
+                  null,
+                  {
+                    "children": [
+                      null,
+                      null,
+                      null,
+                      {
+                        "children": [
+                          null,
+                          null,
+                          null,
+                          null,
+                          null,
+                          [
+                            null,
+                            null,
+                            null,
+                            {
+                              "children": [
+                                null,
+                                null,
+                                null,
+                                {
+                                  "children": [
+                                    null,
+                                    null,
+                                    null,
+                                    {
+                                      "notFound": [
+                                        [
+                                          null,
+                                          [
+                                            null,
+                                            null,
+                                            null,
+                                            {
+                                              "children": [
+                                                null,
+                                                null,
+                                                [
+                                                  null,
+                                                  null,
+                                                  null,
+                                                  {
+                                                    "children": [
+                                                      null,
+                                                      null,
+                                                      [
+                                                        null,
+                                                        null,
+                                                        null,
+                                                        {
+                                                          "children": [
+                                                            [
+                                                              null,
+                                                              null,
+                                                              null,
+                                                              {
+                                                                "children": [
+                                                                  null,
+                                                                  null,
+                                                                  [
+                                                                    null,
+                                                                    null,
+                                                                    null,
+                                                                    {
+                                                                      "children": [
+                                                                        [
+                                                                          null,
+                                                                          null,
+                                                                          null,
+                                                                          {
+                                                                            "children": [
+                                                                              [
+                                                                                null,
+                                                                                null,
+                                                                                null,
+                                                                                {
+                                                                                  "children": [
+                                                                                    [
+                                                                                      null,
+                                                                                      null,
+                                                                                      null,
+                                                                                      {
+                                                                                        "d": "[redacted UI primitive]"
+                                                                                      }
+                                                                                    ]
+                                                                                  ]
+                                                                                }
+                                                                              ]
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                ]
+                                                              }
+                                                            ]
+                                                          ]
+                                                        }
+                                                      ]
+                                                    ]
+                                                  }
+                                                ]
+                                              ]
+                                            }
+                                          ]
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ],
+      [
+        null,
+        null,
+        null,
+        {
+          "state": {
+            "queries": [
+              null,
+              null,
+              {
+                "queryKey": [
+                  "campaigns",
+                  "detail",
+                  "a5c63fad-cd53-4b81-9305-4a2d1696872a"
+                ],
+                "state": {
+                  "status": "success",
+                  "dataUpdatedAt": 1795358527230,
+                  "data": {
+                    "id": "a5c63fad-cd53-4b81-9305-4a2d1696872a",
+                    "status": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    ]
+  },
+  "paused": {
+    "provenance": {
+      "sourceUrl": "https://contentrewards.com/c/campaigns/33c3d5a9-84a9-40c8-b6e4-9904e4816339",
+      "sourceHtmlSha256": "0c8253ec7b6e1685bc510301f78a8f7c8053e2d234c7e0faf2789f4b6c05acd8",
+      "capturedAt": "2026-11-22T11:14:19.499684+00:00",
+      "queryObjectDepth": 4
+    },
+    "id": "33c3d5a9-84a9-40c8-b6e4-9904e4816339",
+    "headers": {
+      "date": "Sun, 22 Nov 2026 11:14:19 GMT",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "age": null
+    },
+    "acceptingSpan": false,
+    "frames": [
+      [
+        null,
+        null,
+        null,
+        {
+          "state": {
+            "queries": [
+              null,
+              null,
+              {
+                "queryKey": [
+                  "campaigns",
+                  "detail",
+                  "33c3d5a9-84a9-40c8-b6e4-9904e4816339"
+                ],
+                "state": {
+                  "status": "success",
+                  "dataUpdatedAt": 1795346059280,
+                  "data": {
+                    "id": "33c3d5a9-84a9-40c8-b6e4-9904e4816339",
+                    "status": "paused"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    ]
+  }
+}
