@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import {FactoryApiBudgetError} from "./factory-api-invocation";
 import {snapshotFactoryApiRequest,snapshotFactoryApiRequestOptions,guardFactoryOpenAiClient} from "./factory-api-sdk";
 import { randomUUID } from "node:crypto";
@@ -269,7 +270,7 @@ function getDefaultLedger(): Promise<AiProviderLedger> {
   if (!defaultLedger) {
     defaultLedger = Promise.all([import("pg"), import("./database-url")]).then(([pg, { resolveDatabaseConnectionString }]) => {
       const Pool = (pg as any).Pool ?? (pg as any).default?.Pool;
-      return new PostgresAiProviderLedger(new Pool({ connectionString: resolveDatabaseConnectionString(), max: 2, allowExitOnIdle: true, application_name: blackopsApplicationName("ai-ledger") }) as unknown as SqlPool);
+      return new PostgresAiProviderLedger(observePostgresPool(new Pool({ connectionString: resolveDatabaseConnectionString(), max: 2, allowExitOnIdle: true, connectionTimeoutMillis:10000, application_name: blackopsApplicationName("ai-ledger") }),{role:"ai-ledger"}) as unknown as SqlPool);
     });
     defaultLedger.catch(() => { defaultLedger = null; });
   }

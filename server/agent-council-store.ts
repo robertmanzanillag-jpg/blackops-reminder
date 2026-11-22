@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import { createHash } from "node:crypto";
 
 export const councilSchemaSql = `CREATE TABLE IF NOT EXISTS agent_council_state (
@@ -95,7 +96,7 @@ export function blackopsApplicationName(role: string, env: Readonly<Record<strin
 /** The same bounded PostgreSQL pool the council store uses (DATABASE_URL). */
 export async function createCouncilPool(role = "council"): Promise<CouncilPool> {
   const [{ Pool }, { resolveDatabaseConnectionString }] = await Promise.all([import("pg"), import("./database-url")]);
-  return new Pool(councilPoolConfig(resolveDatabaseConnectionString(), role));
+  return observePostgresPool(new Pool(councilPoolConfig(resolveDatabaseConnectionString(), role)),{role});
 }
 
 /** Pool settings shared by every council connection (named, bounded, idle-in-transaction capped). */

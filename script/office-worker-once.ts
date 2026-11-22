@@ -1,3 +1,4 @@
+import {observePostgresPool,postgresClientDisconnected} from "../server/postgres-pool-safety";
 // Dedicated trusted cloud entrypoint: never loads repository .env files or adapters.
 // Runs the reviewed office executor once, bounded, then exits (see docs/office-worker-cloud.md).
 import { createHash, randomUUID } from "node:crypto";
@@ -33,7 +34,7 @@ async function main() {
   const lockKey = `office-worker-executor:v1:${ownerKey}`;
   // Dedicated session for the advisory lock. Requires a direct (non transaction-pooled) URL;
   // a pooled session makes verify() fail and the run stops instead of running unowned.
-  const lockPool = new Pool({ connectionString: config.DATABASE_URL, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 15000, query_timeout: 20000, application_name: blackopsApplicationName("office-owner") });
+  const lockPool = observePostgresPool(new Pool({ connectionString: config.DATABASE_URL, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 15000, query_timeout: 20000, application_name: blackopsApplicationName("office-owner") }),{role:"office-owner",onCheckedOutError:()=>{stopping=true;process.exitCode=1;shutdown.abort();}});
   let host: Awaited<ReturnType<typeof import("../server/office-worker-assembly")["assembleOfficeWorker"]>> | undefined;
   let lockClient: import("pg").PoolClient | undefined;
   // Council rows are keyed by sha256(owner): the same key the council store locks.
@@ -48,6 +49,7 @@ async function main() {
         const client = lockClient;
         const ownership: OfficeOnceOwnership = {
           async verify() {
+            if(postgresClientDisconnected(client))return false;
             try {
               return (await client.query(`/*office:cloud-owner-verify*/ SELECT EXISTS(SELECT 1 FROM pg_locks l, (SELECT hashtextextended($1, 0) AS k) h
  WHERE l.locktype='advisory' AND l.pid=pg_backend_pid() AND l.granted AND l.objsubid=1
@@ -65,8 +67,11 @@ async function main() {
         const rows = (await lockClient!.query("/*office:cloud-other-executor*/ SELECT EXISTS(SELECT 1 FROM office_agent_workers WHERE id NOT LIKE 'office-cloud-%' AND last_seen_at > CURRENT_TIMESTAMP - interval '2 minutes') AS active")).rows;
         if (typeof rows[0]?.active !== "boolean") throw Error("OFFICE_ONCE_EXECUTOR_STATE_UNVERIFIED");
         if (rows[0].active) return true;
+        if(stopping||shutdown.signal.aborted||postgresClientDisconnected(lockClient!))throw Error("OFFICE_ONCE_OWNERSHIP_LOST");
         // Assembled only after exclusive ownership; the heartbeat id marks cloud presence.
-        host = await (await import("../server/office-worker-assembly")).assembleOfficeWorker({ shouldStop: () => stopping, workerId: `office-cloud-${randomUUID()}` });
+        const assembly=await import("../server/office-worker-assembly");
+        if(stopping||shutdown.signal.aborted||postgresClientDisconnected(lockClient!))throw Error("OFFICE_ONCE_OWNERSHIP_LOST");
+        host = await assembly.assembleOfficeWorker({ shouldStop: () => stopping, workerId: `office-cloud-${randomUUID()}` });
         return false;
       },
       checkProtocol: () => host!.checkProtocol(),

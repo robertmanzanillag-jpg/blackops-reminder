@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import path from "node:path";
 import {canonicalOfficeSourcePath,persistOfficeSourceDocument,prepareOfficeSourceDocument,type OfficeSourceDocumentKind,type PreparedOfficeSourceDocument,type SourceQuery} from "./office-source-documents";
 
@@ -51,8 +52,7 @@ function sharedSync(){
  const connect=async():Promise<SourceQuery>=>{
   const [{default:pg},{resolveDatabaseConnectionString},{withConnectionRetry},{getSystemUserId}]=await Promise.all([import("pg"),import("./database-url"),import("./office-source-pool"),import("./user-context")]);
   owner=getSystemUserId();
-  const raw=new pg.Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:20000,statement_timeout:10000, application_name: "blackops-office-source-sync" });
-  raw.on("error",()=>undefined);
+  const raw=observePostgresPool(new pg.Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:20000,statement_timeout:10000, application_name: "blackops-office-source-sync" }),{role:"office-source-sync"});
   return withConnectionRetry(raw);
  };
  shared=createOfficeSourceDocumentSync({persist:async(explicitOwner,prepared,writtenAt)=>{

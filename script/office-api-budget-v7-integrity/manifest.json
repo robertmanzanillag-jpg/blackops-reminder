@@ -27,7 +27,7 @@
     },
     {
       "path": "server/ai-model-router.ts",
-      "sha256": "62af9799a81e7fb3655134da428977391e44d5ca330cc7edcbb6801ec5b010c0"
+      "sha256": "3468a213bcf27c90923e9cf09efaa8912a4e2ff8e3feacbfc99cbb04e3cb1b49"
     },
     {
       "path": "server/clippers-local-news-translation.ts",
@@ -82,6 +82,10 @@
       "sha256": "505a302f55d752a4f9bf06e30aa1170a417c326f645b7e6c06a594fe3e5c24c8"
     },
     {
+      "path": "server/postgres-pool-safety.ts",
+      "sha256": "a21df9a1c2d53090583efc4f1c4105f650a055fe26fededa49d2844998a8af53"
+    },
+    {
       "path": "server/shared-openai-credit-ledger.ts",
       "sha256": "7358a04214feb25b01b6fe8753864493b9fd0e95004d62e23b6d8e0094196f43"
     },
@@ -103,7 +107,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "08180581914442614a3e34cc6127d7e2d29a3b825f60343ad1af019513005a3a"
+      "sha256": "ab39a552aaf4430ba58b31e4d1e23e01658cb68975e97af291fa4c18781002db"
     },
     {
       "path": "server/software-factory-asistente-review.ts",
@@ -155,7 +159,7 @@
     },
     {
       "path": "server/software-factory-store.ts",
-      "sha256": "924932caafce23044225691d16c0021aae248b7ed3dce955be61cadba3335546"
+      "sha256": "f70b9beb974329f88cb008311560f9fff6a78a4f0ab1615bc97b9085ebe8cb3b"
     },
     {
       "path": "server/software-factory-worker.ts",

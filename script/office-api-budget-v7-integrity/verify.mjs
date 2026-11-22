@@ -21,6 +21,7 @@ export const REQUIRED_SOURCES=Object.freeze([
   "server/office-shared-credits.ts",
   "server/office-token-budget.ts",
   "server/openai-client.ts",
+  "server/postgres-pool-safety.ts",
   "server/shared-openai-credit-ledger.ts",
   "server/shared-openai-credit-runtime.ts",
   "server/software-factory-anthropic.ts",

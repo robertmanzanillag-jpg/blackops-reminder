@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import {createHash,randomUUID} from "node:crypto";
 import {mkdir,readFile,writeFile,rename} from "node:fs/promises";
 import path from "node:path";
@@ -30,7 +31,7 @@ export function createLocalMarketingLearningStore(root:string):Store{
 let durable:Promise<Store>|undefined,local:Store|undefined;
 async function service(){
  if(marketingRequiresPostgres()){
-  durable??=Promise.all([import("pg"),import("./database-url")]).then(([{Pool},{resolveDatabaseConnectionString}])=>createMarketingLearningStore(new Pool({connectionString:resolveDatabaseConnectionString(),max:2,allowExitOnIdle:true,connectionTimeoutMillis:10000,statement_timeout:10000,application_name:blackopsApplicationName("marketing")})));
+  durable??=Promise.all([import("pg"),import("./database-url")]).then(([{Pool},{resolveDatabaseConnectionString}])=>createMarketingLearningStore(observePostgresPool(new Pool({connectionString:resolveDatabaseConnectionString(),max:2,allowExitOnIdle:true,connectionTimeoutMillis:10000,statement_timeout:10000,application_name:blackopsApplicationName("marketing")}),{role:"marketing"})));
   return createMarketingLearningService(await durable);
  }
  local??=createLocalMarketingLearningStore(path.join(process.env.MARKETING_COMMAND_CENTER_LOCAL_ROOT||path.join(process.cwd(),"marketing_command_center_data"),"owners"));

@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import {readMarketingLearning} from "./marketing-learning-store";
 import {readWebRoleSources,type WebRoleSource} from "./office-web-role-sources";
 import {persistWebRoleSources} from "./office-web-role-store";
@@ -33,8 +34,7 @@ export async function startOfficeWebSourceExporter(){
  // One connection only. A serverless database can take well over ten seconds
  // to accept the first connection after both it and this autoscaled host wake,
  // so allow a longer connect and a bounded retry of connection-level failures.
- const owner=getSystemUserId(),raw=new pg.Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:OFFICE_SOURCE_CONNECT_TIMEOUT_MS,statement_timeout:10000, application_name: "blackops-office-web-sources" });
- raw.on("error",()=>undefined);
+ const owner=getSystemUserId(),raw=observePostgresPool(new pg.Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:OFFICE_SOURCE_CONNECT_TIMEOUT_MS,statement_timeout:10000, application_name: "blackops-office-web-sources" }),{role:"office-web-sources"});
  const pool={...withConnectionRetry(raw),connect:()=>raw.connect()};
  const env=Object.fromEntries(["CLIPPERS_LOCAL_NEWS_WORKSPACE","DROPSHIPPING_PRODUCTS_PATH","DROPSHIPPING_SUPPLIERS_PATH","DROPSHIPPING_SOCIAL_METRICS_PATH","MARKETING_COMMAND_CENTER_LEARNING_PATH"].map(key=>[key,process.env[key]]));
  const cycle=createWebSourceExportCycle({read:()=>readWebRoleSources({pool,owner,configuredOwner:owner,root:process.cwd(),env,marketingLearning:()=>readMarketingLearning(pool,owner),sourceDocuments:()=>readOfficeSourceDocuments(pool,owner)}),persist:sources=>persistWebRoleSources(pool,owner,owner,sources)});

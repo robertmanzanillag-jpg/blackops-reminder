@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T12:16:27.193Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22",
+  "generatedAt": "2026-11-22T13:15:06.933Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/db-pool-idle-recovery-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,13 +125,41 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1362,
-    "filesIndexed": 1242,
-    "imports": 5146,
+    "filesVisible": 1366,
+    "filesIndexed": 1246,
+    "imports": 5169,
     "routes": 640,
-    "symbols": 29254
+    "symbols": 29288
   },
   "directories": {
+    "docs": {
+      "files": 89,
+      "indexed": 86,
+      "kinds": {
+        "docs": 89
+      }
+    },
+    "server": {
+      "files": 302,
+      "indexed": 295,
+      "kinds": {
+        "server": 302
+      }
+    },
+    "tests/helpers": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "test": 3
+      }
+    },
+    "tests": {
+      "files": 366,
+      "indexed": 361,
+      "kinds": {
+        "test": 366
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -210,13 +238,6 @@
         "client-page": 28
       }
     },
-    "docs": {
-      "files": 88,
-      "indexed": 85,
-      "kinds": {
-        "docs": 88
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -260,13 +281,6 @@
         "script": 4
       }
     },
-    "server": {
-      "files": 301,
-      "indexed": 294,
-      "kinds": {
-        "server": 301
-      }
-    },
     "server/blackroom-team": {
       "files": 17,
       "indexed": 17,
@@ -295,13 +309,6 @@
         "shared": 1
       }
     },
-    "tests": {
-      "files": 365,
-      "indexed": 360,
-      "kinds": {
-        "test": 365
-      }
-    },
     "tests/fixtures": {
       "files": 10,
       "indexed": 8,
@@ -314,13 +321,6 @@
       "indexed": 1,
       "kinds": {
         "test": 1
-      }
-    },
-    "tests/helpers": {
-      "files": 2,
-      "indexed": 2,
-      "kinds": {
-        "test": 2
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -6681,6 +6681,14 @@
     },
     {
       "path": "docs/office-worker-cloud.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/postgres-disconnect-recovery.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -15224,6 +15232,7 @@
         "../server/agent-council-store",
         "../server/office-lock-timeout",
         "../server/office-worker-once",
+        "../server/postgres-pool-safety",
         "./office-windows-worker.mjs",
         "node:crypto"
       ],
@@ -15233,6 +15242,7 @@
       "symbols": [
         "CONFIG_KEYS",
         "abort",
+        "assembly",
         "bounds",
         "client",
         "config",
@@ -16092,6 +16102,7 @@
       "kind": "script",
       "imports": [
         "../server/agent-council-store",
+        "../server/postgres-pool-safety",
         "../server/software-factory-diagnostics",
         "../server/software-factory-once"
       ],
@@ -17003,6 +17014,7 @@
       "path": "server/agent-council-store.ts",
       "kind": "server",
       "imports": [
+        "./postgres-pool-safety",
         "node:crypto"
       ],
       "exports": [
@@ -17430,6 +17442,7 @@
         "./agent-council-store",
         "./factory-api-invocation",
         "./factory-api-sdk",
+        "./postgres-pool-safety",
         "node:crypto"
       ],
       "exports": [
@@ -24072,6 +24085,7 @@
       "imports": [
         "./agent-council-store",
         "./database-url",
+        "./postgres-pool-safety",
         "drizzle-orm/node-postgres",
         "pg"
       ],
@@ -27719,6 +27733,7 @@
         "./agent-council-store",
         "./marketing-command-center",
         "./marketing-learning-store",
+        "./postgres-pool-safety",
         "node:crypto",
         "node:fs/promises",
         "node:path"
@@ -28247,6 +28262,7 @@
       "kind": "server",
       "imports": [
         "./agent-council-store",
+        "./postgres-pool-safety",
         "./user-context",
         "express",
         "node:crypto"
@@ -30165,6 +30181,7 @@
       "kind": "server",
       "imports": [
         "./office-source-documents",
+        "./postgres-pool-safety",
         "node:path"
       ],
       "exports": [
@@ -30514,6 +30531,7 @@
         "./office-source-pool",
         "./office-web-role-sources",
         "./office-web-role-store",
+        "./postgres-pool-safety",
         "node:path"
       ],
       "exports": [
@@ -30548,6 +30566,7 @@
       "imports": [
         "./office-cloud-runtime",
         "./office-protocol",
+        "./postgres-pool-safety",
         "./user-context",
         "pg"
       ],
@@ -30646,6 +30665,7 @@
         "name",
         "now",
         "officeOnceBoundsFromEnv",
+        "otherActive",
         "ownership",
         "pollMs",
         "rawIdle",
@@ -30797,6 +30817,32 @@
         "value",
         "watchlist",
         "yahooFormat"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/postgres-pool-safety.ts",
+      "kind": "server",
+      "imports": [
+        "node:events"
+      ],
+      "exports": [
+        "PostgresPoolDiagnostic",
+        "observePostgresPool",
+        "postgresClientDisconnected"
+      ],
+      "symbols": [
+        "ClientEmitter",
+        "LossHandler",
+        "Observation",
+        "PoolEmitter",
+        "disconnected",
+        "emit",
+        "existing",
+        "observations",
+        "observePostgresPool",
+        "postgresClientDisconnected",
+        "role"
       ],
       "routes": []
     },
@@ -33540,6 +33586,7 @@
         "./credit-pacer-runtime",
         "./factory-api-invocation",
         "./office-self-heal",
+        "./postgres-pool-safety",
         "./shared-openai-credit-runtime",
         "./software-factory",
         "./software-factory-asistente-build",
@@ -34786,6 +34833,7 @@
       "imports": [
         "../shared/software-factory-view",
         "./agent-council-store",
+        "./postgres-pool-safety",
         "./software-factory",
         "./software-factory-build-recovery",
         "./software-factory-pipeline",
@@ -35306,6 +35354,7 @@
       "kind": "server",
       "imports": [
         "./office-cloud-store",
+        "./postgres-pool-safety",
         "./software-factory",
         "./software-factory-api-budget",
         "node:crypto",
@@ -46041,6 +46090,31 @@
       "routes": []
     },
     {
+      "path": "tests/helpers/synthetic-postgres.ts",
+      "kind": "test",
+      "imports": [
+        "node:net"
+      ],
+      "exports": [
+        "syntheticPostgres",
+        "until"
+      ],
+      "symbols": [
+        "address",
+        "field",
+        "int16",
+        "int32",
+        "message",
+        "ready",
+        "server",
+        "sql",
+        "syntheticPostgres",
+        "text",
+        "until"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/kong-company-routes.test.ts",
       "kind": "test",
       "imports": [
@@ -49456,6 +49530,34 @@
       "routes": []
     },
     {
+      "path": "tests/postgres-pool-safety.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/factory-api-invocation",
+        "../server/postgres-pool-safety",
+        "../server/software-factory-api-budget",
+        "./helpers/synthetic-postgres",
+        "node:assert/strict",
+        "node:events",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "acquired",
+        "call",
+        "error",
+        "exposure",
+        "h",
+        "harness",
+        "invoke",
+        "pending",
+        "pool",
+        "server"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/public-local-news.test.ts",
       "kind": "test",
       "imports": [
@@ -52326,6 +52428,7 @@
     "tests/office-worker-once.test.ts",
     "tests/office-worker-watchdog.test.ts",
     "tests/owner-office-storage.test.ts",
+    "tests/postgres-pool-safety.test.ts",
     "tests/public-local-news.test.ts",
     "tests/radio-slot-policies.test.ts",
     "tests/radio-slots.test.ts",

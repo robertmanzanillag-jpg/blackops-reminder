@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import { factoryApiExecutionWindow, assertFactoryApiJobAdmission, assertFactoryApiParentSettlement, emptyFactoryApiState, parseFactoryApiState, factoryApiBudgetStatus, checkpointFactoryApiMonth, reserveFactoryApi, settleFactoryApi, unknownFactoryApi, type FactoryApiCheckpoint, type FactoryApiReservation, type FactoryApiExposure, type FactoryApiState } from "./software-factory-api-budget";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -27,7 +28,7 @@ ALTER TABLE software_factory_workers ADD COLUMN IF NOT EXISTS capabilities jsonb
 `; }
 export function createSoftwareFactoryStore(providedPool?: OfficeCloudPool) {
   let lazyPool: OfficeCloudPool | undefined = providedPool;
-  const pool = async () => { if (!lazyPool) { const { Pool } = await import("pg"); const { resolveDatabaseConnectionString } = await import("./database-url"); lazyPool = new Pool({ connectionString: resolveDatabaseConnectionString(), allowExitOnIdle: true }) as unknown as OfficeCloudPool; } return lazyPool; };
+  const pool = async () => { if (!lazyPool) { const { Pool } = await import("pg"); const { resolveDatabaseConnectionString } = await import("./database-url"); lazyPool = observePostgresPool(new Pool({ connectionString: resolveDatabaseConnectionString(), allowExitOnIdle: true, connectionTimeoutMillis:10000 }),{role:"factory-store"}) as unknown as OfficeCloudPool; } return lazyPool; };
   const transaction = async <T>(fn: (client: OfficeCloudClient) => Promise<T>) => { const client = await (await pool()).connect(); try { await client.query("BEGIN"); await client.query("SELECT pg_advisory_xact_lock(83817421)"); const result = await fn(client); await client.query("COMMIT"); return result; } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); } };
   const priorLiabilities=async(c:Pick<OfficeCloudClient,"query">,key:string,now:string)=>{
     const jobs=await c.query("SELECT * FROM software_factory_jobs WHERE owner_key=$1 AND month<$2 AND (status IN ('pending','running','unknown') OR completed_at >= $3::timestamptz)",[key,now.slice(0,7),now.slice(0,7)+"-01T00:00:00.000Z"]);

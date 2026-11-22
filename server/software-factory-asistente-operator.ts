@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import type {FactoryApiPrice} from './factory-api-invocation';
 import {ROLE_WORK_DEADLINE_ID} from "./software-factory-role-deadline";
 import { assertFactoryCreditReady } from "./software-factory-diagnostics";
@@ -412,7 +413,7 @@ async function installed(store: Store) {
     let recoveryPool: import('pg').Pool | undefined;
     const recoveryPrevious=async(ownerKey:string,failedId:string,jobId:string)=>{
       if(env.SOFTWARE_FACTORY_STORAGE_BACKEND && env.SOFTWARE_FACTORY_STORAGE_BACKEND!=='postgres')throw Error('FACTORY_RECOVERY_POSTGRES_REQUIRED');
-      if(!recoveryPool){const [{Pool},{resolveDatabaseConnectionString}]=await Promise.all([import('pg'),import('./database-url')]);recoveryPool=new Pool({connectionString:resolveDatabaseConnectionString(),allowExitOnIdle:true,max:1,connectionTimeoutMillis:10000,statement_timeout:15000,application_name:blackopsApplicationName("factory-asistente")});}
+      if(!recoveryPool){const [{Pool},{resolveDatabaseConnectionString}]=await Promise.all([import('pg'),import('./database-url')]);recoveryPool=observePostgresPool(new Pool({connectionString:resolveDatabaseConnectionString(),allowExitOnIdle:true,max:1,connectionTimeoutMillis:10000,statement_timeout:15000,application_name:blackopsApplicationName("factory-asistente")}),{role:"factory-asistente"});}
       const {loadFailedBuildRecovery}=await import('./software-factory-build-recovery');
       return loadFailedBuildRecovery(recoveryPool,ownerKey,failedId,jobId);
     };

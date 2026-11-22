@@ -112,8 +112,14 @@ export async function runOfficeWorkerOnce(host: OfficeOnceHost, options: {
   const timers: unknown[] = [];
   const halted = () => failed || expired || options.signal.aborted;
   try {
-    if (await host.otherExecutorActive()) return result("pc-active");
+    // Ownership can disappear while acquire() is awaiting the database. Do not
+    // assemble/probe a worker after the dedicated session already aborted.
+    if(options.signal.aborted)return result("aborted");
+    const otherActive=await host.otherExecutorActive();
+    if(options.signal.aborted)return result("aborted");
+    if(otherActive)return result("pc-active");
     await host.checkProtocol();
+    if(options.signal.aborted)return result("aborted");
     // Watchdog and presence: same cadence as the PC worker. A lost lock stops the run.
     timers.push(clock.setInterval(() => {
       if (maintenance || halted()) return;
