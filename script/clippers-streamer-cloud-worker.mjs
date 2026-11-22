@@ -526,6 +526,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const fresh = cloudPublishOf(parseStreamerState(await store.read(ns)));
       const otherDelivery = fresh.posts.some(p => p.candidateId === q.candidateId && canonicalDestinationKey(p.destinationKey) !== destinationKey(destination) && !['deferred', 'not_found', 'blocked'].includes(p.status));
       if (otherDelivery) { report.heldReasons.push('held_release:other_destination_delivery_requires_reconciliation'); continue; }
+      if (fresh.clips[q.candidateId]?.status === 'held_media_review') { report.heldReasons.push('held_release_gate:rights_media_binding_unverified'); continue; }
       const mediaUrl = fresh.clips[q.candidateId]?.mediaAsset?.url;
       if (mediaUrl && !heldMediaBindingMatches(q, fresh.clips[q.candidateId])) {
         await update((s, c) => { const held = c.heldQueue.find(x => x.id === q.id); if (held) { held.status = 'held_rights'; held.rightsHoldReason = 'rights_media_binding_unverified'; }
@@ -613,7 +614,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             if (!activePost && clip && clip.status !== 'held_media_review') Object.assign(clip, { status: 'deferred', reason, attempts: clip.status === HOLD_OWNER_ACTION ? (clip.rightsRetryBudget ?? clip.attempts ?? 0) : (clip.attempts ?? 0) });
           } else if (q.status === 'held_rights' && heldMediaBindingMatches(q, c.clips[q.candidateId])) {
             q.status = HOLD_OWNER_ACTION; delete q.rightsHoldReason;
-            if (c.clips[q.candidateId]?.reason?.startsWith('rights_')) Object.assign(c.clips[q.candidateId], { status: HOLD_OWNER_ACTION, reason: null });
+            if (c.clips[q.candidateId]?.status !== 'held_media_review' && c.clips[q.candidateId]?.reason?.startsWith('rights_')) Object.assign(c.clips[q.candidateId], { status: HOLD_OWNER_ACTION, reason: null });
           }
         }
       });

@@ -767,3 +767,16 @@ test('held media review: conflicting binding metadata survives later passes afte
   assert.deepEqual(store.state.cloudPublish.heldQueue, before);
   assert.equal(m.calls.schedule.length, 0); assert.equal(media.calls.render.length, 0);
 });
+
+
+test('held media review cannot be cleared or bypassed by another matching queue entry for the same candidate', async () => {
+  const c = candidate('shared-review', 'twitch:100', 'thegrefg'), state = baseState([c]);
+  const fb = DESTINATIONS.find(d => d.network === 'facebook'), tt = DESTINATIONS.find(d => d.brandId === 6431685);
+  const item = d => ({ id: `q-${d.network}`, candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: destinationKey(d), caption: c.caption, hookVariant: 'title', mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString(), status: 'held_rights' });
+  state.cloudPublish = { version: 1, posts: [], holds: {}, clips: { [c.id]: { status: 'held_media_review', reason: 'rights_media_binding_unverified', sourceUrl: c.sourceUrl, creatorKey: c.creatorKey, caption: c.caption, hookVariant: 'title', renderSha256: 'a'.repeat(64), mediaAsset: { id: 1, url: 'https://github.com/o/r/releases/download/t/review.mp4' } } }, heldQueue: [item(fb), item(tt)] };
+  const store = memoryStore(state), m = fakeMetricool();
+  const args = { env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: `${destinationKey(fb)},${destinationKey(tt)}` }, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() };
+  await runCloudPublisher(args); await runCloudPublisher(args);
+  assert.equal(store.state.cloudPublish.clips[c.id].status, 'held_media_review');
+  assert.equal(store.state.cloudPublish.heldQueue.length, 2); assert.equal(m.calls.schedule.length, 0);
+});
