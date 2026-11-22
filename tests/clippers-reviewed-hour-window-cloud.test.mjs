@@ -86,8 +86,10 @@ test('production hour-window install explicitly includes the locked TypeScript r
   const production={...process.env,NODE_ENV:'production'};
   for(const key of Object.keys(production))if(/^npm_config_(include|omit|production|only|userconfig|globalconfig)$/i.test(key))delete production[key];
   production.NPM_CONFIG_USERCONFIG=path.join(directory,'absent-user-config');production.NPM_CONFIG_GLOBALCONFIG=path.join(directory,'absent-global-config');
-  const include=flags=>execFileSync('npm',['config','get','include',...flags],{env:production,cwd:directory,encoding:'utf8',timeout:15000}).trim().split(/[,\s]+/).filter(Boolean);
-  assert.ok(include(args.slice(1)).includes('dev'),'effective production install includes tsx from devDependencies');
-  assert.equal(include(args.slice(1).filter(a=>!a.startsWith('--include'))).includes('dev'),false,'regression control reproduces production omission without explicit inclusion');
+  const config=(name,flags)=>execFileSync('npm',['config','get',name,...flags],{env:production,cwd:directory,encoding:'utf8',timeout:15000}).trim().split(/[,\s]+/).filter(Boolean);
+  assert.ok(config('include',args.slice(1)).includes('dev'),'effective production install explicitly includes tsx from devDependencies');
+  const oldFlags=args.slice(1).filter(a=>!a.startsWith('--include'));
+  assert.ok(config('omit',oldFlags).includes('dev'),'production default omits the locked tsx devDependency without the fix');
+  assert.equal(config('include',oldFlags).includes('dev'),false,'the old install has no inclusion override for that omission');
  }finally{await rm(directory,{recursive:true,force:true});}
 });
