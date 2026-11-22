@@ -180,8 +180,8 @@ export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
   const posts = ledger.posts.filter(p => p.candidateId === candidateId);
   if (posts.some(p => UNCERTAIN.has(p.status))) return false;
   const queued = (ledger.heldQueue ?? []).filter(q => q.candidateId === candidateId);
-  if (queued.some(q => q.status === 'held_rights')) return true; // revoked/expired staging must not stay public
-  if (queued.length) return false; // a permissioned queued copy still needs the media
+  if (queued.some(q => q.status !== 'held_rights')) return false; // permissioned queued copies still need media
+  // A rights hold stops pinning media, but known scheduled posts still require a verified copy or reconciliation.
   return posts.filter(p => p.status === 'scheduled').every(p =>
     (p.confirmedMediaUrl && p.confirmedMediaUrl !== assetUrl) || now >= Date.parse(p.scheduledAt) + 2 * HOUR);
 }
@@ -516,6 +516,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const destination = findDestination(q.destination);
       if (!destination || isHeld(c0, destination) || !config.destinations.some(x => destinationKey(x) === destinationKey(destination))) continue;
       const fresh = cloudPublishOf(parseStreamerState(await store.read(ns)));
+      const otherDelivery = fresh.posts.some(p => p.candidateId === q.candidateId && canonicalDestinationKey(p.destinationKey) !== destinationKey(destination) && !['deferred', 'not_found', 'blocked'].includes(p.status));
+      if (otherDelivery) { report.heldReasons.push('held_release:other_destination_delivery_requires_reconciliation'); continue; }
       const mediaUrl = fresh.clips[q.candidateId]?.mediaAsset?.url;
       const drop = () => update((s, c) => { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); });
       if (!mediaUrl && q.status === 'held_rights') {
@@ -589,12 +591,13 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       // which temporary public assets to retain, even when the release loop skipped that destination.
       await update((s, c) => {
         for (const q of c.heldQueue) {
-          const reason = sourceRightsGate(s, { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl }, { now: clock(), destinationKey: q.destinationKey });
+          const reason = sourceRightsGate(s, { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl }, { now: clock(), destinationKey: canonicalDestinationKey(q.destinationKey) });
           if (reason) {
             q.status = 'held_rights'; q.rightsHoldReason = reason;
             const activePost = c.posts.some(p => p.candidateId === q.candidateId && !['deferred', 'not_found', 'blocked'].includes(p.status));
-            if (!activePost && c.clips[q.candidateId]) Object.assign(c.clips[q.candidateId], { status: 'deferred', reason });
-          } else if (q.status === 'held_rights' && c.clips[q.candidateId]?.mediaAsset?.url) {
+            const clip = c.clips[q.candidateId];
+            if (!activePost && clip) Object.assign(clip, { status: 'deferred', reason, attempts: clip.status === HOLD_OWNER_ACTION ? (clip.rightsRetryBudget ?? clip.attempts ?? 0) : (clip.attempts ?? 0) });
+          } else if (q.status === 'held_rights' && c.clips[q.candidateId]?.mediaAsset?.url && q.mediaSha256 === c.clips[q.candidateId]?.renderSha256 && q.sourceUrl === c.clips[q.candidateId]?.sourceUrl && q.creatorKey === c.clips[q.candidateId]?.creatorKey) {
             q.status = HOLD_OWNER_ACTION; delete q.rightsHoldReason;
           }
         }
@@ -673,6 +676,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     // Destination slots from our own (fresh) ledger; Metricool preflight stays authoritative across lanes.
     const ledgerNow = cloudPublishOf(parseStreamerState(await store.read(ns)));
     const posts = ledgerNow.posts;
+    if (ledgerNow.clips[candidate.id]?.reason?.startsWith('rights_') && posts.some(p => p.candidateId === candidate.id && !['deferred', 'not_found', 'blocked'].includes(p.status))) {
+      report.heldReasons.push('rights_existing_delivery_requires_reconciliation'); report.counts.deferred++; continue;
+    }
     // Held destinations (owner action pending) are left out of the Metricool post; their copy is queued locally.
     // Never more than one account per clip: a copy is queued only when the single picked target is held.
     let heldTargets = [];
@@ -817,7 +823,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       report.captions = { ...(report.captions ?? {}), [rendered.captions ?? 'none']: ((report.captions ?? {})[rendered.captions ?? 'none'] ?? 0) + 1 };
       report.counts.rendered++;
       processed++;
-      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
+      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, rightsRetryBudget: priorAttempts, sourceUrl: candidate.sourceUrl, creatorKey: candidate.creatorKey, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
         captions: rendered.captions ?? null, captionsError: rendered.captionsError ?? null, captionLanguage: rendered.captionLanguage ?? null, languageEvidence };
       if (config.dryRun) {
         if (outputDir) { await mkdir(outputDir, { recursive: true }); await copyFile(rendered.file, path.join(outputDir, `${candidate.id.replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`)); }
@@ -831,6 +837,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       if (stageRights) { report.heldReasons.push(stageRights); report.counts.deferred++; await setClip({ ...base, attempts: priorAttempts, status: 'deferred', reason: stageRights }); continue; }
       asset = await stager.upload(rendered.file, `stc-${rendered.sha256.slice(0, 24)}.mp4`);
       await setClip({ ...base, status: 'staged', mediaAsset: asset });
+      // A fresh render cannot revive an old queue binding on a different account or with another hash.
+      await update((s, c) => { c.heldQueue = c.heldQueue.filter(q => q.candidateId !== candidate.id || q.status !== 'held_rights'); });
       if (!await verifyPublicMedia(asset.url, fetchImpl)) throw new Error('PUBLIC_MEDIA_UNREACHABLE');
       let scheduled = 0, pending = 0, gateBlocked = null, dropReason = null;
       for (const p of plan) {
@@ -938,7 +946,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         dropReason = plan.length ? 'rendered_not_scheduled:no_write_attempt' : 'rendered_not_scheduled:no_target';
         report.heldReasons.push(dropReason); report.counts.deferred++;
       }
-      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? (gateBlocked.startsWith('rights_') ? 'deferred' : 'blocked') : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked ?? dropReason, mediaAsset, ...((gateBlocked ?? dropReason)?.startsWith('rights_') ? { attempts: priorAttempts } : {}) });
+      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? (gateBlocked.startsWith('rights_') ? 'deferred' : 'blocked') : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked ?? dropReason, mediaAsset, ...(queuedOnly || (gateBlocked ?? dropReason)?.startsWith('rights_') ? { attempts: priorAttempts } : {}) });
       if (scheduled && candidate.approval?.pendingActionId && approvals?.markExecuted) {
         const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts.filter(x => x.candidateId === candidate.id).map(x => ({ destination: x.destinationKey, scheduledAt: x.scheduledAt, status: x.status, metricoolId: x.metricoolId }));
         await approvals.markExecuted(owner, candidate.approval.pendingActionId, { handoff: 'clippers_streamer_cloud', posts, externalCalls: posts.length }).catch(e => report.errors.push(`approval_update:${code(e)}`));

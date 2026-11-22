@@ -186,8 +186,13 @@ reviewed code, current rights evidence and pending-write reconciliation are veri
 
 Rights changes are observed on the next non-paused worker pass; they are not a push subscription.
 A revoked/expired or unbound held source moves to `held_rights`. Its temporary public staging asset
-is removed when no send for that candidate is uncertain, even while Facebook identity remains held.
-The queue/source metadata stays available. Restoring valid permission requires a fresh render/staging
+stops being pinned solely by that rights-held queue. Cleanup still requires no uncertain send and no
+known scheduled delivery depending on the original URL; those deliveries need verified copies or
+manual cancellation/reconciliation first. This check also runs while Facebook identity remains held.
+The queue/source metadata stays available until a fresh authorized render retires the old media binding.
+A candidate with another active scheduled/uncertain delivery requires manual reconciliation; it is
+not automatically re-rendered or copied to a second account. Restoring valid permission for an
+otherwise unassigned candidate requires a fresh render/staging
 binding if that asset was removed; the old URL is never resent. Unknown prior sends must first be
 reconciled, and their staging assets remain protected pending that reconciliation.
 

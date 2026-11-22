@@ -647,22 +647,23 @@ test('rights: destination or public staging denial never uploads a public asset'
 });
 
 test('rights: revoked/expired legacy held staging is removed while Facebook remains held, but uncertain writes protect it', async () => {
-  for (const scenario of ['revoked', 'expired', 'legacy_source', 'uncertain']) {
+  for (const scenario of ['revoked', 'expired', 'legacy_source', 'uncertain', 'scheduled_reference', 'scheduled_copied']) {
     const c = candidate(`public-${scenario}`, 'twitch:100', 'thegrefg'), state = baseState([c]);
     const d = DESTINATIONS.find(d => d.network === 'facebook'), key = destinationKey(d), url = 'https://github.com/o/r/releases/download/t/public-held.mp4';
     const grant = state.sourceAuthorizations[c.id];
     if (scenario === 'expired') grant.validUntil = new Date(NOW).toISOString(); else grant.status = 'revoked';
     state.cloudPublish = { version: 1, clips: { [c.id]: { status: 'held_owner_action', attempts: 1, mediaAsset: { id: 1, url } } },
-      posts: scenario === 'uncertain' ? [{ id: 'unknown', candidateId: c.id, destination: d, destinationKey: key, status: 'verification_pending', scheduledAt: new Date(NOW + 2 * 3600000).toISOString() }] : [],
+      posts: ['uncertain', 'scheduled_reference', 'scheduled_copied'].includes(scenario) ? [{ id: 'prior', candidateId: c.id, destination: d, destinationKey: key, status: scenario === 'uncertain' ? 'verification_pending' : 'scheduled', confirmedMediaUrl: scenario === 'scheduled_copied' ? 'https://static.metricool.com/copied.mp4' : url, scheduledAt: new Date(NOW + 2 * 3600000).toISOString() }] : [],
       holds: { [key]: { status: 'held_owner_action' } }, heldQueue: [{ id: 'held-public', candidateId: c.id, creatorKey: c.creatorKey,
         ...(scenario === 'legacy_source' ? {} : { sourceUrl: c.sourceUrl }), destination: d, destinationKey: key, caption: c.caption, mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
     const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia(); m.confirmSchedule = async () => null;
     await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager, fetch: okFetch, ...media });
-    assert.deepEqual(stager.removed, scenario === 'uncertain' ? [] : [1], scenario);
+    assert.deepEqual(stager.removed, ['uncertain', 'scheduled_reference'].includes(scenario) ? [] : [1], scenario);
     assert.equal(store.state.cloudPublish.heldQueue[0].status, 'held_rights');
     assert.equal(m.calls.schedule.length, 0); assert.equal(media.calls.render.length, 0);
-    if (scenario !== 'uncertain') assert.equal(store.state.cloudPublish.clips[c.id].mediaAsset, null);
-    else assert.equal(store.state.cloudPublish.posts[0].status, 'verification_pending');
+    if (!['uncertain', 'scheduled_reference'].includes(scenario)) assert.equal(store.state.cloudPublish.clips[c.id].mediaAsset, null);
+    if (scenario === 'uncertain') assert.equal(store.state.cloudPublish.posts[0].status, 'verification_pending');
+    if (scenario === 'scheduled_reference') assert.equal(store.state.cloudPublish.posts[0].status, 'scheduled');
   }
 });
 
@@ -682,4 +683,47 @@ test('rights: restored permission re-renders removed held media with a fresh que
   assert.equal(store.state.cloudPublish.heldQueue.length, 1);
   assert.equal(store.state.cloudPublish.heldQueue[0].mediaSha256, 'a'.repeat(64));
   assert.equal(store.state.cloudPublish.heldQueue[0].status, 'held_owner_action');
+  for (let cycle = 0; cycle < 4; cycle++) {
+    const revoked = store.state; revoked.sourceAuthorizations[c.id].status = 'revoked'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(revoked));
+    await runCloudPublisher(args);
+    const restored = store.state; restored.sourceAuthorizations[c.id].status = 'approved'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(restored));
+    await runCloudPublisher(args);
+    assert.equal(store.state.cloudPublish.clips[c.id].attempts, 1, 'preserve the prior budget without spending it on legal holds');
+  }
+  assert.equal(media.calls.render.length, 5);
+});
+
+
+test('rights: fresh rendering to another account retires the stale rights-held queue instead of reviving its old caption/hash', async () => {
+  const c = candidate('new-target', 'twitch:100', 'thegrefg'), state = baseState([c]);
+  const fb = DESTINATIONS.find(d => d.network === 'facebook'), fbKey = destinationKey(fb);
+  const tt = DESTINATIONS.find(d => d.brandId === 6431685), ttKey = destinationKey(tt);
+  state.cloudPublish = { version: 1, posts: [], holds: { [fbKey]: { status: 'held_owner_action' } },
+    clips: { [c.id]: { status: 'deferred', reason: 'rights_authorization_inactive', attempts: 0, mediaAsset: null } },
+    heldQueue: [{ id: 'held-stale-account', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: fb, destinationKey: fbKey, caption: c.caption, mediaSha256: 'b'.repeat(64), queuedAt: new Date(NOW).toISOString(), status: 'held_rights' }] };
+  const store = memoryStore(state), m = fakeMetricool();
+  const args = { env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: `${ttKey},${fbKey}` }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-new-target': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() };
+  await runCloudPublisher(args);
+  assert.equal(m.calls.schedule.length, 1); assert.equal(m.calls.schedule[0].destinationKey, ttKey);
+  assert.equal(store.state.cloudPublish.heldQueue.length, 0);
+  const next = store.state; next.cloudPublish.holds[fbKey].status = 'cleared'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(next));
+  await runCloudPublisher(args); assert.equal(m.calls.schedule.length, 1, 'no stale second-account write');
+});
+
+test('held source: an existing delivery to another destination requires reconciliation, while legacy destination aliases remain permissioned', async () => {
+  for (const scenario of ['other_delivery', 'legacy_key']) {
+    const c = candidate(`queue-${scenario}`, 'twitch:100', 'thegrefg'), state = baseState([c]);
+    const fb = DESTINATIONS.find(d => d.network === 'facebook'), tt = DESTINATIONS.find(d => d.brandId === 6431685);
+    const d = scenario === 'other_delivery' ? fb : tt, key = destinationKey(d), url = 'https://github.com/o/r/releases/download/t/queue.mp4';
+    state.cloudPublish = { version: 1,
+      posts: scenario === 'other_delivery' ? [{ id: 'already', candidateId: c.id, destination: tt, destinationKey: destinationKey(tt), status: 'scheduled', confirmedMediaUrl: url, scheduledAt: new Date(NOW + 2 * 3600000).toISOString() }] : [],
+      holds: scenario === 'legacy_key' ? { [key]: { status: 'held_owner_action' } } : {},
+      clips: { [c.id]: { status: 'held_owner_action', sourceUrl: c.sourceUrl, creatorKey: c.creatorKey, renderSha256: 'a'.repeat(64), mediaAsset: { id: 1, url } } },
+      heldQueue: [{ id: 'queued', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: scenario === 'legacy_key' ? '6431685:tiktok:streamersclips' : key, caption: c.caption, mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString(), status: 'held_owner_action' }] };
+    const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager();
+    const { report } = await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager, fetch: okFetch, ...fakeMedia() });
+    assert.equal(m.calls.schedule.length, 0); assert.deepEqual(stager.removed, []);
+    assert.equal(store.state.cloudPublish.heldQueue[0].status, 'held_owner_action');
+    if (scenario === 'other_delivery') assert.ok(report.heldReasons.includes('held_release:other_destination_delivery_requires_reconciliation'));
+  }
 });
