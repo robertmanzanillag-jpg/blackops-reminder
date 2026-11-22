@@ -137,20 +137,33 @@ export function streamKeyOf(candidate) {
 }
 // A segment with an unknown start (start == null, e.g. a Mac render whose cut offset was not recorded) overlaps
 // every segment of the same source: the conservative reading for "one source clip -> one account".
-const overlaps = (a, b) => a.key === b.key && (a.start == null || b.start == null || Math.abs(a.start - b.start) < SEGMENT_OVERLAP_SECONDS);
+const overlaps = (a,b) => {
+  if(a.key!==b.key)return false;
+  if(a.start==null||b.start==null)return true;
+  const ae=Number.isFinite(a.end),be=Number.isFinite(b.end);
+  if(ae&&be)return a.start<b.end&&b.start<a.end;
+  // A legacy point anchor may denote a clip end, not its start. Never narrow its old conservative reserve.
+  if(ae)return a.start<b.start+SEGMENT_OVERLAP_SECONDS&&b.start-SEGMENT_OVERLAP_SECONDS<a.end;
+  if(be)return b.start<a.start+SEGMENT_OVERLAP_SECONDS&&a.start-SEGMENT_OVERLAP_SECONDS<b.end;
+  return Math.abs(a.start-b.start)<SEGMENT_OVERLAP_SECONDS;
+};
 
 /**
  * Conflict for a new post: an existing ledger entry with the same file hash or an overlapping source segment.
  * Same destination -> 'already_posted'; another destination -> 'cross_account_duplicate'. null = free.
  */
-export function mediaConflict(entries, { segment, mediaSha256 = null, destinationKey, candidateId = null, sourceId = null }) {
+export function mediaConflict(entries, { segment, mediaSha256 = null, destinationKey, candidateId = null, sourceId = null, physicalSource = null }) {
   // Source identity: the cloud candidate id (youtube:<id>, twitch-clip:<slug>) and the Mac sourceId share one key
   // space, so a candidateId on one side matches a sourceId on the other.
   const ids = new Set([candidateId, sourceId].filter(Boolean));
   for (const e of entries ?? []) {
     if (!e) continue;
-    const same = (mediaSha256 && e.mediaSha256 === mediaSha256) || (segment && e.segment && overlaps(segment, e.segment)) ||
-      (ids.size && (ids.has(e.candidateId) || ids.has(e.sourceId)));
+    const physical = e.physicalSource;
+    const samePhysical = physicalSource?.quality==='verified_physical_file' && physical?.quality==='verified_physical_file' && /^[a-f0-9]{64}$/.test(physicalSource.sha256??'') && physical.sha256===physicalSource.sha256 && [physical.start,physical.end,physicalSource.start,physicalSource.end].every(Number.isFinite) && physical.start>=0&&physical.end>physical.start&&physicalSource.start>=0&&physicalSource.end>physicalSource.start;
+    // Exact same-file intervals can prove disjointness; guessed VOD anchors and unrelated files cannot.
+    const physicalDisjoint=samePhysical&&(physical.end<=physicalSource.start||physicalSource.end<=physical.start);
+    const same = (mediaSha256 && e.mediaSha256 === mediaSha256) || (samePhysical&&!physicalDisjoint) || (!physicalDisjoint&&((segment && e.segment && overlaps(segment, e.segment)) ||
+      (ids.size && (ids.has(e.candidateId) || ids.has(e.sourceId)))));
     if (!same) continue;
     return { reason: e.destinationKey === destinationKey ? 'already_posted' : 'cross_account_duplicate', entry: e };
   }

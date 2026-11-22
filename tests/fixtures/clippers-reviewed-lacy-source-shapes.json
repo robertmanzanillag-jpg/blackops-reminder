@@ -1,0 +1,220 @@
+{
+  "scope": "Real reviewed public source/media/caption/crop/audio metadata ONLY. No owner permission, operational lease, upload or approval is granted by this fixture. Estimated absolute VOD anchors intentionally excluded.",
+  "items": [
+    {
+      "id": "lacy-restart-request-20261122",
+      "sourceUrl": "https://www.twitch.tv/lacy/clip/OilyKawaiiSnoodDerp-tzsXCiXagywtBJNq",
+      "vodId": "2936518555",
+      "sourceSha256": "53d0da2ff23f3d46eb6d42a5c20e291a938471c455de30345a54a87f72a5d711",
+      "sourcePublishedAt": "2026-11-21T21:29:51+00:00",
+      "sourceVodPublishedAt": "2026-11-21T20:20:31Z",
+      "creatorKey": "twitch:494543675",
+      "sourceInterval": [
+        0,
+        30.8
+      ],
+      "sourceFrame": {
+        "width": 1920,
+        "height": 1080
+      },
+      "crop": {
+        "w": 180,
+        "h": 170,
+        "x": "140",
+        "y": "70"
+      },
+      "mediaSha256": "97f1142bc769b2b1cd079b145525257a971cfd09609a814c8c3c5a307d4ae3fe",
+      "mediaBytes": 6175868,
+      "durationSeconds": 30.8,
+      "renderedAt": "2026-11-22T11:03:20.753114+00:00",
+      "caption": "Paid campaign clip. Lacy jokes with a viewer about starting the marathon over. Editorial summary, not verbatim dialogue. Original audio replaced with licensed music.\n\n#LACY #ad\nSource: https://www.twitch.tv/lacy/clip/OilyKawaiiSnoodDerp-tzsXCiXagywtBJNq\nMusic: \"Monkeys Spinning Monkeys\" Kevin MacLeod (incompetech.com). CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ \u00b7 Music excerpted, faded and mixed.",
+      "musicStart": 0,
+      "audioQa": {
+        "captionSha256": "682c7d50ff95c12c75c6236f4c9659cbd3aab1daffcab9247268183990d174c8",
+        "licensedMusicSha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14",
+        "decodedAudioPcmSha256": "936dc30fc576fbae0ad7d98bfaa3b4e65bb02ca250a04b43ec8a444c8e8da8ee",
+        "expectedIndependentMusicPcmSha256": "936dc30fc576fbae0ad7d98bfaa3b4e65bb02ca250a04b43ec8a444c8e8da8ee",
+        "originalMixedAudioIncluded": false
+      },
+      "qaCheckedAt": "2026-11-22T11:12:35.375628+00:00",
+      "qaReportSha256": "a66a4139dfa816d2e155dd11207395b79603772cf744d64538f83f24a727e8c8",
+      "boundedVodAnchor": {
+        "fileStartSecondsEstimate": 4093.233333,
+        "uncertaintySeconds": 0.5,
+        "proofSha256": "1714460bedba03e836d56081b3dbcffa4fa024aabb95fd441230ced4ea06cacb"
+      }
+    },
+    {
+      "id": "lacy-side-mission-detour-20261122",
+      "sourceUrl": "https://www.twitch.tv/videos/2935059680?t=05h09m26s",
+      "vodId": "2935059680",
+      "sourceSha256": "620bef18bc83aa505a1d666d6773c85901650bd4afebd5c1473e286aa172f7cc",
+      "sourcePublishedAt": "2026-11-20T16:33:07Z",
+      "sourceVodPublishedAt": "2026-11-20T16:33:07Z",
+      "creatorKey": "twitch:494543675",
+      "sourceInterval": [
+        116.0,
+        149.7
+      ],
+      "sourceFrame": {
+        "width": 1280,
+        "height": 720
+      },
+      "crop": {
+        "w": 400,
+        "h": 400,
+        "x": "450+150*min(t/8,1)",
+        "y": "240"
+      },
+      "mediaSha256": "3955a147f5372eac8be6fb64ff8ac6e30591541d9eae0370f94d6c4355f97e99",
+      "mediaBytes": 7675465,
+      "durationSeconds": 33.69999999999999,
+      "renderedAt": "2026-11-22T11:04:07.837900+00:00",
+      "caption": "Paid campaign clip. Lacy talks about mistaking side missions for main-story progress in GTA. Editorial summary, not verbatim dialogue. Original audio replaced with licensed music.\n\n#LACY #ad\nSource: https://www.twitch.tv/videos/2935059680?t=05h09m26s\nMusic: \"Monkeys Spinning Monkeys\" Kevin MacLeod (incompetech.com). CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ \u00b7 Music excerpted, faded and mixed.",
+      "musicStart": 28,
+      "audioQa": {
+        "captionSha256": "f1232c96017da9ff0e4919a8c4fece9777504080e8570afb1309d43829aa0244",
+        "licensedMusicSha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14",
+        "decodedAudioPcmSha256": "12432e9a99ef94fa4de5b1e38497e50377c2f642678bd25d939ef684de4f10bb",
+        "expectedIndependentMusicPcmSha256": "12432e9a99ef94fa4de5b1e38497e50377c2f642678bd25d939ef684de4f10bb",
+        "originalMixedAudioIncluded": false
+      },
+      "qaCheckedAt": "2026-11-22T11:12:35.375628+00:00",
+      "qaReportSha256": "a66a4139dfa816d2e155dd11207395b79603772cf744d64538f83f24a727e8c8",
+      "boundedVodAnchor": {
+        "fileStartSecondsEstimate": 18450.033,
+        "uncertaintySeconds": 0.25,
+        "proofSha256": "1714460bedba03e836d56081b3dbcffa4fa024aabb95fd441230ced4ea06cacb"
+      }
+    },
+    {
+      "id": "lacy-session-pacing-20261122",
+      "sourceUrl": "https://www.twitch.tv/videos/2935059680?t=05h09m13s",
+      "vodId": "2935059680",
+      "sourceSha256": "620bef18bc83aa505a1d666d6773c85901650bd4afebd5c1473e286aa172f7cc",
+      "sourcePublishedAt": "2026-11-20T16:33:07Z",
+      "sourceVodPublishedAt": "2026-11-20T16:33:07Z",
+      "creatorKey": "twitch:494543675",
+      "sourceInterval": [
+        103.8,
+        116.0
+      ],
+      "sourceFrame": {
+        "width": 1280,
+        "height": 720
+      },
+      "crop": {
+        "w": 300,
+        "h": 400,
+        "x": "450",
+        "y": "280"
+      },
+      "mediaSha256": "1e6fe0eb269cf7eeea03148b65a9f7023389b35e6c882bc587ab2c2976e4cf45",
+      "mediaBytes": 2199225,
+      "durationSeconds": 12.200000000000003,
+      "renderedAt": "2026-11-22T11:04:28.525983+00:00",
+      "caption": "Paid campaign clip. Lacy weighs spreading the playthrough across shorter sessions. Editorial summary, not verbatim dialogue. Original audio replaced with licensed music.\n\n#LACY #ad\nSource: https://www.twitch.tv/videos/2935059680?t=05h09m13s\nMusic: \"Monkeys Spinning Monkeys\" Kevin MacLeod (incompetech.com). CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ \u00b7 Music excerpted, faded and mixed.",
+      "musicStart": 67,
+      "audioQa": {
+        "captionSha256": "c7611edf9b4f1f6d5915fbe123fed8933183c827d900e3ed45986eacddb7b262",
+        "licensedMusicSha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14",
+        "decodedAudioPcmSha256": "bd02f4de75a6edab332bff26838afc25c3048d6322771687c73ec168ea685663",
+        "expectedIndependentMusicPcmSha256": "bd02f4de75a6edab332bff26838afc25c3048d6322771687c73ec168ea685663",
+        "originalMixedAudioIncluded": false
+      },
+      "qaCheckedAt": "2026-11-22T11:12:35.375628+00:00",
+      "qaReportSha256": "a66a4139dfa816d2e155dd11207395b79603772cf744d64538f83f24a727e8c8",
+      "boundedVodAnchor": {
+        "fileStartSecondsEstimate": 18450.033,
+        "uncertaintySeconds": 0.25,
+        "proofSha256": "1714460bedba03e836d56081b3dbcffa4fa024aabb95fd441230ced4ea06cacb"
+      }
+    },
+    {
+      "id": "lacy-connection-hiccup-20261122",
+      "sourceUrl": "https://www.twitch.tv/videos/2935059680?t=15h49m00s",
+      "vodId": "2935059680",
+      "sourceSha256": "09d19fa085cc9ff566792c542fdc29e1df3c232a26b5c1b250cdd9ddc246406d",
+      "sourcePublishedAt": "2026-11-20T16:33:07Z",
+      "sourceVodPublishedAt": "2026-11-20T16:33:07Z",
+      "creatorKey": "twitch:494543675",
+      "sourceInterval": [
+        0,
+        12.4
+      ],
+      "sourceFrame": {
+        "width": 1280,
+        "height": 720
+      },
+      "crop": {
+        "w": 630,
+        "h": 630,
+        "x": "270",
+        "y": "50"
+      },
+      "mediaSha256": "e610bba07636ca4160edadfa0d6179d4fe7b8407844ef747ac405b4398b12a4b",
+      "mediaBytes": 4794408,
+      "durationSeconds": 12.4,
+      "renderedAt": "2026-11-22T11:04:52.718705+00:00",
+      "caption": "Paid campaign clip. An interruption during an archived Lacy marathon session; the edit makes no current outage claim. Editorial summary, not verbatim dialogue. Original audio replaced with licensed music.\n\n#LACY #ad\nSource: https://www.twitch.tv/videos/2935059680?t=15h49m00s\nMusic: \"Monkeys Spinning Monkeys\" Kevin MacLeod (incompetech.com). CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ \u00b7 Music excerpted, faded and mixed.",
+      "musicStart": 52,
+      "audioQa": {
+        "captionSha256": "d19e210e4cfb66431d98f8d6d26515ab79909a203b9e5a9686b07209bb822404",
+        "licensedMusicSha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14",
+        "decodedAudioPcmSha256": "0a750b62c16888a9b9193597821482fa3b01810ef20f2b1d0be6f1d84a6415dc",
+        "expectedIndependentMusicPcmSha256": "0a750b62c16888a9b9193597821482fa3b01810ef20f2b1d0be6f1d84a6415dc",
+        "originalMixedAudioIncluded": false
+      },
+      "qaCheckedAt": "2026-11-22T11:12:35.375628+00:00",
+      "qaReportSha256": "a66a4139dfa816d2e155dd11207395b79603772cf744d64538f83f24a727e8c8",
+      "boundedVodAnchor": {
+        "fileStartSecondsEstimate": 56938.366,
+        "uncertaintySeconds": 0.25,
+        "proofSha256": "1714460bedba03e836d56081b3dbcffa4fa024aabb95fd441230ced4ea06cacb"
+      }
+    },
+    {
+      "id": "lacy-old-photo-reaction-20261122",
+      "sourceUrl": "https://www.twitch.tv/lacy/clip/SpotlessKitschyHornetSaltBae-kGTwbOVEwnHyhq5z",
+      "vodId": "2936518555",
+      "sourceSha256": "14a30e1c7a0c4fad5fa9fa69a3b3fd171269589cc485b7f2e7938ce57b780ecb",
+      "sourcePublishedAt": "2026-11-22T00:43:39+00:00",
+      "sourceVodPublishedAt": "2026-11-21T20:20:31Z",
+      "creatorKey": "twitch:494543675",
+      "sourceInterval": [
+        7.5,
+        25.5
+      ],
+      "sourceFrame": {
+        "width": 1920,
+        "height": 1080
+      },
+      "crop": {
+        "w": 180,
+        "h": 170,
+        "x": "1590",
+        "y": "70"
+      },
+      "mediaSha256": "c4c1cc6ffedfd81ac741257374be2053611c51d94ab67c33c45bf3ece13576ae",
+      "mediaBytes": 4195476,
+      "durationSeconds": 18.0,
+      "renderedAt": "2026-11-22T11:09:12.344305+00:00",
+      "caption": "Paid campaign clip. Lacy reacts to chat bringing up an old photo. The photo itself is not included. Editorial summary, not verbatim dialogue. Original audio replaced with licensed music.\n\n#LACY #ad\nSource: https://www.twitch.tv/lacy/clip/SpotlessKitschyHornetSaltBae-kGTwbOVEwnHyhq5z\nMusic: \"Monkeys Spinning Monkeys\" Kevin MacLeod (incompetech.com). CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ \u00b7 Music excerpted, faded and mixed.",
+      "musicStart": 93,
+      "audioQa": {
+        "captionSha256": "63f95d9b5d66c32b39b6d57a1ca687b6a174bc03d29d10c82c02e4bfe6251b77",
+        "licensedMusicSha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14",
+        "decodedAudioPcmSha256": "811d8c5bea1e2c84d77f9cf6a37d57857f597efff55cc4d0d53bc7c2290aa271",
+        "expectedIndependentMusicPcmSha256": "811d8c5bea1e2c84d77f9cf6a37d57857f597efff55cc4d0d53bc7c2290aa271",
+        "originalMixedAudioIncluded": false
+      },
+      "qaCheckedAt": "2026-11-22T11:12:35.375628+00:00",
+      "qaReportSha256": "a66a4139dfa816d2e155dd11207395b79603772cf744d64538f83f24a727e8c8",
+      "boundedVodAnchor": {
+        "fileStartSecondsEstimate": 15732.583,
+        "uncertaintySeconds": 0.5,
+        "proofSha256": "1714460bedba03e836d56081b3dbcffa4fa024aabb95fd441230ced4ea06cacb"
+      }
+    }
+  ]
+}
