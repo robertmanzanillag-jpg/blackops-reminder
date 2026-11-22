@@ -103,6 +103,7 @@ const reasonLabels: Record<string, string> = {
   account_analytics_unavailable: "Todavía no hay una lectura verificable de la analítica de esta cuenta.",
 };
 const outputLabels: Record<string, string> = {
+  externalOwnerUiObservations: "Programaciones observadas en interfaz", externalMetricoolApiObservations: "Programaciones observadas por conexión",
   researchCandidates: "Candidatos de investigación",
   verified_publications: "Publicaciones verificadas", observations: "Observaciones", prepared: "Preparados",
   uploaded: "Subidos", eligible_assets: "Activos aptos", comparisons: "Comparaciones", promotions: "Promociones",
@@ -208,8 +209,9 @@ export function ClippersOfficeReport({ data, now }: { data: ClippersOrchestraSta
     {data.manualObservations && <section aria-label="Programación externa observada" className="rounded-2xl border border-white/10 p-4 text-sm text-slate-300">
       <h3 className="font-semibold text-white">Programación externa observada</h3>
       <p className="mt-1 text-xs text-slate-400">Lectura de Metricool. No acredita producción autónoma, derechos ni aprendizaje de agentes. Cada fila conserva su fecha de comprobación.</p>
-      <p className="mt-2 text-xs">Estado: {data.manualObservations.state} · Última comprobación: {at(data.manualObservations.observedAt)}</p>
-      <div className="mt-3 space-y-2">{data.manualObservations.posts.map(post => <div key={`${post.destination.brandId}:${post.destination.network}:${post.metricoolUuid}`} className="rounded-lg bg-black/20 p-2 text-xs"><span className="font-medium">{post.day} · {post.destination.account} · {post.destination.network}</span><p>{at(post.scheduledAt)} · {post.providerState}{post.draft ? " · borrador" : ""}{post.stale || now-Date.parse(post.observedAt)>26*3600000 ? " · comprobación antigua" : ""}</p><p className="text-slate-500">ID {post.metricoolId} · comprobado {at(post.observedAt)}</p></div>)}</div>
+      <p className="mt-2 text-xs">Estado: {{observed:'Comprobado',stale:'Comprobación antigua',missing:'Sin observaciones',invalid:'No se pudo verificar'}[data.manualObservations.state]} · Última comprobación: {at(data.manualObservations.observedAt)}</p>
+      <Reasons reasons={data.manualObservations.heldReasons} />
+      <div className="mt-3 space-y-2">{data.manualObservations.posts.map(post => <div key={`${post.destination.brandId}:${post.destination.network}:${post.metricoolUuid}`} className="rounded-lg bg-black/20 p-2 text-xs"><span className="font-medium">{post.day} · {post.destination.network==='facebook'?`${post.destination.brandId===6595747?'New York':'Miami'} · Facebook`:`@${post.destination.account} · TikTok`}</span><p>{at(post.scheduledAt)} · {post.providerState}{post.draft ? " · borrador" : ""}{post.stale || now-Date.parse(post.observedAt)>26*3600000 ? " · comprobación antigua" : ""}</p><p className="text-slate-500">ID {post.metricoolId} · comprobado {at(post.observedAt)}</p></div>)}</div>
     </section>}
     <Tabs defaultValue="team">
       <TabsList aria-label="Área Clippers" className="grid h-auto w-full grid-cols-2 gap-1 bg-slate-900 p-1 sm:grid-cols-4">

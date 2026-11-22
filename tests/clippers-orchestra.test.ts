@@ -280,9 +280,12 @@ test('external owner UI observations survive wire validation without learner ACK
  const rows=Array.from({length:5},(_,i)=>{const r={schemaVersion:1,origin:'external_owner_ui',kind:'external_schedule_observation',assetId:'owner-ui-'+i,destination:DESTINATIONS[0],sourceUrl:'https://www.youtube.com/watch?v=aaaaaaaaaaa',caption:'Actual observed caption '+i,metricoolId:String(1000+i),scheduledAt:`2026-11-18T${String(16+i*2).padStart(2,'0')}:00:00.000Z`.replace('T24:','T23:'),mediaUrl:`https://static.metricool.com/video/123/202611/observed${i}.mp4`,sha256:'a'.repeat(64),sizeBytes:100,renderReceiptSha256:'b'.repeat(64),observedAt:now().toISOString(),confirmation:'exact_scheduler_get_and_native_bytes',publicationState:'not_evaluated',paidSpendUsd:0};return{...r,proofSha256:digest(r)};});
  await save(root,'reports/clippers-daily-learning/external-schedules.json',rows);
  const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.accounts[0].confirmedScheduledOrPublished,5);assert.equal(r.accounts[0].shortfall,0);assert.equal(r.accounts[1].confirmedScheduledOrPublished,null);
- const publisher=r.roles.find((v:any)=>v.stage==='publisher');assert.equal(publisher.outputs.externalOwnerUiObservations,5);assert.equal(publisher.lastRunAt,now().toISOString());assert.equal(publisher.outcomes.length,0);assert.equal(publisher.heartbeatAt,null);assert.equal(publisher.career.points,null);
+ const publisher=r.roles.find((v:any)=>v.stage==='publisher');assert.equal(publisher.outputs.externalOwnerUiObservations,5);assert.equal(publisher.lastRunAt,null);assert.equal(publisher.state,'disconnected');assert.deepEqual(publisher.evidenceIds,[]);assert.equal(publisher.outcomes.length,0);assert.equal(publisher.heartbeatAt,null);assert.equal(publisher.career.points,null);
+ for(const row of rows){row.origin='external_metricool_api';const {proofSha256,...proof}=row;row.proofSha256=digest(proof);}await save(root,'reports/clippers-daily-learning/external-schedules.json',rows);
+ const api=await base(root),apiPublisher=api.roles.find((v:any)=>v.stage==='publisher');assert.equal(apiPublisher.outputs.externalMetricoolApiObservations,5);assert.equal(apiPublisher.state,'disconnected');assert.equal(apiPublisher.runId,null);assert.equal(apiPublisher.lastRunAt,null);assert.deepEqual(apiPublisher.evidenceIds,[]);assert.equal(apiPublisher.outcomes.length,0);assert.ok(parseClippersOrchestraStatus(api,NOW));
+ await save(root,'reports/clippers-daily-learning/latest.json',{schemaVersion:1,generatedAt:new Date(NOW-1000).toISOString(),date:'2026-11-18',paidSpendUsd:0,verifiedPublications:0,destinations:DESTINATIONS.map(d=>({...d,eligible:0,confirmedScheduledOrPublished:0,shortfall:5,blockers:['no_reviewed_assets']}))});
+ const mixed=await base(root),mp=mixed.roles.find((v:any)=>v.stage==='publisher');assert.equal(mixed.accounts[0].confirmedScheduledOrPublished,5);assert.equal(mp.state,'held');assert.equal(mp.outputs.confirmed,0);assert.equal(mp.outcomes.length,0);
 }));
-
 
 test('New York Facebook is represented while NY TikTok and historical four-account payloads stay honest',async()=>fixture(async root=>{
  const report=await base(root);const ny=report.accounts.find((x:any)=>x.key==='6595747:facebook:1198281286708321');
@@ -312,5 +315,14 @@ test('manual Metricool observations remain separate from canonical execution and
  const corrupted=structuredClone(r);corrupted.manualObservations.posts[0].pipelineEligibility=true;assert.equal(parseClippersOrchestraStatus(corrupted,NOW),null);
  const stale=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+27*3600000)});assert.equal(stale.manualObservations.state,'stale');assert.equal(stale.manualObservations.posts[0].stale,true);assert.ok(parseClippersOrchestraStatus(stale,NOW+27*3600000));
  const changed={...row,observedAt:new Date(NOW-1000).toISOString(),providerState:'ERROR'};await save(root,filename,[seal(changed),seal(row)]);r=await base(root);assert.equal(r.manualObservations.posts.length,1);assert.equal(r.manualObservations.posts[0].providerState,'PENDING');
- for(const rows of [[seal({...row,pipelineEligibility:true})],[seal({...row,mediaSha256:'invalid'})],[seal(row),seal(row)],[seal({...changed,metricoolId:'999'}),seal(row)]]){await save(root,filename,rows);r=await base(root);assert.equal(r.manualObservations.state,'invalid');assert.equal(r.manualObservations.posts.length,0);assert.ok(parseClippersOrchestraStatus(r,NOW));}
+ for(const rows of [[seal({...row,pipelineEligibility:true})],[seal({...row,draft:true})],[seal(row),seal({...changed,metricoolUuid:'12345'})],[seal({...row,mediaSha256:'invalid'})],[seal(row),seal(row)],[seal({...changed,metricoolId:'999'}),seal(row)]]){await save(root,filename,rows);r=await base(root);assert.equal(r.manualObservations.state,'invalid');assert.equal(r.manualObservations.posts.length,0);assert.ok(parseClippersOrchestraStatus(r,NOW));}
 }));
+
+
+test('New York Facebook cannot dispatch without fresh matching identity and publish permission',async()=>{
+ const destination=DESTINATIONS.find(d=>d.brandId===6595747&&d.network==='facebook');
+ for(const [identity,canPublish,expected] of [['1198281286708321',false,'destination_publish_permission_missing'],['1193011863901514',true,'destination_identity_unverified']]){
+  const calls:any[]=[];const adapter=createPortfolioMetricool({token:'synthetic-test-token',userId:12,env:{CLIPPERS_RUNTIME:'cloud'},fetcher:async(resource:any,options:any)=>{calls.push({url:String(resource),method:options?.method??'GET'});assert.match(String(resource),/simpleProfiles/);return new Response(JSON.stringify([{id:6595747,facebookPageId:identity,canPublish}]),{headers:{'content-type':'application/json'}});}});
+  await assert.rejects(adapter.schedule(destination,{caption:'Authorized clip',mediaUrl:'https://static.metricool.com/planner/202611/6595747-file-1.mp4',scheduledAt:'2026-11-23T16:00:00.000Z'}),new RegExp(expected));assert.equal(calls.length,1);assert.equal(calls[0].method,'GET');
+ }
+});

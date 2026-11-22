@@ -8,13 +8,13 @@ const iso=(value,until)=>typeof value==='string'&&Number.isFinite(Date.parse(val
 const fields=['schemaVersion','kind','origin','observedAt','destination','assetId','metricoolId','metricoolUuid','scheduledAt','timezone','providerState','draft','autoPublish','caption','mediaUrl','mediaSha256','sizeBytes','sourceUrl','sourceSha256','sourcePublishedAt','publisherObservationDate','exactNativeMediaBytesVerified','rawMcpSnapshotSha256','brandSnapshotSha256','ownerOperatorReceiptSha256','mediaQaSha256','canonicalRendererReceipt','canonicalPublishingGrant','learnerStateChanged','pipelineEligibility','providerWrites','proofSha256'];
 export function validatedManualObservations(raw,now=Date.now()){
  if(!Array.isArray(raw)||raw.length>2000)throw Error('manual_observations_invalid');
- const identities=new Map(),seen=new Set();
+ const identities=new Map(),nativeIds=new Map(),assets=new Map(),seen=new Set();
  for(const row of raw){
   if(!row||Object.keys(row).length!==fields.length||Object.keys(row).some(key=>!fields.includes(key)))throw Error('manual_observation_shape');
   const {proofSha256,...proof}=row,d=findDestination(row.destination);
   if(row.schemaVersion!==1||row.kind!=='external_manual_schedule_observation'||row.origin!=='external_metricool_api'||!d||destinationKey(d)!==destinationKey(row.destination)||
     !/^[A-Za-z0-9_.:-]{1,100}$/.test(row.assetId??'')||!/^\d{1,30}$/.test(row.metricoolId??'')||!UUID.test(row.metricoolUuid??'')||!iso(row.observedAt,now)||!iso(row.scheduledAt,Infinity)||row.timezone!=='America/New_York'||
-    !['PENDING','PUBLISHED','ERROR','DRAFT'].includes(row.providerState)||typeof row.draft!=='boolean'||typeof row.autoPublish!=='boolean'||
+    !['PENDING','PUBLISHED','ERROR','DRAFT'].includes(row.providerState)||typeof row.draft!=='boolean'||typeof row.autoPublish!=='boolean'||row.draft!==(row.providerState==='DRAFT')||
     typeof row.caption!=='string'||!row.caption.length||row.caption.length>10000||!metricoolNativeUrl(row.mediaUrl)||!Number.isSafeInteger(row.sizeBytes)||row.sizeBytes<1||
     !['mediaSha256','sourceSha256','rawMcpSnapshotSha256','brandSnapshotSha256','ownerOperatorReceiptSha256','mediaQaSha256'].every(k=>SHA.test(row[k]??''))||
     typeof row.sourceUrl!=='string'||!/^https:\/\/[^\s]+$/.test(row.sourceUrl)||!(row.sourcePublishedAt===null||iso(row.sourcePublishedAt,Date.parse(row.observedAt)))||
@@ -23,6 +23,7 @@ export function validatedManualObservations(raw,now=Date.now()){
   const key=`${destinationKey(d)}:${row.metricoolUuid}`,sameTime=`${key}:${row.observedAt}`;
   if(seen.has(sameTime))throw Error('manual_observation_duplicate');seen.add(sameTime);
   // Status can change. An existing UUID cannot silently become another post, asset or slot.
+  for(const [map,value] of [[nativeIds,row.metricoolId],[assets,row.assetId]]){const binding=`${destinationKey(d)}:${value}`;if(map.has(binding)&&map.get(binding)!==row.metricoolUuid)throw Error('manual_observation_duplicate_identity');map.set(binding,row.metricoolUuid);}
   const identity=JSON.stringify([row.metricoolId,row.assetId,row.scheduledAt,row.caption,row.mediaUrl,row.mediaSha256,row.sizeBytes,row.sourceUrl,row.sourceSha256]);
   if(identities.has(key)&&identities.get(key)!==identity)throw Error('manual_observation_identity_conflict');identities.set(key,identity);
  }
