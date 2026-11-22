@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T13:38:25.510Z
-Repo: `.`
+Generated: 2026-11-22T13:57:22.529Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-owner-hour-window-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1382 | 1259 | 5246 | 646 | 29516 |
+| 1386 | 1264 | 5278 | 647 | 29595 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,13 +28,13 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 370 | 365 | test:370 |
+| `tests` | 374 | 369 | test:374 |
 | `server` | 304 | 297 | server:304 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
-| `script` | 159 | 142 | script:159 |
-| `docs` | 94 | 89 | docs:94 |
+| `script` | 160 | 143 | script:160 |
+| `docs` | 91 | 88 | docs:91 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `shared` | 53 | 47 | shared:53 |
+| `shared` | 55 | 48 | shared:55 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
@@ -91,6 +91,7 @@ Package: `rest-express`
 - `tests/clippers-office-area.test.mjs`: `/`, `/api/auth/me`, `/area.css`, `/area.js`
 - `tests/clippers-orchestra-endpoint.test.ts`: `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/remote`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
+- `tests/clippers-owner-hour-window-ui.test.ts`: `/favicon.ico`
 - `tests/clippers-private-final-routes.test.ts`: `/favicon.ico`
 - `tests/clippers-reviewed-derivative-routes.test.ts`: `/favicon.ico`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
@@ -184,6 +185,7 @@ Package: `rest-express`
 - `tests/clippers-orchestra-endpoint.test.ts`
 - `tests/clippers-orchestra.test.ts`
 - `tests/clippers-owned-source-scripts.test.ts`
+- `tests/clippers-owner-hour-window-ui.test.ts`
 - `tests/clippers-private-final-routes.test.ts`
 - `tests/clippers-reviewed-derivative-routes.test.ts`
 - `tests/clippers-runtime-status.test.ts`
@@ -471,11 +473,3 @@ Package: `rest-express`
 4. Regenerate with `npm run codebase:map` after major file moves, new pages, routes, tests, or server modules.
 5. Do not paste `docs/codebase-map.json` into prompts; use it for local scripts or targeted lookups only.
 
-
-## Build provenance verification
-
-- `script/build-provenance.ts` observes validated Git HEAD and a clean tracked tree before compilation; `script/build.ts` compares the same observation after all outputs and embeds a literal into the server. No startup Git or environment authority is used.
-- `server/build-provenance.ts` exposes the bounded `buildProvenance` field on both `/health` and `/api/health`. Development/unstamped, missing Git, dirty tracked files or any untracked input under runtime roots (including ignored/private inputs, whose contents are never read), and unavailable/unsafe source remain unverified.
-- `tracked-runtime-source-v1` hashes tracked code extensions under client/src, server, shared and script, plus `.replit`, package manifests, client/index.html, Vite/TypeScript/PostCSS/meta-image/UI config and the exact local-news-delivery-policy config. Secret/private/archive/media/data paths are excluded. It is a selected source digest, not a hash of every deployment input or installed dependency. Tracked public/media assets are covered by HEAD/clean status rather than hashed here; build-time environment can vary output from identical source. Retain external artifact hashes when verifying exact output.
-- For a cutover, independently pin the reviewed combined deployment HEAD (including preserved local overrides) and its runtime source SHA. Match those exact values to the build's `dist/build-provenance.json` and native health response; optionally retain an external SHA of `dist/index.cjs`. A stale `OFFICE_WEB_REVISION` is not a substitute. Unknown or mismatching provenance cannot satisfy this verification contract.
-- Verified means a clean local build observation only. It is not cryptographic remote attestation, approval of every financial consumer, proof of current worker activity, or deployment authorization. Replit publication still requires the normal review and human approval.
