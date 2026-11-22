@@ -63,6 +63,7 @@ test('configured Sol snapshot completes free count then guarded exact-model gene
  const generate=createOpenAiFactoryTextProvider({request,model:snapshot,inputNanoUsdPerToken:2000,outputNanoUsdPerToken:10000,pricingValidUntil:price.validUntil,now:()=>new Date('2026-11-18T12:00:00.000Z'),maxInputTokens:1000});
  const result=await withFactoryApiParent(job,()=>generate({instructions:'Review synthetic code',text:'synthetic requirements',maxOutputTokens:32,maxCostCents:5,signal:new AbortController().signal}));
  assert.equal(result.status,'completed');
+ assert.equal(result.costCents,1); // The secondary cents ledger rounds the measured fractional-cent charge upward.
  assert.deepEqual(calls.map(c=>c.url),['https://api.openai.com/v1/responses/input_tokens','https://api.openai.com/v1/responses']);
  assert.deepEqual(calls[1].body,{...calls[0].body,max_output_tokens:32,store:false,tools:[],stream:false,service_tier:'default'});
 });

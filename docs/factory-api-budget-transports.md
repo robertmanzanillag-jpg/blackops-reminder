@@ -40,7 +40,7 @@ Streaming, audio, images, hosted tools, remote media/conversation state, priorit
 service tiers, unbounded outputs and generic raw token-counting endpoints stay held
 before SDK/HTTP dispatch. The installed Factory composition explicitly routes only
 `POST /v1/responses/input_tokens` through `software-factory-openai-count.ts`, inside
-a claimed parent context and with plain-text prompt fields. OpenAI documents that
+a Factory parent context and with plain-text prompt fields. OpenAI documents that
 [counting endpoint as free](https://help.openai.com/en/articles/4936856-understanding-and-counting-tokens);
 the separate generation request is billed. No paid reservation or settlement is
 invented for the free count. The provider sends the same prompt to both requests

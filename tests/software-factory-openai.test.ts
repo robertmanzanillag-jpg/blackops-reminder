@@ -39,8 +39,10 @@ test("documented undated snapshots retain exact identity and all budget gates",a
  for(const alias of ["gpt-6-astra-latest","gpt-6.1-sol-latest","gpt-6-sol","gpt-4.1"]){
   assert.throws(()=>createOpenAiFactoryTextProvider({...config,model:alias,request:async()=>count()}),/CONFIGURATION/);
  }
- let calls=0;const capped=createOpenAiFactoryTextProvider({...config,model:"gpt-6-astra",outputNanoUsdPerToken:1000000,request:async()=>{calls++;return count();}});
- assert.equal((await capped(input())).status,"blocked");assert.equal(calls,1);
+ for(const snapshot of ["gpt-6-astra","gpt-6.1-sol"]) {
+  let calls=0;const capped=createOpenAiFactoryTextProvider({...config,model:snapshot,outputNanoUsdPerToken:1000000,request:async()=>{calls++;return count();}});
+  assert.equal((await capped(input())).status,"blocked");assert.equal(calls,1);
+ }
 });
 test("missing usage, changed model, exceeded cap and ambiguous HTTP never become success or retry",async()=>{
  for(const response of [()=>json({...result(),status:"in_progress"}),()=>json({...result(),usage:null}),()=>json({...result(),model:"other"}),()=>json({...result(),usage:{input_tokens:101,output_tokens:20,total_tokens:121}}),()=>json({...result(),usage:{input_tokens:100,output_tokens:101,total_tokens:201}}),()=>new Response("private provider error",{status:503}),()=>{throw Error("lost acknowledgment");}]){
