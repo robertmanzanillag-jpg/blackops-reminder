@@ -53,7 +53,7 @@ export function retainLegacyUncertainReservation(c,post,{now=Date.now()}={}){
  const reservationId='legacy-uncertain-'+digest(identity),existing=claims.find(e=>isProtectedMediaClaim(e)&&e.reservationId===reservationId);
  if(existing){if(existing.noReplay!==true||existing.deliveryState!=='historically_unresolved'||digest(Object.fromEntries(Object.keys(identity).map(k=>[k,existing[k]])))!==digest(identity))throw Error('legacy_uncertain_claim_unverified');return existing;}
  if(claims.length>=MEDIA_LEDGER_LIMIT)throw Error('legacy_uncertain_claim_capacity_hold');
- const clip=c.clips?.[identity.candidateId],claim={...identity,origin:LEGACY_UNCERTAIN_RESERVATION_ORIGIN,reservationId,noReplay:true,deliveryState:'historically_unresolved',previousStatus:post.status,retainedAt:new Date(now).toISOString(),currentCalendarAbsenceOnly:true,attemptReason:maybe(post.reason),mediaAsset:clip?.mediaAsset?{id:maybe(clip.mediaAsset.id),url:maybe(clip.mediaAsset.url),createdAt:maybe(clip.mediaAsset.createdAt)}:null};
+ const clip=c.clips?.[identity.candidateId],claim={...identity,origin:LEGACY_UNCERTAIN_RESERVATION_ORIGIN,reservationId,noReplay:true,deliveryState:'historically_unresolved',previousStatus:post.status,retainedAt:new Date(now).toISOString(),legacyProbeAbsenceOnly:true,calendarCoverage:'unverified_legacy_probe',attemptReason:maybe(post.reason),mediaAsset:clip?.mediaAsset?{id:maybe(clip.mediaAsset.id),url:maybe(clip.mediaAsset.url),createdAt:maybe(clip.mediaAsset.createdAt)}:null};
  if(Buffer.byteLength(JSON.stringify(claim))>8192)throw Error('legacy_uncertain_claim_capacity_hold');
  c.mediaLedger=[...claims,claim];return claim;
 }

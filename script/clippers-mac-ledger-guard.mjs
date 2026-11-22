@@ -204,8 +204,8 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
     await rename(tmp, file);
   }
   const strip = ({ mirrored, ...e }) => e;
-  // Only other accounts count here: same-account repeats are each Mac script's own dedupe/cap responsibility.
-  const conflictOf = (entries, entry) => mediaConflict(entries.filter(e => canonicalDestinationKey(e?.destinationKey) !== entry.destinationKey),
+  // Ordinary same-account dedupe belongs to each Mac script; unresolved protected attempts always refuse replay.
+  const conflictOf = (entries, entry) => mediaConflict(entries.filter(e => isProtectedMediaClaim(e)||canonicalDestinationKey(e?.destinationKey) !== entry.destinationKey),
     { segment: entry.segment, mediaSha256: entry.mediaSha256, destinationKey: entry.destinationKey, candidateId: entry.candidateId, sourceId: entry.sourceId });
 
   /**
@@ -275,7 +275,7 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
             const shared = [...mediaEntriesOf(s.cloudPublish), ...firstLocal];
             if (!refusal) refusal = macRoutingRefusal({ destination, item, entries: shared }) ?? conflictOf(shared, entry)?.reason ?? null;
             const existing = Array.isArray(s.cloudPublish.mediaLedger) ? s.cloudPublish.mediaLedger : [];
-            const known = new Set(existing.map(e => `${e.candidateId}|${e.destinationKey}`));
+            const known = new Set(existing.filter(e=>!isProtectedMediaClaim(e)).map(e => `${e.candidateId}|${e.destinationKey}`));
             const pending = local.entries.filter(e => !e.mirrored && !known.has(`${e.candidateId}|${e.destinationKey}`)).map(strip);
             if (refusal && !pending.length) return raw ?? JSON.stringify(s);
             s.cloudPublish.mediaLedger = boundedMediaLedger([...existing.filter(e => isProtectedMediaClaim(e)||refusal||!(e.candidateId === entry.candidateId && e.destinationKey === entry.destinationKey)),...pending,...(refusal?[]:[entry])],{required:[...pending,...(refusal?[]:[entry])]});

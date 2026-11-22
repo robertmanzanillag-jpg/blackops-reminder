@@ -186,7 +186,7 @@ function heldMediaBindingMatches(q, clip) {
 }
 
 export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
-  if((ledger.mediaLedger??[]).some(e=>isProtectedMediaClaim(e)&&(e.candidateId===candidateId||e.mediaUrl===assetUrl||e.mediaAsset?.url===assetUrl)))return false;
+  if((ledger.mediaLedger??[]).some(e=>isProtectedMediaClaim(e)&&(e.candidateId===candidateId||(typeof assetUrl==='string'&&assetUrl.length>0&&(e.mediaUrl===assetUrl||e.mediaAsset?.url===assetUrl)))))return false;
   const posts = ledger.posts.filter(p => p.candidateId === candidateId);
   if (posts.some(p => UNCERTAIN.has(p.status))) return false;
   const queued = (ledger.heldQueue ?? []).filter(q => q.candidateId === candidateId);
