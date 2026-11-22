@@ -1,3 +1,4 @@
+import { manualObservationView } from './clippers-manual-observations.mjs';
 import { verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
 // Read-only projection of the installed pipeline's private receipts. No provider, rights or publishing API.
 import { createHash } from 'node:crypto';
@@ -18,6 +19,8 @@ const codes=value=>Array.isArray(value)?[...new Set(value.filter(v=>typeof v==='
 const NY_CLOCK=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const total=(rows,field)=>rows.every(row=>n(row[field])!==null)?rows.reduce((sum,row)=>sum+row[field],0):null;
 const emptyCareer=()=>({registered:false,generation:null,points:null,battery:null,inTraining:false,hiredAt:null,skillIds:[],lastEvidenceId:null});
+// Historical complete four-account reports remain readable; New York Facebook stays unknown there.
+const compatibleDestinationRows=rows=>Array.isArray(rows)&&[4,DESTINATIONS.length].includes(rows.length)&&new Set(rows.filter(findDestination).map(destinationKey)).size===rows.length&&rows.every(row=>DESTINATIONS.slice(0,rows.length).some(d=>destinationKey(d)===destinationKey(row)));
 export async function privateOrchestraJson(root,relative,maxBytes=25_000_000){
   const file=path.join(root,relative);let fd;
   try{
@@ -177,8 +180,8 @@ async function comparisonsView(root,state,metrics,now,media){
 export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()}={}){
   const at=+now;if(!Number.isFinite(at)||!workspaceRoot||!path.isAbsolute(workspaceRoot))throw Error('orchestra_configuration_invalid');
   const root=await realpath(workspaceRoot);
-  const files={external:'reports/clippers-daily-learning/external-schedules.json',watchdog:'reports/clippers-daily-watchdog/latest.json',learning:'reports/clippers-daily-learning/latest.json',state:'reports/clippers-daily-learning/state.json',prepare:'reports/clippers-daily-learning/prepare-latest.json',media:'reports/clippers-daily-learning/portfolio-media-receipts.json',input:'config/clippers-daily-learning/approved-input.json',accountAnalytics:'reports/clippers-account-analytics/latest.json',creatorSelection:'reports/clippers-creator-selection/latest.json'};
-  const caps={external:2097152,watchdog:1048576,learning:2097152,state:25000000,prepare:262144,media:5242880,input:2097152,accountAnalytics:524288,creatorSelection:262144};
+  const files={manual:'reports/clippers-daily-learning/manual-metricool-observations.json',external:'reports/clippers-daily-learning/external-schedules.json',watchdog:'reports/clippers-daily-watchdog/latest.json',learning:'reports/clippers-daily-learning/latest.json',state:'reports/clippers-daily-learning/state.json',prepare:'reports/clippers-daily-learning/prepare-latest.json',media:'reports/clippers-daily-learning/portfolio-media-receipts.json',input:'config/clippers-daily-learning/approved-input.json',accountAnalytics:'reports/clippers-account-analytics/latest.json',creatorSelection:'reports/clippers-creator-selection/latest.json'};
+  const caps={manual:10_000_000,external:2097152,watchdog:1048576,learning:2097152,state:25000000,prepare:262144,media:5242880,input:2097152,accountAnalytics:524288,creatorSelection:262144};
   const entries=await Promise.all(Object.entries(files).map(async([k,file])=>[k,await privateOrchestraJson(root,file,caps[k])]));
   const artifacts=Object.fromEntries(entries),wd=artifacts.watchdog.value,report=artifacts.learning.value,prep=artifacts.prepare.value;
   const rawState=artifacts.state.value,state=rawState?.schemaVersion===1&&Array.isArray(rawState.deliveries)&&rawState.deliveries.length<=2000&&Array.isArray(rawState.observations)&&rawState.observations.length<=20000&&Array.isArray(rawState.history)&&rawState.history.length<=1000&&rawState.versions&&typeof rawState.versions==='object'?rawState:null;
@@ -213,12 +216,12 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const {comparisons,qualifications}=await comparisonsView(root,state,metrics,at,media);
   const reportAt=time(report?.generatedAt,at),watchdogAt=time(wd?.generatedAt,at),prepareAt=time(prep?.generatedAt,at);
   const rawAnalytics=artifacts.accountAnalytics.value;
-  const analytics=time(rawAnalytics?.generatedAt,at)&&rawAnalytics?.schemaVersion===1&&rawAnalytics.paidSpendUsd===0&&rawAnalytics.readOnly===true&&Array.isArray(rawAnalytics.accounts)&&rawAnalytics.accounts.length===4&&new Set(rawAnalytics.accounts.filter(findDestination).map(destinationKey)).size===4?rawAnalytics:null;
+  const analytics=time(rawAnalytics?.generatedAt,at)&&rawAnalytics?.schemaVersion===1&&rawAnalytics.paidSpendUsd===0&&rawAnalytics.readOnly===true&&compatibleDestinationRows(rawAnalytics.accounts)?rawAnalytics:null;
   const analyticsAt=analytics?.generatedAt??null;
   const discoveryAt=discovery.sources.map(s=>s.observedAt).filter(Boolean).sort().at(-1)??null;
   const evidenceAt=[reportAt,watchdogAt,prepareAt,discoveryAt,analyticsAt,weeklyAt,externalAt].filter(Boolean).sort().at(-1)??null;
   const age=evidenceAt?(at-Date.parse(evidenceAt))/60000:null,sourceState=evidenceAt?(age<=26*60?'connected':'stale'):'disconnected';
-  const validLearning=report?.schemaVersion===1&&report.paidSpendUsd===0&&reportAt&&report.date===localDay(now)&&Array.isArray(report.destinations)&&report.destinations.length===4&&new Set(report.destinations.filter(d=>findDestination(d)).map(destinationKey)).size===4?report:null;
+  const validLearning=report?.schemaVersion===1&&report.paidSpendUsd===0&&reportAt&&report.date===localDay(now)&&compatibleDestinationRows(report.destinations)?report:null;
   const nextDue=watchdogAt?nextDaily(at,wd.checkHour):null;
   const weeklyIsNewer=weeklyAt&&(!reportAt||weeklyAt>reportAt);
   const accounts=DESTINATIONS.map(d=>{
@@ -261,7 +264,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     const analyticsStale=measured?.observedAt&&at-Date.parse(measured.observedAt)>26*HOUR;
     const accountAnalysis={status:analyticsStale?'held':measured?.status==='observed'?'observed':measured?'held':'unavailable',observedAt:time(measured?.observedAt,at),posts:measured?.status==='observed'?verifiedPosts.length:null,totalViews:measured?.status==='observed'?verifiedPosts.reduce((sum,p)=>sum+p.views,0):null,actualAgeHoursMin:ages.length?Math.min(...ages):null,actualAgeHoursMax:ages.length?Math.max(...ages):null,heldReasons:[...(analyticsStale?['account_analytics_stale']:[]),...(measured?.reason?codes([measured.reason]):measured?[]:['account_analytics_unavailable'])]};
     const accountObservedAt=[accountAnalysis.observedAt,observedAt].filter(Boolean).sort().at(-1)??null;
-    return {key,brandId:String(d.brandId),network:d.network,account:d.account,label:d.network==='facebook'?'Streamers · Facebook':`@${d.account}`,connection:accountObservedAt&&at-Date.parse(accountObservedAt)<=26*HOUR?'observed':'unverified',observedAt:accountObservedAt,dailyTarget:5,eligibleAssets:r?n(r.eligible):null,confirmedScheduledOrPublished:r?n(r.confirmedScheduledOrPublished):null,shortfall:r?n(r.shortfall):null,heldReasons:r?codes(r.blockers):['learning_report_unavailable'],activeVersion:state?String(state.versions[key]??'baseline-1'):null,policyStatus:typeof v?.status==='string'&&/^[a-z_]+$/.test(v.status)?v.status:'policy_unobserved',metricAgeBuckets:buckets,analytics:accountAnalysis};
+    return {key,brandId:String(d.brandId),network:d.network,account:d.account,label:d.network==='facebook'?`${d.brandId===6595747?'New York':'Miami'} · Facebook`:`@${d.account}`,connection:accountObservedAt&&at-Date.parse(accountObservedAt)<=26*HOUR?'observed':'unverified',observedAt:accountObservedAt,dailyTarget:5,eligibleAssets:r?n(r.eligible):null,confirmedScheduledOrPublished:r?n(r.confirmedScheduledOrPublished):null,shortfall:r?n(r.shortfall):null,heldReasons:r?codes(r.blockers):['learning_report_unavailable'],activeVersion:state?String(state.versions[key]??'baseline-1'):null,policyStatus:typeof v?.status==='string'&&/^[a-z_]+$/.test(v.status)?v.status:'policy_unobserved',metricAgeBuckets:buckets,analytics:accountAnalysis};
   });
   const confirmedMedia=Array.isArray(artifacts.media.value)?artifacts.media.value.filter(r=>findDestination(r)&&r.status==='ready'&&r.paidSpendAllowed===false&&SHA.test(r.sha256??'')&&SHA.test(r.renderReceiptSha256??'')):[];
   const eligibleComparisons=state?comparisons.filter(c=>c.eligible).length:null;
@@ -272,6 +275,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const analyticsEvidenceAt=[analyticsAt,queueMetricAt].filter(Boolean).sort().at(-1)??null;
   const recentMetrics=metrics.filter(m=>time(m.capturedAt,at)&&at-Date.parse(m.capturedAt)<=26*HOUR);
   const paired=discovery.signals.filter(s=>s.label==='paired_growth_observed').length;
+  const canonicalPublisherConfirmed=weeklyIsNewer?new Set(weeklyReceipts.filter(d=>localDay(new Date(d.scheduledAt))===localDay(now)).map(d=>`${destinationKey(d)}:${d.metricoolId}`)).size:(validLearning?.destinations??[]).reduce((sum,d)=>sum+(n(d.confirmedScheduledOrPublished)??0),0);
   const roles=[
     role('supervisor',watchdogAt,artifacts.watchdog,{},watchdogAt?[]:['watchdog_report_unavailable']),
     role('analytics',analyticsEvidenceAt,analyticsEvidenceAt===analyticsAt?artifacts.accountAnalytics:artifacts.state,{storedSnapshots:metrics.length,recentSnapshots:recentMetrics.length,accountsObserved:accounts.filter(a=>a.analytics.status==='observed').length},recentMetrics.length||accounts.some(a=>a.analytics.status==='observed')?[]:['no_verified_metric_observations']),
@@ -279,11 +283,11 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     role('streamers',discoveryAt,discoveryArtifact,discovery.observations===null?{}:{observations:discovery.observations},discovery.sources.some(s=>s.status==='observed')?[]:['public_feed_observations_unavailable']),
     role('editor',prepareAt,artifacts.prepare,prepareAt?{prepared:n(prep.prepared)??0,scopedMediaReceipts:confirmedMedia.length}:{},confirmedMedia.length?[]:[prep?.status==='disabled'?'preparation_disabled':'no_reviewed_ready_media']),
     role('checker',prepareAt,artifacts.prepare,prepareAt?{verifiedScopedMedia:confirmedMedia.length}:{},confirmedMedia.length?[]:['rights_or_render_review_required']),
-    role('publisher',weeklyIsNewer?weeklyAt:reportAt,weeklyIsNewer?artifacts.state:artifacts.learning,(validLearning||weeklyIsNewer)?{confirmed:accounts.reduce((s,a)=>s+(a.confirmedScheduledOrPublished??0),0),verifiedPublications:weeklyIsNewer?weeklyReceipts.filter(d=>d.status==='published'&&exactPost(d.post?.url,d)?.id===d.post?.id&&time(d.post?.verifiedAt,at)).length:n(validLearning.verifiedPublications)??0}:{},((validLearning||weeklyIsNewer)&&accounts.some(a=>a.confirmedScheduledOrPublished>0))||(weeklyIsNewer&&weeklyReceipts.length)?[]:['no_provider_confirmed_publication_or_schedule']),
+    role('publisher',weeklyIsNewer?weeklyAt:reportAt,weeklyIsNewer?artifacts.state:artifacts.learning,(validLearning||weeklyIsNewer)?{confirmed:canonicalPublisherConfirmed,verifiedPublications:weeklyIsNewer?weeklyReceipts.filter(d=>d.status==='published'&&exactPost(d.post?.url,d)?.id===d.post?.id&&time(d.post?.verifiedAt,at)).length:n(validLearning.verifiedPublications)??0}:{},((validLearning||weeklyIsNewer)&&canonicalPublisherConfirmed>0)||(weeklyIsNewer&&weeklyReceipts.length)?[]:['no_provider_confirmed_publication_or_schedule']),
     role('learning',reportAt,artifacts.learning,state?{eligibleComparisons:eligibleComparisons,qualifiedCandidates:qualifications.length,promotions}:{},qualifications.length?[]:['three_current_independent_comparisons_required']),
     role('health',watchdogAt,artifacts.watchdog,{},sourceState==='connected'?[]:['runtime_evidence_unavailable_or_stale']),
   ];
-  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){const p=roles.find(r=>r.stage==='publisher');p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),externalOwnerUiObservations:external.length};}
+  if(external.length){const p=roles.find(r=>r.stage==='publisher');p.outputs={...p.outputs,externalOwnerUiObservations:external.filter(row=>row.origin==='external_owner_ui').length,externalMetricoolApiObservations:external.filter(row=>row.origin==='external_metricool_api').length};}
   if(weeklyIsNewer&&weeklyReceipts.length)roles.find(r=>r.stage==='publisher').state='completed';
   const outcomes=(stage,items)=>{
     const target=roles.find(r=>r.stage===stage);
@@ -309,5 +313,5 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const routingAt=time(artifacts.creatorSelection.value?.evaluatedAt,at);
   const rawCreatorSelection=report?.creatorSelection&&reportAt&&(!routingAt||Date.parse(reportAt)>=Date.parse(routingAt))?report.creatorSelection:artifacts.creatorSelection.value;
   const creatorSelection=creatorSelectionView(rawCreatorSelection,at);
-  return {version:1,creatorSelection,generatedAt:new Date(at).toISOString(),evidenceAt,sourceFreshness:{state:sourceState,transport:evidenceAt?'local_reports':'unavailable',receivedAt:null,reportedAt:evidenceAt,ageMinutes:age,staleAfterMinutes:26*60,heldReasons:evidenceAt?sourceState==='stale'?['runtime_evidence_stale']:[]:['runtime_reports_unavailable']},transport:{state:'disconnected',lastIngestAt:null,maxAgeMs:90000},disconnectedDestinations:[{brandId:'6595747',label:'New York',reason:'destination_not_connected'}],accounts,roles,discovery,learning:{comparisons,eligibleComparisons,promotions,requiredComparisons:3,minimumPerArm:5,improvementThreshold:0.2,automaticPromotion:false,heldReasons:qualifications.length?['manual_queue_review_required']:['three_current_independent_comparisons_required']},safety:{paidSpendUsd:0,deniedBrandIds:['6431692','6475033','6585226'],metadataDoesNotGrantRights:true,publicUploadRequiresReviewedPacket:true,publicationClaimsRequireProviderReceipt:true}};
+  return {version:1,manualObservations:manualObservationView(artifacts.manual.value,{now:at,error:artifacts.manual.error}),creatorSelection,generatedAt:new Date(at).toISOString(),evidenceAt,sourceFreshness:{state:sourceState,transport:evidenceAt?'local_reports':'unavailable',receivedAt:null,reportedAt:evidenceAt,ageMinutes:age,staleAfterMinutes:26*60,heldReasons:evidenceAt?sourceState==='stale'?['runtime_evidence_stale']:[]:['runtime_reports_unavailable']},transport:{state:'disconnected',lastIngestAt:null,maxAgeMs:90000},disconnectedDestinations:[{brandId:'6595747',label:'New York · TikTok',reason:'destination_not_connected'}],accounts,roles,discovery,learning:{comparisons,eligibleComparisons,promotions,requiredComparisons:3,minimumPerArm:5,improvementThreshold:0.2,automaticPromotion:false,heldReasons:qualifications.length?['manual_queue_review_required']:['three_current_independent_comparisons_required']},safety:{paidSpendUsd:0,deniedBrandIds:['6431692','6475033','6585226'],metadataDoesNotGrantRights:true,publicUploadRequiresReviewedPacket:true,publicationClaimsRequireProviderReceipt:true}};
 }

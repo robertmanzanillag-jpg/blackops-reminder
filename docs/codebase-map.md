@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T09:06:43.632Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-publication-recovery-nov22`
+Generated: 2026-11-22T10:29:28.642Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-receipts-bridge-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1320 | 1205 | 4994 | 633 | 28713 |
+| 1328 | 1213 | 5018 | 633 | 28825 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 353 | 349 | test:353 |
+| `tests` | 355 | 351 | test:355 |
 | `server` | 297 | 291 | server:297 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
-| `script` | 147 | 132 | script:147 |
-| `docs` | 81 | 78 | docs:81 |
+| `script` | 151 | 136 | script:151 |
+| `docs` | 83 | 80 | docs:83 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 48 | 44 | shared:48 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -437,20 +437,20 @@ Package: `rest-express`
 - `script/clippers-generate-owned-sports-streamer-sources.ts` (script; 26 symbols, 3 imports)
 - `script/clippers-generate-owned-weekly-backlog-sources.ts` (script; 34 symbols, 3 imports)
 - `script/clippers-import-external-closeout-evidence.ts` (script; 117 symbols, 3 imports)
+- `script/clippers-install-local-write-fence.mjs` (script; 33 symbols, 5 imports)
 - `script/clippers-local-subtitles.mjs` (script; 47 symbols, 5 imports)
 - `script/clippers-mac-ledger-guard.mjs` (script; 69 symbols, 9 imports)
+- `script/clippers-manual-observations.mjs` (script; 12 symbols, 3 imports)
 - `script/clippers-marketplace-intake.mjs` (script; 59 symbols, 3 imports)
 - `script/clippers-marketplace-refresh.mjs` (script; 50 symbols, 4 imports)
 - `script/clippers-metricool-autopilot.mjs` (script; 125 symbols, 7 imports)
 - `script/clippers-motivation-shorts.mjs` (script; 158 symbols, 7 imports)
-- `script/clippers-native-media-receipts.mjs` (script; 34 symbols, 9 imports)
+- `script/clippers-native-media-receipts.mjs` (script; 38 symbols, 9 imports)
+- `script/clippers-observed-accounts.mjs` (script; 5 symbols)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 128 symbols, 9 imports)
-- `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
-- `script/clippers-portable-magick.mjs` (script; 10 symbols, 3 imports)
-- `script/clippers-portfolio-discovery.mjs` (script; 94 symbols, 7 imports)
+- `script/clippers-orchestra-report.mjs` (script; 130 symbols, 10 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

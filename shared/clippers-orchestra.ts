@@ -37,7 +37,9 @@ export type ClippersComparisonView = {
 };
 export type ClippersCreatorPreferenceView = { scopeKey: string; destination: {brandId:number;network:'tiktok'|'facebook';account:string}; language:string;format:string;context:string;postingBand:string;timezone:'America/New_York';windowHours:24|72|168;baselineCreatorGroupId:string;preferredCreatorGroupId:string;status:'preferred'|'baseline'|'unmeasured';reason:string;eligibleSamples:number;expiresAt:string|null;evidenceSha256:string };
 export type ClippersCreatorSelectionView = { evaluatedAt:string|null; contexts:number;assigned:number|null;heldReasons:string[];preferences:ClippersCreatorPreferenceView[] };
+export type ClippersManualObservationView = { kind: 'external_manual_schedule_observations'; pipelineEligibility: false; state: 'observed' | 'stale' | 'missing' | 'invalid'; observedAt: string | null; heldReasons: string[]; posts: Array<Record<string, any>> };
 export type ClippersOrchestraStatus = {
+  manualObservations?: ClippersManualObservationView;
   creatorSelection?: ClippersCreatorSelectionView;
   version: 1; generatedAt: string; evidenceAt: string | null;
   sourceFreshness: { state: 'connected' | 'stale' | 'disconnected' | 'invalid'; transport: 'local_reports' | 'authenticated_ingest' | 'unavailable'; receivedAt: string | null; reportedAt: string | null; ageMinutes: number | null; staleAfterMinutes: number; heldReasons: string[] };
@@ -50,7 +52,7 @@ export type ClippersOrchestraStatus = {
 };
 
 const roleStages = ['supervisor','analytics','trends','streamers','editor','checker','publisher','learning','health'] as const;
-const targetKeys = ['6431685:tiktok:streamersus','6431687:tiktok:streamersclipusa','6591612:tiktok:news305miami','6591612:facebook:1193011863901514'];
+const targetKeys = ['6431685:tiktok:streamersus','6431687:tiktok:streamersclipusa','6591612:tiktok:news305miami','6591612:facebook:1193011863901514','6595747:facebook:1198281286708321'];
 // Earlier account names of the same brand+network (script/clippers-portfolio-metricool.mjs LEGACY_ACCOUNT_ALIASES).
 // Persisted learning/creator-selection evidence written before the rename still names the same destination.
 const legacyTargetKeys: Record<string,string> = { '6431685:tiktok:streamersclips': '6431685:tiktok:streamersus', '6591612:tiktok:ynb4b6r6': '6591612:tiktok:news305miami' };
@@ -72,7 +74,7 @@ const nullableFinite = (v: unknown) => v===null || finite(v);
 
 /** Reject malformed payloads instead of turning unavailable evidence into zero activity. */
 export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): ClippersOrchestraStatus | null {
-  if(!record(value)||!keys(value,['version','generatedAt','evidenceAt','sourceFreshness','transport','disconnectedDestinations','accounts','roles','discovery','learning','safety',...(value.creatorSelection===undefined?[]:['creatorSelection'])]))return null;
+  if(!record(value)||!keys(value,['version','generatedAt','evidenceAt','sourceFreshness','transport','disconnectedDestinations','accounts','roles','discovery','learning','safety',...(value.creatorSelection===undefined?[]:['creatorSelection']),...(value.manualObservations===undefined?[]:['manualObservations'])]))return null;
   const v=value as Record<string,any>;
   if(v.version!==1 || !time(v.generatedAt,now) || !nullableTime(v.evidenceAt,now))return null;
   const sf=v.sourceFreshness, tr=v.transport;
@@ -83,10 +85,12 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
   if(!keys(tr,['state','lastIngestAt','maxAgeMs']) || !states.includes(tr.state) || !nullableTime(tr.lastIngestAt,now) || tr.maxAgeMs!==90_000)return null;
   if(!Array.isArray(v.disconnectedDestinations) || v.disconnectedDestinations.length!==1 || !keys(v.disconnectedDestinations[0],['brandId','label','reason']) ||
     v.disconnectedDestinations[0].brandId!=='6595747' || !text(v.disconnectedDestinations[0].label) || v.disconnectedDestinations[0].reason!=='destination_not_connected')return null;
-  if(!Array.isArray(v.accounts) || v.accounts.length!==4 || new Set(v.accounts.map((a:any)=>a?.key)).size!==4)return null;
+  // Read compatibility for the historical four-destination wire payload; new reports contain all five.
+  const expectedTargets=Array.isArray(v.accounts)&&v.accounts.length===4?targetKeys.slice(0,4):targetKeys;
+  if(!Array.isArray(v.accounts) || v.accounts.length!==expectedTargets.length || new Set(v.accounts.map((a:any)=>legacyTargetKeys[a?.key]??a?.key)).size!==expectedTargets.length)return null;
   for(const a of v.accounts){
     if(!keys(a,['key','brandId','network','account','label','connection','observedAt','dailyTarget','eligibleAssets','confirmedScheduledOrPublished','shortfall','heldReasons','activeVersion','policyStatus','metricAgeBuckets',...(a.analytics===undefined?[]:['analytics'])]) ||
-      !targetKeys.includes(a.key) || a.key!==[a.brandId,a.network,a.account].join(':') || !text(a.label) ||
+      !expectedTargets.includes(legacyTargetKeys[a.key]??a.key) || a.key!==[a.brandId,a.network,a.account].join(':') || !text(a.label) ||
       !['observed','unverified','disconnected'].includes(a.connection) || !nullableTime(a.observedAt,now) || a.dailyTarget!==5 ||
       ![a.eligibleAssets,a.confirmedScheduledOrPublished,a.shortfall].every(nullableCount) || !codes(a.heldReasons) ||
       !(a.activeVersion===null||code(a.activeVersion)) || !code(a.policyStatus) || !Array.isArray(a.metricAgeBuckets) || a.metricAgeBuckets.length>3)return null;
@@ -136,6 +140,19 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
       if(!keys(p,['scopeKey','destination','language','format','context','postingBand','timezone','windowHours','baselineCreatorGroupId','preferredCreatorGroupId','status','reason','eligibleSamples','expiresAt','evidenceSha256'])||!(/^[a-f0-9]{64}$/).test(p.scopeKey)||!(/^[a-f0-9]{64}$/).test(p.evidenceSha256)||!keys(p.destination,['brandId','network','account'])||(!Number.isSafeInteger(p.destination.brandId)||!isTargetKey([p.destination.brandId,p.destination.network,p.destination.account].join(':')))||!/^([01]\d|2[0-3]):00$/.test(p.postingBand)||p.timezone!=='America/New_York'||![24,72,168].includes(p.windowHours)||!code(p.language)||!code(p.format)||!code(p.context)||!knownGroups.has(p.baselineCreatorGroupId)||!knownGroups.has(p.preferredCreatorGroupId)||!['preferred','baseline','unmeasured'].includes(p.status)||!code(p.reason)||!count(p.eligibleSamples)||!nullableTime(p.expiresAt,now+24*3600000)||
         (p.status==='preferred'&&(!p.expiresAt||Date.parse(p.expiresAt)<=now||p.eligibleSamples<30)))return null;
     }
+  }
+  if(v.manualObservations!==undefined){
+    const m=v.manualObservations;
+    if(!keys(m,['kind','pipelineEligibility','state','observedAt','heldReasons','posts'])||m.kind!=='external_manual_schedule_observations'||m.pipelineEligibility!==false||!['observed','stale','missing','invalid'].includes(m.state)||!nullableTime(m.observedAt,now)||!codes(m.heldReasons)||!Array.isArray(m.posts)||m.posts.length>2000)return null;
+    const seen=new Set();
+    for(const p of m.posts){
+      if(!record(p))return null;
+      const k=record(p.destination)?[p.destination.brandId,p.destination.network,p.destination.account].join(':'):'';
+      const id=`${k}:${p.metricoolUuid}`;
+      if(!keys(p,['schemaVersion','kind','origin','observedAt','destination','assetId','metricoolId','metricoolUuid','scheduledAt','timezone','providerState','draft','autoPublish','caption','mediaUrl','mediaSha256','sizeBytes','sourceUrl','sourceSha256','sourcePublishedAt','publisherObservationDate','exactNativeMediaBytesVerified','rawMcpSnapshotSha256','brandSnapshotSha256','ownerOperatorReceiptSha256','mediaQaSha256','canonicalRendererReceipt','canonicalPublishingGrant','learnerStateChanged','pipelineEligibility','providerWrites','proofSha256','day','stale'])||!isTargetKey(k)||seen.has(id)||p.schemaVersion!==1||p.kind!=='external_manual_schedule_observation'||p.origin!=='external_metricool_api'||p.pipelineEligibility!==false||p.learnerStateChanged!==false||p.providerWrites!==0||p.canonicalRendererReceipt!==null||p.canonicalPublishingGrant!==null||p.exactNativeMediaBytesVerified!==true||!time(p.observedAt,now)||!time(p.scheduledAt,Infinity)||p.timezone!=='America/New_York'||!/^\d{4}-\d{2}-\d{2}$/.test(p.day)||p.day!==new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(p.scheduledAt))||typeof p.stale!=='boolean'||!['PENDING','PUBLISHED','ERROR','DRAFT'].includes(p.providerState)||typeof p.draft!=='boolean'||p.draft!==(p.providerState==='DRAFT')||typeof p.autoPublish!=='boolean'||typeof p.caption!=='string'||!p.caption.length||p.caption.length>10000||!/^\d{1,30}$/.test(p.metricoolId)||!(/^(?:-?\d{1,30}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i).test(p.metricoolUuid)||!code(p.assetId)||!count(p.sizeBytes)||p.sizeBytes<1||!['mediaSha256','sourceSha256','rawMcpSnapshotSha256','brandSnapshotSha256','ownerOperatorReceiptSha256','mediaQaSha256','proofSha256'].every(f=>(/^[a-f0-9]{64}$/).test(p[f]))||typeof p.mediaUrl!=='string'||!p.mediaUrl.startsWith('https://')||typeof p.sourceUrl!=='string'||!p.sourceUrl.startsWith('https://')||!nullableTime(p.sourcePublishedAt,Date.parse(p.observedAt)))return null;
+      seen.add(id);
+    }
+    if((m.state==='missing'||m.state==='invalid')&&(m.posts.length||m.observedAt!==null))return null;
   }
   const s=v.safety;
   if(!keys(s,['paidSpendUsd','deniedBrandIds','metadataDoesNotGrantRights','publicUploadRequiresReviewedPacket','publicationClaimsRequireProviderReceipt'])||s.paidSpendUsd!==0||!Array.isArray(s.deniedBrandIds)||s.deniedBrandIds.length!==3||new Set(s.deniedBrandIds).size!==3||!s.deniedBrandIds.every((x:unknown)=>typeof x==='string'&&denied.includes(x))||s.metadataDoesNotGrantRights!==true||s.publicUploadRequiresReviewedPacket!==true||s.publicationClaimsRequireProviderReceipt!==true)return null;

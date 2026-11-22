@@ -14,6 +14,7 @@ export const DESTINATIONS = Object.freeze([
   Object.freeze({ brandId: 6431687, network: 'tiktok', account: 'streamersclipusa' }),
   Object.freeze({ brandId: 6591612, network: 'tiktok', account: 'news305miami' }),
   Object.freeze({ brandId: 6591612, network: 'facebook', account: '1193011863901514' }),
+  Object.freeze({ brandId: 6595747, network: 'facebook', account: '1198281286708321' }),
 ]);
 // Earlier account names of the same brand+network. Ledger rows written with them still resolve to (and
 // count against the caps/duplicate checks of) the current destination; they are never targeted.
@@ -21,6 +22,7 @@ export const LEGACY_ACCOUNT_ALIASES = Object.freeze({
   '6431685:tiktok': Object.freeze(['streamersclips']),
   '6591612:tiktok': Object.freeze(['ynb4b6r6']),
 });
+// Only New York TikTok remains disconnected; Facebook still needs fresh permission/identity checks.
 export const DISCONNECTED_BRAND = 6595747;
 export const localHour = time => new Intl.DateTimeFormat('en-US', {timeZone: TIME_ZONE, hour:'2-digit', hourCycle:'h23'}).format(new Date(time));
 function accountAliases(destination) {
