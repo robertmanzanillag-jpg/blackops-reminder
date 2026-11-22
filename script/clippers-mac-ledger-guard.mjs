@@ -18,7 +18,7 @@ import { link, mkdir, open, readFile, rename, stat, unlink, writeFile } from 'no
 import path from 'node:path';
 import { STREAMER_STATE_NAMESPACE, parseStreamerStateStrict, emptyStreamerState } from './clippers-streamer-discovery.mjs';
 import { canonicalDestinationKey, destinationKey } from './clippers-portfolio-metricool.mjs';
-import { cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
+import { cloudPublishOf, mediaEntriesOf, boundedMediaLedger, isProtectedMediaClaim } from '../shared/clippers-media-ledger.mjs';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
 import { metricoolWriteRefusal } from '../shared/clippers-metricool-writer.mjs';
 import { laneForDestinationKey, mediaConflict, routeCandidate } from '../shared/clippers-account-lanes.mjs';
@@ -204,8 +204,8 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
     await rename(tmp, file);
   }
   const strip = ({ mirrored, ...e }) => e;
-  // Only other accounts count here: same-account repeats are each Mac script's own dedupe/cap responsibility.
-  const conflictOf = (entries, entry) => mediaConflict(entries.filter(e => canonicalDestinationKey(e?.destinationKey) !== entry.destinationKey),
+  // Ordinary same-account dedupe belongs to each Mac script; unresolved protected attempts always refuse replay.
+  const conflictOf = (entries, entry) => mediaConflict(entries.filter(e => isProtectedMediaClaim(e)||canonicalDestinationKey(e?.destinationKey) !== entry.destinationKey),
     { segment: entry.segment, mediaSha256: entry.mediaSha256, destinationKey: entry.destinationKey, candidateId: entry.candidateId, sourceId: entry.sourceId });
 
   /**
@@ -275,10 +275,10 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
             const shared = [...mediaEntriesOf(s.cloudPublish), ...firstLocal];
             if (!refusal) refusal = macRoutingRefusal({ destination, item, entries: shared }) ?? conflictOf(shared, entry)?.reason ?? null;
             const existing = Array.isArray(s.cloudPublish.mediaLedger) ? s.cloudPublish.mediaLedger : [];
-            const known = new Set(existing.map(e => `${e.candidateId}|${e.destinationKey}`));
+            const known = new Set(existing.filter(e=>!isProtectedMediaClaim(e)).map(e => `${e.candidateId}|${e.destinationKey}`));
             const pending = local.entries.filter(e => !e.mirrored && !known.has(`${e.candidateId}|${e.destinationKey}`)).map(strip);
             if (refusal && !pending.length) return raw ?? JSON.stringify(s);
-            s.cloudPublish.mediaLedger = [...existing.filter(e => refusal || !(e.candidateId === entry.candidateId && e.destinationKey === entry.destinationKey)), ...pending, ...(refusal ? [] : [entry])].slice(-5000);
+            s.cloudPublish.mediaLedger = boundedMediaLedger([...existing.filter(e => isProtectedMediaClaim(e)||refusal||!(e.candidateId === entry.candidateId && e.destinationKey === entry.destinationKey)),...pending,...(refusal?[]:[entry])],{required:[...pending,...(refusal?[]:[entry])]});
             return JSON.stringify(s);
           });
           mirrored = true;

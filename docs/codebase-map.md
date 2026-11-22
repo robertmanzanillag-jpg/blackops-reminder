@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T15:21:15.616Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/nov22-github-scout-auth-fix`
+Generated: 2026-11-22T15:32:18.402Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-legacy-uncertain-retention-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1389 | 1267 | 5287 | 647 | 29667 |
+| 1391 | 1269 | 5300 | 647 | 29704 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 376 | 371 | test:376 |
+| `tests` | 377 | 372 | test:377 |
 | `server` | 304 | 297 | server:304 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 160 | 143 | script:160 |
-| `docs` | 91 | 88 | docs:91 |
+| `docs` | 92 | 89 | docs:92 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 55 | 48 | shared:55 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
