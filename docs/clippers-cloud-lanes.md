@@ -32,8 +32,9 @@ PostgreSQL (`agent_council_state`). Media lives in Google Drive. Nothing is stor
   database, retired or not, including drafts and manual runs. Rollback only: `CLIPPERS_MAC_METRICOOL_WRITES=owner_override`
   in the Mac env (or `CLIPPERS_CLOUD_OWNED_BRANDS` to narrow the list, `none` to empty it). Reason: on 2026-11-19 a Mac
   run filled brand 6431685's day with 10 TikTok drafts and blocked the cloud publisher.
-- **Shared brand day.** Metricool's cap is 5 posts per brand per day and every calendar row (drafts too) counts.
-  The marketplace lane (`metricool-autopilot`) counts all writers' rows toward 5 and may use at most
+- **Shared account/network day.** Our baseline is five active or uncertain reservations per connected account/network per local day, not a Metricool brand limit.
+  Complete nonpublishing drafts reserve hours/content without counting as active coverage. Ambiguous or publishing rows remain quota reservations.
+  The marketplace lane (`metricool-autopilot`) counts that network's writers toward five and may use at most
   `CLIPPERS_MARKETPLACE_LANE_DAILY_QUOTA` (default 2) of a day, so it never takes the streamer publisher's whole day.
 - Dry runs take no lease, upload nothing and persist nothing. That is how you QA the cloud while the Mac still runs.
 

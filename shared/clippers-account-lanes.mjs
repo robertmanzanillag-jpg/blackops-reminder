@@ -5,11 +5,11 @@
 //   account for the same source segment (same Twitch VOD +-60 s, same source clip id, same YouTube cut) or
 //   the same rendered file hash. Follow-up clips of a stream stay on the account that first used the stream.
 // - Spanish only for Clipwave Miami; English for the others.
-// - Posting: 10/12/16/18/20 ET (weekends -30 %); 6-8 a day once the account's weekly median passes 1k views.
+// - Posting: at least five daily slots, including weekends; 6-8 a day once the account's weekly median passes 1k views.
 //   Metricool best-time hours (read-only) reorder the slots when available.
 // - Auto-publish per account only once its weekly median is >= 1k views; until then Metricool drafts for
 //   owner approval.
-// - Clipping rule: clip unless the creator explicitly prohibits it (shared/clippers-streamer-policy.mjs).
+// - Publication requires positive owner-reviewed source rights; creator prohibitions still block it.
 
 import { TWITCH_LOGIN_CANDIDATES } from './clippers-priority-creators.mjs';
 
@@ -211,7 +211,7 @@ export const isWeekend = day => ['Sat', 'Sun'].includes(WEEKDAY.format(new Date(
 export function laneSchedule({ day, scaled = false, bestTimes = null, killedHours = [] }) {
   const weekend = isWeekend(day);
   const full = scaled ? SCALED_DAILY : BASE_DAILY;
-  const cap = Math.max(1, Math.round(full * (weekend ? WEEKEND_FACTOR : 1)));
+  const cap = Math.max(BASE_DAILY, Math.round(full * (weekend ? WEEKEND_FACTOR : 1)));
   const defaults = scaled ? SCALED_SLOT_HOURS : BASE_SLOT_HOURS;
   const killed = new Set(killedHours);
   const weekday = new Date(`${day}T17:00:00Z`).getUTCDay();

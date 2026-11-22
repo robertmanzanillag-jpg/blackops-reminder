@@ -419,3 +419,25 @@ test("skips a concurrent autopilot run while its lock is active", async () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   }
 });
+
+
+test('marketplace counts its TikTok network only and keeps complete drafts as reservations rather than active quota', async () => {
+  for (const draftComplete of [true, false, 'contradictory-provider']) {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), 'quota-network-'));
+    try {
+      const calls = [];
+      const row = (network, time, id, extra = {}) => ({ id, text:`outside ${id}`, publicationDate:{dateTime:`2026-07-28T${time}`}, providers:[{network,status:'PENDING'}], draft:false, autoPublish:true, ...extra });
+      const old = [...['10:00:00','12:30:00','15:00:00','17:30:00'].map((h,i)=>row('tiktok',h,`tt-${i}`)), row('tiktok','18:00:00','held-draft',{draft:true,autoPublish:draftComplete?false:undefined,...(draftComplete==='contradictory-provider'?{providers:[{network:'tiktok',status:'PENDING'},{network:'tiktok',status:'PUBLISHING'}]}:{})}), ...['10:00:00','12:00:00','14:00:00','16:00:00','18:00:00'].map((h,i)=>row('facebook',h,`fb-${i}`))];
+      const result = await runMetricoolAutopilot({ env:{CLIPPERS_RUNTIME:'cloud',CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED:'true',METRICOOL_USER_TOKEN:'fixture-token',METRICOOL_USER_ID:'3558197',CLIPPERS_METRICOOL_BLOG_ID:'6431687',CLIPPERS_TIKTOK_ACCOUNT:'streamersclipusa'}, workspaceRoot, ledgerGuard:allowGuard, mediaReceipts:[mediaReceipt], queue:{targetDailyClips:5,items:[eligible]}, ledger:[], now:new Date('2026-07-28T05:00:00Z'),
+        async fetch(url,init) {
+          if(url==='https://ai.metricool.com/mcp'){calls.push(JSON.parse(init.body));return Response.json({jsonrpc:'2.0',result:{content:[]}});}
+          if(!calls.length)return Response.json({data:old});
+          const info=JSON.parse(calls[0].params.arguments.info);return Response.json({data:[{id:'confirmed-new',text:eligible.caption,publicationDate:info.publicationDate,providers:[{network:'tiktok'}]}]});
+        }
+      });
+      assert.equal(calls.length,1); assert.equal(result.scheduled,1);
+      const date=JSON.parse(calls[0].params.arguments.info).publicationDate.dateTime;
+      assert.equal(date,draftComplete===true?'2026-07-28T20:00:00':'2026-07-29T10:00:00');
+    } finally { await rm(workspaceRoot,{recursive:true,force:true}); }
+  }
+});

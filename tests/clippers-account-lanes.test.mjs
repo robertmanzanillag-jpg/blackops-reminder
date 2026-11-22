@@ -67,12 +67,13 @@ test('hooks: 3-6 upper-case words; captions: curiosity + creator + credit + 3-5 
   assert.match(laneCaption({ lane: 'miami', title: 'Westcol grita', name: 'Westcol', handle: 'westcol', platform: 'twitch', sourceUrl }), /¿Qué acaba de pasar\?.*\n.*\n.*Fuente/);
 });
 
-test('schedule: 10/12/16/18/20 ET, weekends -30 %, 8/day once scaled, Metricool best time reorders', () => {
+test('schedule: five daily baseline slots including weekends, 8/day once scaled, Metricool best time reorders', () => {
   assert.deepEqual(laneSchedule({ day: '2026-11-19' }).slots, ['10:00', '12:00', '16:00', '18:00', '20:00']);
   assert.equal(isWeekend('2026-11-21'), true);
-  assert.equal(laneSchedule({ day: '2026-11-21' }).cap, 4);
+  assert.equal(laneSchedule({ day: '2026-11-21' }).cap, 5);
   assert.equal(laneSchedule({ day: '2026-11-19', scaled: true }).cap, 8);
   assert.equal(laneSchedule({ day: '2026-11-22', scaled: true }).cap, 6);
+  for (const day of ['2026-11-21', '2026-11-22']) { const plan = laneSchedule({ day }); assert.equal(plan.cap, 5); assert.equal(plan.slots.length, 5); assert.equal(new Set(plan.slots).size, 5); }
   const best = parseBestTimes([{ dayOfWeek: 'Thursday', hour: 9, value: 5 }, { dayOfWeek: 'Thursday', hour: 11, value: 9 }, { dayOfWeek: 'Thursday', hour: 14, value: 8 },
     { dayOfWeek: 'Thursday', hour: 19, value: 7 }, { dayOfWeek: 'Thursday', hour: 21, value: 6 }, { dayOfWeek: 'Thursday', hour: 3, value: 99 }]);
   const s = laneSchedule({ day: '2026-11-19', bestTimes: best });

@@ -237,3 +237,18 @@ test('Office never double counts a local scheduled ACK after the same calendar I
  let report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+3*3600000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,4);
  proof.scheduled=[];proof.published=[{id:'111',publishedAt:'2026-11-18T14:00:00.000Z'}];const {sha256:old,...updated}=proof;proof.sha256=digest(updated);await f.write(`${REPORT}/state.json`,state);report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+3*3600000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);
 });
+
+
+test('weekly coverage separates definite drafts and other networks without losing hour/content/UUID guards', async () => {
+ const tt=DESTINATIONS.find(d=>d.brandId===6591612&&d.network==='tiktok'),fb=DESTINATIONS.find(d=>d.brandId===6591612&&d.network==='facebook');let rows=[];
+ const row=(d,h,id,extra={})=>({id,uuid:`uuid-${id}`,text:`outside ${id}`,media:[`https://example.com/${id}.mp4`],draft:false,autoPublish:true,providers:[{network:d.network,status:'PENDING'}],publicationDate:{dateTime:`2026-11-23T${h}:00:00`,timezone:'America/New_York'},...extra});
+ const adapter=createPortfolioMetricool({token:'synthetic-token',userId:12,fetcher:async resource=>new URL(resource).pathname.endsWith('/simpleProfiles')?Response.json([{id:6591612,canPublish:true,tiktok:tt.account,facebook:fb.account}]):Response.json(rows)});
+ const item={scheduledAt:'2026-11-24T01:00:00.000Z',caption:'unique',mediaUrl:'https://example.com/new.mp4'};
+ const draft=row(fb,'18','draft',{draft:true,autoPublish:false});
+ rows=[...['10','12','14','16','18'].map((h,i)=>row(tt,h,`tt-${i}`)),...['10','12','14','16'].map((h,i)=>row(fb,h,`fb-${i}`)),draft];
+ const coverage=await adapter.weeklyPreflight(fb,item,{now:NOW});assert.equal(coverage.confirmedCount,4);assert.equal(coverage.activeCoverageCount,4);assert.deepEqual(coverage.reservedDraftIds,['draft']);assert.equal(coverage.calendarIds.includes('draft'),false);assert.equal(coverage.evidence.draftReservations.length,1);
+ await assert.rejects(adapter.weeklyPreflight(fb,{...item,caption:draft.text},{now:NOW}),/daily_cap/);
+ await assert.rejects(adapter.weeklyPreflight(fb,{...item,scheduledAt:'2026-11-23T23:00:00.000Z'},{now:NOW}),/daily_cap/);
+ const conflict={...row(fb,'19','other'),uuid:draft.uuid};rows.push(conflict);await assert.rejects(adapter.weeklyPreflight(fb,item,{now:NOW}),/identity_conflict/);rows.pop();
+ delete draft.autoPublish;await assert.rejects(adapter.weeklyPreflight(fb,item,{now:NOW}),/schedule_unverified/);
+});
