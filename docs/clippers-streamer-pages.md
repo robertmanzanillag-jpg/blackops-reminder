@@ -78,13 +78,13 @@ restores the legacy fan-out.
 - **Edit:** peak-first cut (loudest ebur128 moment at ~1 s), 15-35 s (default 28), 3-6 word upper-case hook in the top
   third, burned word-by-word captions when `CLIPPERS_WHISPER_BIN` + `CLIPPERS_WHISPER_MODEL` are set (otherwise none).
 - **Caption:** curiosity line + question + creator name and credit/source + 3-5 hashtags; duet, stitch and comments on.
-- **Slots:** 10/12/16/18/20 ET, weekends -30 %; 8 a day (6 on weekends) once the weekly median passes 1k. Metricool
+- **Slots:** 10/12/16/18/20 ET, with a five-slot baseline on weekends; 8 a day (6 on weekends) once the weekly median passes 1k. Metricool
   best-time (read-only, refreshed weekly) reorders hours 09-22 when it has data.
 - **Owner override (on now):** `CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE` defaults to `memes:tiktok,sport:tiktok,miami:tiktok`
   (@streamersus 6431685, @streamersclipusa 6431687, @news305miami 6591612). Those TikTok accounts auto-publish
   without the 1k median gate (stale/missing analytics no longer force drafts there) and their clips skip the BlackOps
   owner approval (`CLIPPERS_STREAMER_AUTO_PUBLISH` unset = `lanes`). One account per clip, language, prohibition/takedown,
-  daily caps (5/day until the real median passes 1k) and slots stay enforced. Facebook and NYC can never be overridden.
+  per-account/network daily caps (five every day until the real median passes 1k) and slots stay enforced. Facebook and NYC can never be overridden.
   Office/Panel growth view shows `auto (owner override)`. **Kill switch:** set repo variable
   `CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE` to `""` (env) or `off` (GitHub variables cannot be empty) -> drafts + owner approval.
 - **Auto-publish gate:** per account, weekly median >= 1k views over >= 5 posts. Below that, posts go to Metricool as
@@ -208,3 +208,28 @@ Held releases also require the queue's exact source, creator, rendered SHA, capt
 its staged clip. Missing or conflicting media bindings stay in `held_media_review` for owner
 reconciliation rather than being inferred from a new grant. If an asset-removal attempt failed,
 restoring a still-matching grant restores the held clip state without generating a second render.
+
+
+## Daily target and reservations
+
+The five-video baseline is a local policy per connected social account/network and New York day,
+including Saturday and Sunday. It is not a brand-wide limit imposed by Metricool. The portfolio
+adapter and marketplace TikTok reader already filter the relevant network, so Miami can have five
+TikTok and five Facebook deliveries without sharing one five-post pool. Cross-account media/content
+reuse checks still apply separately.
+
+A row counts as a definite nonpublishing draft only when `draft:true`, `autoPublish:false` and its
+provider reports a compatible draft/pending/scheduled state. It reserves its original hour, caption,
+media and identity; it contributes zero active coverage. Missing or contradictory flags, publishing,
+awaiting confirmation and failed-attempt uncertainty remain conservative quota reservations until
+reconciled. Existing drafts are not moved, approved or replaced by this change. Five preferred hours
+can still be short of five active videos if one is reserved by a draft; that requires reconciliation,
+not invented capacity or a claim that the draft published. Weekly proofs expose draft reservations
+separately and exclude them from active calendar IDs.
+
+Metricool documents [limits per social account](https://help.metricool.com/basic-guide-for-api-integration-r97af)
+and [network-specific rolling limits](https://help.metricool.com/daily-posting-limits-on-social-media-sh58j):
+Facebook Reels has a 30-per-rolling-24-hour limit; TikTok does not disclose a numeric daily ceiling,
+and Metricool recommends at least five minutes between TikTok posts. Failed attempts may also affect
+provider quotas. The local five-post policy does not override provider errors, account restrictions,
+rights gates or unknown-send holds, and does not attest the account's current subscription quota.

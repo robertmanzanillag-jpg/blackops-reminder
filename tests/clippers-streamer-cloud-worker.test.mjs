@@ -780,3 +780,41 @@ test('held media review cannot be cleared or bypassed by another matching queue 
   assert.equal(store.state.cloudPublish.clips[c.id].status, 'held_media_review');
   assert.equal(store.state.cloudPublish.heldQueue.length, 2); assert.equal(m.calls.schedule.length, 0);
 });
+
+
+test('account quota: five TikTok and five Facebook slots are separate even inside one Metricool brand', async () => {
+  const tt = DESTINATIONS.find(d => d.brandId === 6591612 && d.network === 'tiktok');
+  const fb = DESTINATIONS.find(d => d.brandId === 6591612 && d.network === 'facebook');
+  let rows = [];
+  const row = (d, hour, i, extra = {}) => ({ id: `${d.network}-${i}`, uuid: `uuid-${d.network}-${i}`, text: `${d.network} outside writer ${i}`, media: [`https://example.com/${d.network}-${i}.mp4`], draft: false, autoPublish: true, providers: [{ network: d.network, status: 'PENDING' }], publicationDate: { dateTime: `2026-11-22T${hour}:00:00`, timezone: 'America/New_York' }, ...extra });
+  const adapter = createPortfolioMetricool({ token: 'fixture-token', userId: 12, fetcher: async resource => {
+    const u = new URL(resource); if (u.pathname.endsWith('/simpleProfiles')) return Response.json([{ id: 6591612, canPublish: true, tiktok: tt.account, facebook: fb.account }]);
+    return Response.json({ data: rows });
+  } });
+  const item = { scheduledAt: '2026-11-23T01:00:00.000Z', caption: 'new unique clip', mediaUrl: 'https://example.com/new.mp4', dailyLimit: 5 };
+  const five = (d, n = 5) => ['10','12','14','16','18'].slice(0,n).map((h,i) => row(d,h,i));
+  rows = [...five(tt), ...five(fb,4)]; await adapter.preflight(fb,item);
+  rows = [...five(tt,4), ...five(fb)]; await adapter.preflight(tt,item);
+  rows = [...five(tt), ...five(fb)];
+  for (const d of [tt,fb]) await assert.rejects(adapter.preflight(d,item), e => e.detail === 'daily_cap' && e.dayRows === 5);
+  const draft = row(tt,'18','draft', { draft: true, autoPublish: false });
+  rows = [...five(tt,4), draft, ...five(fb)]; await adapter.preflight(tt,item);
+  await assert.rejects(adapter.preflight(tt,{ ...item, scheduledAt:'2026-11-22T23:00:00.000Z' }), e => e.detail === 'slot_duplicate');
+  await assert.rejects(adapter.preflight(tt,{ ...item, caption:draft.text }), e => e.detail === 'slot_duplicate_content');
+  await assert.rejects(adapter.preflight(tt,{ ...item, mediaUrl:draft.media[0] }), e => e.detail === 'slot_duplicate_content');
+  for (const mutate of [d => delete d.autoPublish, d => d.providers[0].status = 'PUBLISHING', d => d.providers[0].status = 'AWAITING_CONFIRMATION', d => d.providers[0].status = 'ERROR', d => d.providers[0].status = 'UNKNOWN', d => d.providers.push({network:'tiktok',status:'PUBLISHING'}), d => d.providers[0].publicUrl='https://www.tiktok.com/@news305miami/video/123', d => d.providers[0].publishedAt='2026-11-22T12:00:00Z']) {
+    const ambiguous = structuredClone(draft); mutate(ambiguous); rows = [...five(tt,4), ambiguous];
+    await assert.rejects(adapter.preflight(tt,item), e => e.detail === 'daily_cap' && e.dayRows === 5);
+  }
+});
+
+test('planner quota excludes only verified draft receipts while preserving their hours and unknown-send reservations', () => {
+  const d = DESTINATIONS[0], key = destinationKey(d), config = { ...cloudPublishConfig(ON), slots:['11:00','13:00','15:00','17:00','19:00'] };
+  const posts = ['11','13','15','17'].map((h,i) => ({ destinationKey:key, status:'scheduled', scheduledAt:`2026-11-19T${Number(h)+5}:00:00.000Z`, metricoolId:`active-${i}`, draft:false }));
+  const draft = { destinationKey:key, status:'scheduled', scheduledAt:'2026-11-19T23:00:00.000Z', metricoolId:'verified-draft', draft:true };
+  assert.equal(nextSlot({now:NOW,config,destination:d,posts:[...posts,draft]}), '2026-11-20T00:00:00.000Z');
+  for (const status of ['verification_pending','pending_write']) {
+    const at = nextSlot({now:NOW,config,destination:d,posts:[...posts,{...draft,status}]});
+    assert.ok(at.startsWith('2026-11-20T16:'), status);
+  }
+});

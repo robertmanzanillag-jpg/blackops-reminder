@@ -160,6 +160,14 @@ function analyticsPublicationTime(row) {
 function statusOf(row, destination) {
   return row.providers?.find(p => p.network === destination.network)?.status ?? row.status;
 }
+/** A complete provider draft is a reservation, never active publication coverage. Unknowns remain quota reservations. */
+export function confirmedNonPublishingDraft(row, network) {
+  const targets = Array.isArray(row?.providers) ? row.providers.filter(p => p && typeof p === 'object' && !Array.isArray(p) && p.network === network) : [];
+  if (targets.length !== 1) return false;
+  const target = targets[0];
+  if ([target.publicUrl, target.publishedAt, row.publicUrl, row.publishedPostUrl, row.publishedAt].some(v => v != null && String(v).trim() !== '')) return false;
+  return row?.draft === true && row?.autoPublish === false && ['draft', 'pending', 'scheduled'].includes(String(target.status ?? '').toLowerCase());
+}
 function metricsFrom(row, destination) {
   const metrics = row.providers?.find(p => p.network === destination.network)?.metrics ?? row.metrics ?? row;
   const views = metrics.views ?? metrics.videoViews ?? metrics.viewCount;
@@ -312,18 +320,20 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
     },
     async preflight(destination, item) {
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
-      // Drafts count too: a draft waiting for owner approval holds its slot, caption and media.
-      const rows = await schedule(destination, localDay(new Date(item.scheduledAt)), false, item.countDrafts === true);
+      // Every draft still reserves its hour, caption and media. Only a complete nonpublishing draft
+      // is excluded from the per-network active/uncertain quota; five is our policy, not an API hard limit.
+      const rows = await schedule(destination, localDay(new Date(item.scheduledAt)), false, true);
+      const quotaRows = rows.filter(row => !confirmedNonPublishingDraft(row, destination.network));
       if (rows.some(row => !scheduledTime(row))) throw Error('metricool_schedule_time_unverified');
       // Content match (same caption or media) wins over everything: the owner rule is never repeat a clip.
       const contentDuplicate = rows.some(row => row.text === item.caption || providerMedia(row) === item.mediaUrl);
       const hourClash = rows.some(row => localHour(scheduledTime(row)) === localHour(item.scheduledAt));
       const limit = Number.isSafeInteger(item.dailyLimit) ? Math.max(1, Math.min(SCALED_DAILY_LIMIT, item.dailyLimit)) : DAILY_LIMIT;
-      if (contentDuplicate || hourClash || rows.length >= limit) {
+      if (contentDuplicate || hourClash || quotaRows.length >= limit) {
         // Same public code for every caller; `detail` tells the streamer worker to stop (content), skip the day (cap) or try another hour.
         const e = new Error('metricool_slot_duplicate_or_daily_cap');
-        e.detail = contentDuplicate ? 'slot_duplicate_content' : rows.length >= limit ? 'daily_cap' : 'slot_duplicate';
-        e.dayRows = rows.length; e.dayLimit = limit;
+        e.detail = contentDuplicate ? 'slot_duplicate_content' : quotaRows.length >= limit ? 'daily_cap' : 'slot_duplicate';
+        e.dayRows = quotaRows.length; e.dayLimit = limit; e.reservedDraftRows = rows.length - quotaRows.length;
         throw e;
       }
     },
@@ -363,7 +373,8 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       if (Date.parse(item.scheduledAt) < +now + 300000) throw Error('weekly_schedule_expired');
       profiles = settings = undefined;
       if (!(await destinationSettings(destination)).canPublish) throw Error('destination_publish_permission_missing');
-      const rows = await schedule(destination, day, true);
+      const rows = await schedule(destination, day, true, true);
+      const drafts = new Map(), identities = new Map();
       const pending = new Map();
       const published = new Map();
       const calendarIds=new Set(),calendarPublished=new Map(),untimedPublished=new Map();
@@ -387,8 +398,14 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       }
       for (const row of rows) {
         const when = scheduledTime(row), status = String(statusOf(row,destination)).toLowerCase();
-        if (!when || localDay(new Date(when))!==day || !schedulerId(row) || !['scheduled','pending','publishing','published','posted'].includes(status)) throw Error('weekly_provider_schedule_unverified');
+        if (!when || localDay(new Date(when))!==day || !schedulerId(row) || !['scheduled','pending','publishing','published','posted','draft'].includes(status)) throw Error('weekly_provider_schedule_unverified');
+        const identity = String(row.uuid ?? schedulerId(row));
+        if (identities.has(identity)) { if (JSON.stringify(identities.get(identity)) !== JSON.stringify(row)) throw Error('weekly_provider_identity_conflict'); continue; }
+        identities.set(identity, row);
+        if (confirmedNonPublishingDraft(row, destination.network)) { drafts.set(identity, row); continue; }
+        if (row.draft === true) throw Error('weekly_provider_schedule_unverified');
         calendarIds.add(schedulerId(row));
+        if (status === 'draft') throw Error('weekly_provider_schedule_unverified');
         if (['published','posted'].includes(status)) {
           const target = row.providers.find(p=>p.network===destination.network);
           const exact = exactPost(target.publicUrl ?? row.publicUrl ?? row.publishedPostUrl,destination);
@@ -406,11 +423,13 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
         pending.set(key,row);
       }
       const hours = [...pending.values()].map(row=>localHour(scheduledTime(row))).concat([...published.values()].map(post=>localHour(post.publishedAt)));
-      if (hours.length>=DAILY_LIMIT || new Set(hours).size!==hours.length || hours.includes(localHour(item.scheduledAt)) ||
-          [...pending.values()].some(row=>row.text===item.caption || providerMedia(row)===item.mediaUrl)) throw Error('metricool_slot_duplicate_or_daily_cap');
+      const draftHours = [...drafts.values()].map(row => localHour(scheduledTime(row)));
+      if (hours.length>=DAILY_LIMIT || new Set(hours).size!==hours.length || hours.includes(localHour(item.scheduledAt)) || draftHours.includes(localHour(item.scheduledAt)) ||
+          [...identities.values()].some(row=>row.text===item.caption || providerMedia(row)===item.mediaUrl)) throw Error('metricool_slot_duplicate_or_daily_cap');
       const evidence={destination,day,observedAt:now.toISOString(),source:'fresh_rest_calendar_and_account_analytics',calendarPublished:[...calendarPublished].map(([platformPostId,id])=>({id,platformPostId})),
+        draftReservations:[...drafts.values()].map(row=>({id:schedulerId(row),uuid:row.uuid??null,scheduledAt:scheduledTime(row),status:'nonpublishing_draft'})),
         scheduled:[...pending.values()].map(row=>({id:schedulerId(row),scheduledAt:scheduledTime(row),status:String(statusOf(row,destination)).toLowerCase(),...(untimedPublished.has(schedulerId(row))?{platformPostId:untimedPublished.get(schedulerId(row)),publicationTimeVerified:false}:{})})),published:[...published.values()]};
-      return { day, observedAt:evidence.observedAt, coverageSource:evidence.source, confirmedCount:hours.length, scheduledIds:evidence.scheduled.map(row=>row.id), publishedIds:[...new Set([...evidence.published.map(row=>row.id),...calendarPublished.keys()])],calendarIds:[...calendarIds],reservedPublishing:[...pending.values()].filter(row=>String(statusOf(row,destination)).toLowerCase()==='publishing').length,publicationTimesUnverified:untimedPublished.size,evidence,
+      return { day, observedAt:evidence.observedAt, coverageSource:evidence.source, confirmedCount:hours.length, scheduledIds:evidence.scheduled.map(row=>row.id), publishedIds:[...new Set([...evidence.published.map(row=>row.id),...calendarPublished.keys()])],calendarIds:[...calendarIds],reservedDraftIds:[...drafts.values()].map(schedulerId),reservedDraftHours:draftHours,activeCoverageCount:hours.length-[...pending.values()].filter(row=>String(statusOf(row,destination)).toLowerCase()==='publishing').length,reservedPublishing:[...pending.values()].filter(row=>String(statusOf(row,destination)).toLowerCase()==='publishing').length,publicationTimesUnverified:untimedPublished.size,evidence,
         evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };
     },
     async schedule(destination, item) {

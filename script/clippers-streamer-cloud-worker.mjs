@@ -127,7 +127,8 @@ export function nextSlot({ now, config, destination, index = 0, posts = [], skip
   let day = localDay(new Date(now));
   for (let d = 0; d < 2; d++, day = nextDay(day)) {
     const sameDay = mine.filter(p => localDay(new Date(p.scheduledAt)) === day);
-    if (skipDays.has(day) || sameDay.length >= config.dailyCap) continue;
+    const quotaReservations = sameDay.filter(p => !(p.draft === true && p.status === 'scheduled' && p.metricoolId));
+    if (skipDays.has(day) || quotaReservations.length >= config.dailyCap) continue;
     const hours = new Set(sameDay.map(p => localHour(p.scheduledAt)));
     for (const slot of config.slots) {
       const [h, m] = slot.split(':').map(Number);

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T10:29:28.642Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-receipts-bridge-nov22",
+  "generatedAt": "2026-11-22T10:39:14.143Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-account-quota-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -129,16 +129,9 @@
     "filesIndexed": 1213,
     "imports": 5018,
     "routes": 633,
-    "symbols": 28825
+    "symbols": 28841
   },
   "directories": {
-    "script": {
-      "files": 151,
-      "indexed": 136,
-      "kinds": {
-        "script": 151
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -230,6 +223,13 @@
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 151,
+      "indexed": 136,
+      "kinds": {
+        "script": 151
       }
     },
     "script/office-api-budget-v6": {
@@ -10198,7 +10198,7 @@
         "validateAutopilotItem"
       ],
       "symbols": [
-        "BRAND_DAILY_CAP",
+        "ACCOUNT_DAILY_TARGET",
         "DAILY_SLOTS",
         "METRICOOL_MCP_URL",
         "TIMEZONE",
@@ -11115,6 +11115,7 @@
         "TIME_ZONE",
         "canonicalAccount",
         "canonicalDestinationKey",
+        "confirmedNonPublishingDraft",
         "createPortfolioMetricool",
         "destinationKey",
         "exactPost",
@@ -11154,6 +11155,7 @@
         "canonicalPath",
         "chars",
         "completionRate",
+        "confirmedNonPublishingDraft",
         "connection",
         "connectionSettings",
         "contentDuplicate",
@@ -11165,6 +11167,8 @@
         "destination",
         "destinationKey",
         "destinationSettings",
+        "draftHours",
+        "drafts",
         "e",
         "entries",
         "envelope",
@@ -11220,6 +11224,7 @@
         "providerTimestamp",
         "published",
         "publishedAt",
+        "quotaRows",
         "raw",
         "reason",
         "refused",
@@ -11236,6 +11241,7 @@
         "status",
         "statusOf",
         "target",
+        "targets",
         "text",
         "tiktokTitle",
         "to",
@@ -12446,6 +12452,7 @@
         "queuedCandidate",
         "queuedOnly",
         "queuedSource",
+        "quotaReservations",
         "r",
         "raw",
         "real",
@@ -42645,13 +42652,16 @@
         "allowGuard",
         "args",
         "calls",
+        "date",
         "eligible",
         "info",
         "lock",
         "mediaReceipt",
+        "old",
         "reportDir",
         "result",
         "retry",
+        "row",
         "slots",
         "workspaceRoot"
       ],
@@ -43635,6 +43645,7 @@
         "ON",
         "adapter",
         "again",
+        "ambiguous",
         "approvals",
         "args",
         "asset",
@@ -43654,6 +43665,7 @@
         "dayOf",
         "dir",
         "download",
+        "draft",
         "dry",
         "dry2",
         "dup",
@@ -43669,6 +43681,7 @@
         "fbFirst",
         "fetch",
         "file",
+        "five",
         "full",
         "grant",
         "h",
@@ -44064,6 +44077,9 @@
         "c",
         "child",
         "configured",
+        "conflict",
+        "coverage",
+        "draft",
         "evidence",
         "exec",
         "f",
@@ -44095,6 +44111,7 @@
         "state",
         "timestamp",
         "tools",
+        "tt",
         "uploader",
         "write"
       ],
