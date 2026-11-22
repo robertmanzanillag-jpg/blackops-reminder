@@ -750,3 +750,20 @@ test('rights: failed public-asset removal followed by restoration reuses the ver
   await runCloudPublisher(args); assert.equal(m.calls.schedule.length, 1); assert.equal(media.calls.render.length, 1);
   assert.equal(m.calls.schedule[0].mediaSha256, 'a'.repeat(64));
 });
+
+
+test('held media review: conflicting binding metadata survives later passes after its public asset was removed', async () => {
+  const c = candidate('binding-review', 'twitch:100', 'thegrefg'), state = baseState([c]);
+  const d = DESTINATIONS.find(d => d.network === 'facebook'), key = destinationKey(d);
+  state.cloudPublish = { version: 1, posts: [], holds: {},
+    clips: { [c.id]: { status: 'held_owner_action', sourceUrl: c.sourceUrl, creatorKey: c.creatorKey, caption: c.caption, hookVariant: 'title', renderSha256: 'b'.repeat(64), mediaAsset: { id: 9, url: 'https://github.com/o/r/releases/download/t/conflicting.mp4' } } },
+    heldQueue: [{ id: 'review-binding', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: key, caption: c.caption, hookVariant: 'title', mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString(), status: 'held_owner_action' }] };
+  const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia();
+  const args = { env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager, fetch: okFetch, ...media };
+  await runCloudPublisher(args); assert.deepEqual(stager.removed, [9]);
+  assert.equal(store.state.cloudPublish.clips[c.id].status, 'held_media_review');
+  const before = structuredClone(store.state.cloudPublish.heldQueue);
+  await runCloudPublisher(args);
+  assert.deepEqual(store.state.cloudPublish.heldQueue, before);
+  assert.equal(m.calls.schedule.length, 0); assert.equal(media.calls.render.length, 0);
+});

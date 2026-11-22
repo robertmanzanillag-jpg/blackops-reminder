@@ -534,6 +534,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       }
       const drop = () => update((s, c) => { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); });
       if (!mediaUrl && q.status === 'held_rights') {
+        if (fresh.clips[q.candidateId]?.status === 'held_media_review') { report.heldReasons.push('held_release_gate:rights_media_binding_unverified'); continue; }
         const sourceState = parseStreamerStateStrict(await store.read(ns));
         const source = { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl };
         const rights = sourceRightsGate(sourceState, source, { now: clock(), destinationKey: destinationKey(destination) });
