@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T14:03:55.448Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-external-attribution-fence-nov22",
+  "generatedAt": "2026-11-22T14:46:43.508Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-campaign-leaf-depth-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,13 +125,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1387,
-    "filesIndexed": 1265,
-    "imports": 5282,
+    "filesVisible": 1389,
+    "filesIndexed": 1267,
+    "imports": 5286,
     "routes": 647,
-    "symbols": 29611
+    "symbols": 29621
   },
   "directories": {
+    "tests": {
+      "files": 376,
+      "indexed": 371,
+      "kinds": {
+        "test": 376
+      }
+    },
+    "tests/fixtures": {
+      "files": 11,
+      "indexed": 9,
+      "kinds": {
+        "test": 11
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -293,20 +307,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 375,
-      "indexed": 370,
-      "kinds": {
-        "test": 375
-      }
-    },
-    "tests/fixtures": {
-      "files": 10,
-      "indexed": 8,
-      "kinds": {
-        "test": 10
       }
     },
     "tests/harness": {
@@ -42381,6 +42381,30 @@
       "routes": []
     },
     {
+      "path": "tests/clippers-campaign-leaf-depth.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-derivative-campaign.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "changeLeaf",
+        "changeQuery",
+        "depths",
+        "f",
+        "fixture",
+        "htmlOf",
+        "input",
+        "inputOf",
+        "paused",
+        "proof"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/clippers-cloud-lanes-status.test.ts",
       "kind": "test",
       "imports": [
@@ -46476,6 +46500,14 @@
         "trainee",
         "view"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/fixtures/clippers-campaign-depth-actual.json",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {

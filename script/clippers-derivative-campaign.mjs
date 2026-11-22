@@ -6,7 +6,7 @@ export function parseDerivativeCampaignResponse({id,url,status,headers,html,now=
   const age=headers.get('age'),date=Date.parse(headers.get('date'));
   if(!headers.get('cache-control')?.toLowerCase().includes('no-store')||(age!==null&&age!=='0')||!Number.isFinite(date)||now-date>120000||date-now>30000)throw Error('derivative_campaign_stale');
   const hits=[];
-  function walk(v,depth=0){if(depth>40)throw Error('derivative_campaign_unverified');if(!v||typeof v!=='object')return;if(Array.isArray(v)){for(const x of v)walk(x,depth+1);return;}if(JSON.stringify(v.queryKey)===JSON.stringify(['campaigns','detail',id]))hits.push(v);for(const x of Object.values(v))walk(x,depth+1);}
+  function walk(v,depth=0){if(!v||typeof v!=='object')return;if(depth>40)throw Error('derivative_campaign_unverified');if(Array.isArray(v)){for(const x of v)walk(x,depth+1);return;}if(JSON.stringify(v.queryKey)===JSON.stringify(['campaigns','detail',id]))hits.push(v);for(const x of Object.values(v))walk(x,depth+1);}
   for(const match of html.matchAll(/self\.__next_f\.push\((.*?)\)<\/script>/gs)){
     let chunks;try{chunks=JSON.parse(match[1]);}catch{continue;}if(!Array.isArray(chunks))continue;
     for(const chunk of chunks)if(typeof chunk==='string')for(const line of chunk.split('\n')){let data;try{data=JSON.parse(line.slice(line.indexOf(':')+1));}catch{continue;}walk(data);}
