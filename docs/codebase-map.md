@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-22T13:34:05.082Z
+Generated: 2026-11-22T13:38:25.510Z
 Repo: `.`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1369 | 1249 | 5184 | 640 | 29318 |
+| 1382 | 1259 | 5246 | 646 | 29516 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 367 | 362 | test:367 |
-| `server` | 303 | 296 | server:303 |
+| `tests` | 370 | 365 | test:370 |
+| `server` | 304 | 297 | server:304 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
-| `script` | 156 | 140 | script:156 |
-| `docs` | 89 | 86 | docs:89 |
+| `script` | 159 | 142 | script:159 |
+| `docs` | 94 | 89 | docs:94 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 53 | 47 | shared:53 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -42,8 +42,8 @@ Package: `rest-express`
 | `tests/fixtures` | 10 | 8 | test:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
+| `tests/helpers` | 4 | 4 | test:4 |
 | `script/office-api-budget-v7-integrity` | 3 | 3 | script:3 |
-| `tests/helpers` | 3 | 3 | test:3 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
@@ -63,6 +63,7 @@ Package: `rest-express`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/clippers-orchestra`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/blackroom-team-routes.ts`: `/api/blackroom-team`, `/api/blackroom-team/:id/action/:action`, `/api/blackroom-team/:id/run`, `/api/blackroom-team/:id/status`
 - `server/clippers-orchestra-routes.ts`: `/api/clippers/orchestra/status`
+- `server/clippers-private-final-routes.ts`: `${base}/${route}`, `${base}/chunks/:index`, `${base}/cleanup`, `${base}/preview`, `${base}/status`
 - `server/clippers-reviewed-derivative-routes.ts`: `/api/clippers/reviewed-derivatives`, `/api/clippers/reviewed-derivatives/approve`, `/api/clippers/reviewed-derivatives/propose`, `/api/clippers/reviewed-derivatives/reconcile`, `/api/clippers/reviewed-derivatives/review`, `/api/clippers/reviewed-derivatives/revoke`
 - `server/clippers-streamers-status.ts`: `/api/clippers/streamers/holds/resolved`, `/api/clippers/streamers/status`, `/api/clippers/streamers/takedown`, `/api/clippers/streamers/takedown/removed`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
@@ -90,6 +91,7 @@ Package: `rest-express`
 - `tests/clippers-office-area.test.mjs`: `/`, `/api/auth/me`, `/area.css`, `/area.js`
 - `tests/clippers-orchestra-endpoint.test.ts`: `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/remote`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
+- `tests/clippers-private-final-routes.test.ts`: `/favicon.ico`
 - `tests/clippers-reviewed-derivative-routes.test.ts`: `/favicon.ico`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
@@ -182,6 +184,7 @@ Package: `rest-express`
 - `tests/clippers-orchestra-endpoint.test.ts`
 - `tests/clippers-orchestra.test.ts`
 - `tests/clippers-owned-source-scripts.test.ts`
+- `tests/clippers-private-final-routes.test.ts`
 - `tests/clippers-reviewed-derivative-routes.test.ts`
 - `tests/clippers-runtime-status.test.ts`
 - `tests/clippers-streamer-pending-actions-postgres.test.ts`
