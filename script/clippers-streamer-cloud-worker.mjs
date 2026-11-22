@@ -29,7 +29,7 @@ import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText, detectSpeechLanguage, whisperConfigured } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
-import { emptyCloudPublish, cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
+import { emptyCloudPublish, cloudPublishOf, mediaEntriesOf, isProtectedMediaClaim, retainLegacyUncertainReservation, legacyUncertainAttemptKey, upsertMediaLedgerClaim } from '../shared/clippers-media-ledger.mjs';
 import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS, resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE, normalizeLanguage, SERVED_LANGUAGES } from '../shared/clippers-account-lanes.mjs';
 
 const HOUR = 3_600_000;
@@ -186,6 +186,7 @@ function heldMediaBindingMatches(q, clip) {
 }
 
 export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
+  if((ledger.mediaLedger??[]).some(e=>isProtectedMediaClaim(e)&&(e.candidateId===candidateId||e.mediaUrl===assetUrl||e.mediaAsset?.url===assetUrl)))return false;
   const posts = ledger.posts.filter(p => p.candidateId === candidateId);
   if (posts.some(p => UNCERTAIN.has(p.status))) return false;
   const queued = (ledger.heldQueue ?? []).filter(q => q.candidateId === candidateId);
@@ -210,7 +211,10 @@ export function publishGate(state, candidate, options = {}) {
   if (candidate.platform === 'twitch' && !clipLengthAllowed(candidate.durationSec)) return 'clip_too_long';
   if (candidate.kind === 'live') return 'live_stream_not_clipped';
   if (!captionHasCredit(candidate.caption, candidate.handle, candidate.sourceUrl)) return 'caption_missing_credit';
-  return sourceRightsGate(state, candidate, options);
+  const rights=sourceRightsGate(state,candidate,options);if(rights)return rights;
+  const protectedClaims=(state?.cloudPublish?.mediaLedger??[]).filter(isProtectedMediaClaim);
+  if(mediaConflict(protectedClaims,{candidateId:candidate.id,sourceId:candidate.sourceId,segment:options.segment??sourceSegment(candidate),mediaSha256:options.mediaSha256??null,destinationKey:options.destinationKey??''}))return 'legacy_uncertain_delivery_requires_reconciliation';
+  return null;
 }
 
 /** Fresh read of the creator's own description (Twitch user / YouTube channel). */
@@ -266,7 +270,7 @@ export function postItem({ candidate, destination, scheduledAt, caption, mediaUr
 // ---------- Account lanes ----------
 /** Remove the media-ledger claim of a post that was never written to Metricool. */
 export function dropClaim(c, item) {
-  if (Array.isArray(c.mediaLedger)) c.mediaLedger = c.mediaLedger.filter(e => !(e.candidateId === item.candidateId && e.destinationKey === item.destinationKey));
+  if (Array.isArray(c.mediaLedger)) c.mediaLedger = c.mediaLedger.filter(e => isProtectedMediaClaim(e)||!(e.candidateId === item.candidateId && e.destinationKey === item.destinationKey));
 }
 export { mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 
@@ -389,12 +393,12 @@ export function createGithubReleaseStager({ token, repo, fetch: fetchImpl = glob
       try { await api(`https://api.github.com/repos/${repo}/releases/assets/${Number(assetId)}`, { method: 'DELETE' }, [204]); return true; }
       catch (e) { if (e.status === 404) return true; throw e; }
     },
-    async sweep({ now = Date.now(), olderThanMs = 48 * HOUR, keep = new Set() } = {}) {
+    async sweep({ now = Date.now(), olderThanMs = 48 * HOUR, keep = new Set(), keepUrls = new Set() } = {}) {
       const r = await ensure();
       const assets = await api(`https://api.github.com/repos/${repo}/releases/${r.id}/assets?per_page=100`);
       let removed = 0;
       for (const a of assets ?? []) {
-        if (!String(a.name).startsWith('stc-') || keep.has(a.id) || now - Date.parse(a.created_at) < olderThanMs) continue;
+        if (!String(a.name).startsWith('stc-') || keep.has(a.id) || keepUrls.has(a.browser_download_url) || now - Date.parse(a.created_at) < olderThanMs) continue;
         await this.remove(a.id); removed++;
       }
       return removed;
@@ -478,13 +482,16 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           const found = await metricool.confirmSchedule(post.destination, post);
           const status = found ? 'scheduled' : now - Date.parse(post.scheduledAt) > 2 * HOUR ? 'not_found' : post.status;
           if (status !== post.status) {
-            await update((s, c) => {
-              const p = c.posts.find(x => x.id === post.id);
-              if (p) { p.status = status; if (found) { p.metricoolId = found.id; p.confirmedMediaUrl = found.mediaUrl ?? null; } }
-              const clip = c.clips[post.candidateId];
-              if (found && clip?.status === 'verification_pending') clip.status = 'published';
+            const changed=await update((s,c)=>{
+              const p=c.posts.find(x=>x.id===post.id);
+              if(!p||!UNCERTAIN.has(p.status)||legacyUncertainAttemptKey(p)!==legacyUncertainAttemptKey(post))return false;
+              if(status==='not_found')retainLegacyUncertainReservation(c,p,{now});
+              p.status=status;if(found){p.metricoolId=found.id;p.confirmedMediaUrl=found.mediaUrl??null;}
+              const clip=c.clips[post.candidateId];
+              if(found&&clip?.status==='verification_pending')clip.status='published';
+              return true;
             });
-            report.counts.reconciled++;
+            if(changed)report.counts.reconciled++;
           }
         } else if (post.status === 'scheduled' && post.metricoolId && !post.observation) {
           const age = (now - Date.parse(post.scheduledAt)) / HOUR;
@@ -567,16 +574,15 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const blocked = await update((s, c) => {
         const cand = s.candidates.find(x => x.id === q.candidateId);
         const queuedSource = cand ? { ...cand, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl } : null;
-        const reason = cand ? publishGate(s, queuedSource, { now: clock(), destinationKey: destinationKey(destination), scheduledAt }) : 'candidate_missing';
+        const reason = cand ? publishGate(s, queuedSource, { now: clock(), destinationKey: destinationKey(destination), scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 }) : 'candidate_missing';
         if (reason) { if (!reason.startsWith('rights_')) c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return reason; }
         const prior = c.posts.find(x => x.id === item.id);
         if (prior && prior.status !== 'deferred') { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return 'already_attempted'; }
         if (lane) { // Same one-file-one-account check + claim as the main write path, inside this transaction.
-          const others = mediaEntriesOf({ ...c, posts: c.posts.filter(x => x.id !== item.id) }).filter(e => !(e.candidateId === q.candidateId && e.destinationKey === item.destinationKey));
+          const others = mediaEntriesOf({ ...c, posts: c.posts.filter(x => x.id !== item.id) }).filter(e => isProtectedMediaClaim(e)||!(e.candidateId === q.candidateId && e.destinationKey === item.destinationKey));
           const conflict = mediaConflict(others, { segment: item.segment, mediaSha256: item.mediaSha256, candidateId: q.candidateId, destinationKey: item.destinationKey });
           if (conflict) { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return conflict.reason; }
-          c.mediaLedger = [...(Array.isArray(c.mediaLedger) ? c.mediaLedger : []).filter(e => !(e.candidateId === q.candidateId && e.destinationKey === item.destinationKey)),
-            mediaEntry({ candidate: cand, segment: item.segment, mediaSha256: item.mediaSha256, destinationKey: item.destinationKey, at: iso(clock()) })].slice(-5000);
+          upsertMediaLedgerClaim(c,mediaEntry({candidate:cand,segment:item.segment,mediaSha256:item.mediaSha256,destinationKey:item.destinationKey,at:iso(clock())}));
         }
         c.posts = c.posts.filter(x => x.id !== item.id);
         c.posts.push({ ...item, attemptedAt: iso(clock()), releasedFromHold: true });
@@ -597,7 +603,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       try {
         const current = parseStreamerStateStrict(await store.read(ns));
         const queuedCandidate = current?.candidates.find(x => x.id === q.candidateId);
-        const rights = publishGate(current, queuedCandidate ? { ...queuedCandidate, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl, caption: q.caption } : null, { now: clock(), destinationKey: destinationKey(destination), scheduledAt: item.scheduledAt });
+        const rights = publishGate(current, queuedCandidate ? { ...queuedCandidate, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl, caption: q.caption } : null, { now: clock(), destinationKey: destinationKey(destination), scheduledAt:item.scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 });
         if (rights) { await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); }); report.heldReasons.push(`held_release_gate:${rights}`); continue; }
         const found = await metricool.schedule(destination, item); status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null; }
       catch (e) { reason = code(e); status = PRE_WRITE_ERRORS.has(reason) ? 'deferred' : 'verification_pending'; }
@@ -630,7 +636,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         }
       });
       const current = cloudPublishOf(parseStreamerState(await store.read(ns)));
-      const keep = new Set();
+      const keep = new Set((current.mediaLedger??[]).filter(isProtectedMediaClaim).map(e=>e.mediaAsset?.id).filter(Boolean));
       for (const [candidateId, clip] of Object.entries(current.clips)) {
         if (!clip.mediaAsset?.id) continue;
         if (!stagedAssetRemovable(current, candidateId, clip.mediaAsset.url, now)) { keep.add(clip.mediaAsset.id); continue; }
@@ -638,7 +644,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         report.counts.assetsRemoved++;
         await update((s, c) => { if (c.clips[candidateId]) c.clips[candidateId].mediaAsset = null; });
       }
-      report.counts.assetsRemoved += await stager.sweep({ now, keep });
+      const keepUrls=new Set((current.mediaLedger??[]).filter(isProtectedMediaClaim).flatMap(e=>[e.mediaUrl,e.mediaAsset?.url]).filter(v=>typeof v==='string'&&v));
+      report.counts.assetsRemoved += await stager.sweep({ now, keep, keepUrls });
     } catch (e) { report.heldReasons.push(`media_sweep:${code(e)}`); }
   }
 
@@ -877,19 +884,20 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           const item = postItem({ candidate, destination: p.destination, scheduledAt: at, caption, mediaUrl: asset.url, mediaSha256: rendered.sha256, hookVariant,
             lane: lanePick ? { ...lanePick, segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }) } : null });
           item.byteLength=Number.isSafeInteger(rendered.sizeBytes)?rendered.sizeBytes:null;
+          item.segment??=sourceSegment(candidate,{start:(source.cut?.start??0)+(rendered.cutStart??0)});
+          item.streamKey??=streamKeyOf(candidate);
           if (!lanePick) item.draft = true; // lanes off: single account, owner approves every post
           // Fresh gate + durable "pending_write" BEFORE the write (a crash can never authorise a resend).
           const blocked = await update((s, c) => {
-            const reason = publishGate(s, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt: at });
+            const reason = publishGate(s, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt:at,segment:item.segment,mediaSha256:item.mediaSha256 });
             if (reason) return reason;
             const prior = c.posts.find(x => x.id === item.id);
             if (prior && prior.status !== 'deferred') return 'already_attempted';
             if (lanePick) { // One video file / source segment -> one account (checked and claimed atomically).
-              const others = mediaEntriesOf({ ...c, posts: c.posts.filter(x => x.id !== item.id) }).filter(e => !(e.candidateId === candidate.id && e.destinationKey === item.destinationKey));
+              const others = mediaEntriesOf({ ...c, posts: c.posts.filter(x => x.id !== item.id) }).filter(e => isProtectedMediaClaim(e)||!(e.candidateId === candidate.id && e.destinationKey === item.destinationKey));
               const conflict = mediaConflict(others, { segment: item.segment, mediaSha256: item.mediaSha256, candidateId: candidate.id, destinationKey: item.destinationKey });
               if (conflict) return conflict.reason;
-              c.mediaLedger = [...(Array.isArray(c.mediaLedger) ? c.mediaLedger : []).filter(e => !(e.candidateId === candidate.id && e.destinationKey === item.destinationKey)),
-                mediaEntry({ candidate, segment: item.segment, mediaSha256: item.mediaSha256, destinationKey: item.destinationKey, at: iso(clock()) })].slice(-5000);
+              upsertMediaLedgerClaim(c,mediaEntry({candidate,segment:item.segment,mediaSha256:item.mediaSha256,destinationKey:item.destinationKey,at:iso(clock())}));
             }
             c.posts = c.posts.filter(x => x.id !== item.id);
             c.posts.push({ ...item, attemptedAt: iso(clock()) });
@@ -927,7 +935,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           }
           try {
             const current = parseStreamerStateStrict(await store.read(ns));
-            const rights = publishGate(current, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt: item.scheduledAt });
+            const rights = publishGate(current, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt:item.scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 });
             if (rights) {
               await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
               report.heldReasons.push(rights); report.counts[rights.startsWith('rights_') ? 'deferred' : 'blocked']++;
