@@ -1,3 +1,4 @@
+import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,FactoryTokenCostError} from './factory-api-token-cost';
 import {currentFactoryApiParent} from "./factory-api-context";
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
@@ -14,23 +15,20 @@ export function factoryApiAdmissionError(error:unknown){
 }
 const sha=z.string().regex(/^[a-f0-9]{64}$/),positive=z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 export const factoryApiPriceSchema=z.object({model:z.string().min(1).max(200),inputNanoUsdPerToken:positive,
- outputNanoUsdPerToken:positive,cachedInputNanoUsdPerToken:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),validUntil:z.string().datetime(),evidenceSha256:sha}).strict();
+ outputNanoUsdPerToken:positive,maxInputTokens:positive.optional(),cacheWrite30mNanoUsdPerToken:positive.optional(),cacheWrite12hNanoUsdPerToken:positive.optional(),cachedInputNanoUsdPerToken:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),validUntil:z.string().datetime(),evidenceSha256:sha}).strict();
 export type FactoryApiPrice=z.infer<typeof factoryApiPriceSchema>;
-export type FactoryApiUsage={model:string;responseId:string;inputTokens:number;outputTokens:number;cachedInputTokens:number};
+export type FactoryApiUsage={model:string;responseId:string;inputTokens:number;outputTokens:number;cachedInputTokens:number;cacheWriteTokens?:number;cacheWrite30mTokens?:number;cacheWrite12hTokens?:number;inputTokenDetailsSha256?:string};
 type Store=Pick<typeof softwareFactoryStore,'reserveApi'|'settleApi'|'unknownApi'|'executionWindowApi'|'apiBudgetStatus'>;
 export const apiEvidenceHash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-function microCost(price:FactoryApiPrice,input:number,output:number,cached:number){
- if(![input,output,cached].every(n=>Number.isSafeInteger(n)&&n>=0))throw new FactoryApiBudgetError('FACTORY_API_USAGE_UNVERIFIED');
- if(cached>input||(cached>0&&price.cachedInputNanoUsdPerToken===undefined))throw new FactoryApiBudgetError("FACTORY_API_CACHE_USAGE_UNPRICED");
- const cost=(BigInt(input-cached)*BigInt(price.inputNanoUsdPerToken)+BigInt(cached)*BigInt(price.cachedInputNanoUsdPerToken??0)+BigInt(output)*BigInt(price.outputNanoUsdPerToken)+999n)/1000n;
- if(cost>BigInt(Number.MAX_SAFE_INTEGER))throw new FactoryApiBudgetError('FACTORY_API_COST_OVERFLOW');return Number(cost);
+function costError(error:unknown):never{
+ throw new FactoryApiBudgetError(error instanceof FactoryTokenCostError?error.code:'FACTORY_API_COST_OVERFLOW');
 }
 /** Purely injected authority boundary. Never initializes or reconciles anything.
  * A dispatched exception/missing usage keeps full escrow and stops paid replay. */
 export function createFactoryApiInvocation(options:{store:Store;owner:()=>string;now?:()=>Date}){
  const now=options.now??(()=>new Date());
  const invoke=async function invoke<T>(input:{executionId?:string;consumer:FactoryApiReservation['consumer'];
-   requestSha256:string;price:FactoryApiPrice;promptBytes:number;maxOutputTokens:number;
+   requestSha256:string;price:FactoryApiPrice;promptBytes:number;maxOutputTokens:number;cacheWriteCoverage?:boolean;
    parent?:FactoryApiReservation['parent'];signal?:AbortSignal;
    call:(options:{signal:AbortSignal;maxRetries:0;timeout:number})=>Promise<T>;
    usage:(result:T)=>FactoryApiUsage}):Promise<T>{
@@ -49,9 +47,11 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
   if(sourceSignal?.aborted)throw new FactoryApiBudgetError("FACTORY_API_EXECUTION_CANCELLED");
   const parent=input.parent??(context?{jobId:context.jobId,fence:context.fence}:undefined);
   const key='api:'+apiEvidenceHash([input.consumer,input.executionId??randomUUID()]);
-  const requestSha256=apiEvidenceHash([input.requestSha256,price,input.promptBytes,input.maxOutputTokens,parent??null]);
+  const coverage=input.cacheWriteCoverage===true;
+  let maximumMicroUsd:number;try{maximumMicroUsd=Math.max(1,factoryTextMaximumMicroUsd(price,input.promptBytes+1024,input.maxOutputTokens,coverage));}catch(error){costError(error);}
+  const requestSha256=apiEvidenceHash([input.requestSha256,price,input.promptBytes,input.maxOutputTokens,parent??null,coverage?'bounded_30m_12h':'no_cache_write_coverage']);
   const reservation=await options.store.reserveApi(owner,{key,consumer:input.consumer,requestSha256,
-    maximumMicroUsd:Math.max(1,microCost(price,input.promptBytes+1024,input.maxOutputTokens,0)),...(parent?{parent}:{})}).catch(error=>{throw factoryApiAdmissionError(error);});
+    maximumMicroUsd:maximumMicroUsd!,...(parent?{parent}:{})}).catch(error=>{throw factoryApiAdmissionError(error);});
   if(!reservation.admitted)throw new FactoryApiBudgetError('FACTORY_API_DISPATCH_ALREADY_RESERVED');
   let dispatched=false;
   try{
@@ -67,8 +67,10 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    const result=await input.call({signal,maxRetries:0,timeout});
    signal.throwIfAborted();if(now().getTime()>=Date.parse(price.validUntil))throw Error("expired");
    const usage=input.usage(result);
+   if(usage.inputTokens>input.promptBytes+1024||usage.outputTokens>input.maxOutputTokens)throw Error('usage bounds');
    if(usage.model!==price.model||typeof usage.responseId!=='string'||!usage.responseId||usage.responseId.length>300)throw Error('unverified');
-   const actualMicroUsd=microCost(price,usage.inputTokens,usage.outputTokens,usage.cachedInputTokens);
+   if(usage.inputTokenDetailsSha256!==undefined)sha.parse(usage.inputTokenDetailsSha256);
+   const actualMicroUsd=factoryTextActualMicroUsd(price,{...usage,cachedTokens:usage.cachedInputTokens},coverage);
    const settled=await options.store.settleApi(owner,key,{actualMicroUsd,evidenceSha256:apiEvidenceHash({requestSha256,price,usage})});
    if(settled?.settled===false)throw Error('overrun');
    return result;

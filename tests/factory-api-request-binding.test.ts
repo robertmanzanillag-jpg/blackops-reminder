@@ -5,9 +5,9 @@ import {guardFactoryOpenAiClient,guardFactoryOpenAiFetch} from '../server/factor
 import {fixtureFactoryInvocation} from './fixtures/factory-api-budget';
 import {createRoutedOpenAI,InMemoryAiProviderLedger} from '../server/ai-model-router';
 import {OpenAiLocalNewsTranslationAdapter} from '../server/clippers-local-news-translation';
-const model='synthetic-model',price={model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)};
+const model='synthetic-model',price={model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,cachedInputNanoUsdPerToken:100,cacheWrite30mNanoUsdPerToken:500,cacheWrite12hNanoUsdPerToken:800, maxInputTokens:1_049_600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)};
 const body=()=>({model,messages:[{role:'user' as const,content:'original text'}],max_completion_tokens:16});
-const completion=()=>({id:'synthetic-response',object:'chat.completion',model,choices:[{finish_reason:'stop',message:{role:'assistant',content:'synthetic result'}}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0}}});
+const completion=()=>({id:'synthetic-response',object:'chat.completion',model,choices:[{finish_reason:'stop',message:{role:'assistant',content:'synthetic result'}}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0,cache_write_tokens:0}}});
 function fixture(pause=false){
  let release!:()=>void;const wait=pause?new Promise<void>(resolve=>{release=resolve;}):Promise.resolve();
  let admissions=0;const calls:{url:string;init:RequestInit;body:any}[]=[],authority=fixtureFactoryInvocation();
@@ -32,7 +32,7 @@ test('SDK body, nested content and allowed options are immutable snapshots befor
  (options as any).body={model:'other',max_completion_tokens:100000};
  f.release();await pending;
  assert.equal(f.admissions(),1);assert.equal(f.calls.length,1);
- assert.equal(f.calls[0].body.model,model);assert.equal(f.calls[0].body.max_completion_tokens,16);assert.equal(f.calls[0].body.messages[0].content,'original text');
+ assert.equal(f.calls[0].body.model,model);assert.equal(f.calls[0].body.max_completion_tokens,16);assert.equal(f.calls[0].body.messages[0].content,'original text');assert.equal(f.calls[0].body.service_tier,'default');
 });
 test('remote prompt/context and ambiguous dual output limits hold before SDK or reserve',async()=>{
  const f=fixture();
@@ -43,11 +43,11 @@ test('remote prompt/context and ambiguous dual output limits hold before SDK or 
 test('raw fetch uses the validated body/method/header snapshot despite caller mutation during admission',async()=>{
  const f=fixture(true),calls:any[]=[],headers=new Headers({Authorization:'synthetic-original'});
  const request:RequestInit={method:'POST',body:JSON.stringify({model,input:'original',max_output_tokens:16}),headers};
- const guarded=guardFactoryOpenAiFetch((async(url,init)=>{calls.push({url,init,body:JSON.parse(String(init?.body))});return Response.json({id:'synthetic-raw',status:'completed',model,usage:{input_tokens:10,output_tokens:5,input_tokens_details:{cached_tokens:0}},output:[]});}) as typeof fetch,{invoke:f.invoke,price});
+ const guarded=guardFactoryOpenAiFetch((async(url,init)=>{calls.push({url,init,body:JSON.parse(String(init?.body))});return Response.json({id:'synthetic-raw',status:'completed',model,usage:{input_tokens:10,output_tokens:5,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}},output:[]});}) as typeof fetch,{invoke:f.invoke,price});
  const pending=guarded('https://api.openai.com/v1/responses',request);
  request.method='DELETE';request.body=JSON.stringify({model:'expensive',input:'changed',max_output_tokens:100000});headers.set('Authorization','synthetic-mutated');
  f.release();await pending;
- assert.equal(calls.length,1);assert.equal(calls[0].init.method,'POST');assert.equal(calls[0].body.model,model);assert.equal(calls[0].body.max_output_tokens,16);assert.equal(calls[0].body.input,'original');assert.equal(new Headers(calls[0].init.headers).get('Authorization'),'synthetic-original');
+ assert.equal(calls.length,1);assert.equal(calls[0].init.method,'POST');assert.equal(calls[0].body.model,model);assert.equal(calls[0].body.max_output_tokens,16);assert.equal(calls[0].body.input,'original');assert.equal(calls[0].body.service_tier,'default');assert.equal(new Headers(calls[0].init.headers).get('Authorization'),'synthetic-original');
 });
 test('Clips uses the same normalized source for credential and billing-provider selection',()=>{
  for(const integration of ['   ','undefined','null','changeme']){
@@ -59,4 +59,4 @@ test('Clips uses the same normalized source for credential and billing-provider 
  const client=(adapter as any).getClient();assert.equal(client.apiKey,'synthetic-integration');assert.equal(client.baseURL,'https://integration.invalid/v1');
 });
 
-test('router pins original request before secondary-ledger await and rejects remote references before translation',async()=>{const f=fixture(),ledger=new InMemoryAiProviderLedger();let release!:()=>void;const wait=new Promise<void>(resolve=>{release=resolve;}),reserve=ledger.reserve.bind(ledger);ledger.reserve=async input=>{await wait;return reserve(input);};const client=createRoutedOpenAI({tier:'standard',label:'binding',env:{AI_ROUTER_ENABLED:'true',OPENAI_API_KEY:'synthetic-own'},ledger,makeClient:()=>f.client,factoryInvocation:f.invoke,factoryPricing:()=>price});const original=body(),pending=client.chat.completions.create(original);original.max_completion_tokens=100000;original.messages[0].content='changed';release();await pending;assert.equal(f.calls[0].body.max_completion_tokens,16);assert.equal(f.calls[0].body.messages[0].content,'original text');const remote=createRoutedOpenAI({tier:'repetitive',label:'remote',env:{AI_ROUTER_ENABLED:'true',DEEPSEEK_API_KEY:'synthetic-deep',DEEPSEEK_MODEL:model},ledger:new InMemoryAiProviderLedger(),makeClient:()=>{throw Error('must not construct client');},factoryInvocation:f.invoke,factoryPricing:()=>price});for(const request of [{model,input:[{id:'stored'}],max_output_tokens:16},{model,prompt:{id:'stored-prompt'},input:'local',max_output_tokens:16}])await assert.rejects(remote.responses!.create(request),/OPERATION_UNPRICED/);assert.equal(f.calls.length,1);});
+test('router pins original request before secondary-ledger await and rejects remote references before translation',async()=>{const f=fixture(),ledger=new InMemoryAiProviderLedger();let release!:()=>void;const wait=new Promise<void>(resolve=>{release=resolve;}),reserve=ledger.reserve.bind(ledger);ledger.reserve=async input=>{await wait;return reserve(input);};const client=createRoutedOpenAI({tier:'standard',label:'binding',env:{AI_ROUTER_ENABLED:'true',OPENAI_API_KEY:'synthetic-own'},ledger,makeClient:()=>f.client,factoryInvocation:f.invoke,factoryPricing:()=>price});const original=body(),pending=client.chat.completions.create(original);original.max_completion_tokens=100000;original.messages[0].content='changed';release();await pending;assert.equal(f.calls[0].body.max_completion_tokens,16);assert.equal(f.calls[0].body.messages[0].content,'original text');assert.equal(f.calls[0].body.service_tier,'default');const remote=createRoutedOpenAI({tier:'repetitive',label:'remote',env:{AI_ROUTER_ENABLED:'true',DEEPSEEK_API_KEY:'synthetic-deep',DEEPSEEK_MODEL:model},ledger:new InMemoryAiProviderLedger(),makeClient:()=>{throw Error('must not construct client');},factoryInvocation:f.invoke,factoryPricing:()=>price});for(const request of [{model,input:[{id:'stored'}],max_output_tokens:16},{model,prompt:{id:'stored-prompt'},input:'local',max_output_tokens:16}])await assert.rejects(remote.responses!.create(request),/OPERATION_UNPRICED/);assert.equal(f.calls.length,1);});

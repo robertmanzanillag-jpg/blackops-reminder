@@ -4,10 +4,10 @@ import {randomUUID,createHash} from 'node:crypto';
 import {createFactoryOpenAiTransport} from '../server/software-factory-openai-transport';
 import {withFactoryApiParent} from '../server/factory-api-context';
 import {fixtureFactoryInvocation} from './fixtures/factory-api-budget';
-const model='synthetic-model',price={model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)};
+const model='synthetic-model',price={model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,cachedInputNanoUsdPerToken:100,cacheWrite30mNanoUsdPerToken:500,cacheWrite12hNanoUsdPerToken:800, maxInputTokens:1_049_600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)};
 const parent=()=>({id:randomUUID(),fence:randomUUID(),status:'running',ownerKey:createHash('sha256').update('synthetic-owner').digest('hex')}) as any;
 const body=()=>JSON.stringify({model,input:'synthetic requirements',max_output_tokens:32});
-const output=()=>({id:'resp_synthetic',model,status:'completed',usage:{input_tokens:10,output_tokens:5,input_tokens_details:{cached_tokens:0}}});
+const output=()=>({id:'resp_synthetic',model,status:'completed',usage:{input_tokens:10,output_tokens:5,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}});
 test('model credential reaches only approved bounded Responses operation inside Factory escrow',async()=>{
  const job=parent(),key='sk-proj-'+'a'.repeat(50),signal=new AbortController().signal,calls:{url:string;init:RequestInit}[]=[];
  const request=createFactoryOpenAiTransport(key,(async(url,init)=>{calls.push({url:String(url),init:init!});return Response.json(output());}) as typeof fetch,{price,invoke:fixtureFactoryInvocation(undefined,job)});
@@ -29,11 +29,11 @@ test('Factory OpenAI path end to end: unbilled count transport + gated priced cr
  const {createFactoryOpenAiCountTransport,routeFactoryOpenAiRequests}=await import('../server/software-factory-openai-count');
  const {createOpenAiFactoryTextProvider}=await import('../server/software-factory-openai');
  const job=parent(),key='sk-proj-'+'c'.repeat(50),calls:{url:string;init:RequestInit}[]=[];
- const raw=(async(url:string,init:RequestInit)=>{calls.push({url:String(url),init});return String(url).endsWith('/input_tokens')?Response.json({object:'response.input_tokens',input_tokens:10}):Response.json({...output(),model:'synthetic-model-2026-01-01',object:'response',output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'ok'}]}],usage:{input_tokens:10,output_tokens:5,total_tokens:15,input_tokens_details:{cached_tokens:0}}});}) as typeof fetch;
+ const raw=(async(url:string,init:RequestInit)=>{calls.push({url:String(url),init});return String(url).endsWith('/input_tokens')?Response.json({object:'response.input_tokens',input_tokens:10}):Response.json({...output(),model:'synthetic-model-2026-01-01',object:'response',output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'ok'}]}],usage:{input_tokens:10,output_tokens:5,total_tokens:15,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}});}) as typeof fetch;
  // The price must name the provider model for the gate.
  const gatedPrice={...price,model:'synthetic-model-2026-01-01'};
  const request2=routeFactoryOpenAiRequests(createFactoryOpenAiTransport(key,raw,{price:gatedPrice,invoke:fixtureFactoryInvocation(undefined,job)}),createFactoryOpenAiCountTransport(key,raw));
- const generate2=createOpenAiFactoryTextProvider({request:request2,model:'synthetic-model-2026-01-01',inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,pricingValidUntil:'2027-01-01T00:00:00.000Z',now:()=>new Date('2026-11-18T12:00:00.000Z'),maxInputTokens:1000});
+ const generate2=createOpenAiFactoryTextProvider({request:request2,apiPrice:gatedPrice,model:'synthetic-model-2026-01-01',inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,pricingValidUntil:'2027-01-01T00:00:00.000Z',now:()=>new Date('2026-11-18T12:00:00.000Z'),maxInputTokens:1000});
  const result=await withFactoryApiParent(job,()=>generate2({instructions:'x',text:'synthetic requirements',maxOutputTokens:32,maxCostCents:5,signal:new AbortController().signal}));
  assert.equal(result.status,'completed');
  assert.equal(calls.length,2);assert.ok(calls[0].url.endsWith('/input_tokens'));assert.equal(new Headers(calls[0].init.headers).get('Authorization'),`Bearer ${key}`);assert.equal(calls[0].init.redirect,'error');
@@ -56,11 +56,11 @@ test('configured Sol snapshot completes free count then guarded exact-model gene
   calls.push({url:String(url),body:JSON.parse(String(init.body))});
   return String(url).endsWith('/input_tokens')?Response.json({object:'response.input_tokens',input_tokens:10}):Response.json({
    ...output(),object:'response',model:snapshot,output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'bounded result'}]}],
-   usage:{input_tokens:10,output_tokens:5,total_tokens:15,input_tokens_details:{cached_tokens:0}}});
+   usage:{input_tokens:10,output_tokens:5,total_tokens:15,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}});
  }) as typeof fetch;
- const approvedPrice={...price,model:snapshot,inputNanoUsdPerToken:2000,outputNanoUsdPerToken:10000};
+ const approvedPrice={...price,model:snapshot,inputNanoUsdPerToken:2000,outputNanoUsdPerToken:10000,cacheWrite30mNanoUsdPerToken:2500,cacheWrite12hNanoUsdPerToken:4000, maxInputTokens:1_049_600};
  const request=routeFactoryOpenAiRequests(createFactoryOpenAiTransport(key,raw,{price:approvedPrice,invoke:fixtureFactoryInvocation(undefined,job)}),createFactoryOpenAiCountTransport(key,raw));
- const generate=createOpenAiFactoryTextProvider({request,model:snapshot,inputNanoUsdPerToken:2000,outputNanoUsdPerToken:10000,pricingValidUntil:price.validUntil,now:()=>new Date('2026-11-18T12:00:00.000Z'),maxInputTokens:1000});
+ const generate=createOpenAiFactoryTextProvider({request,apiPrice:approvedPrice,model:snapshot,inputNanoUsdPerToken:2000,outputNanoUsdPerToken:10000,pricingValidUntil:price.validUntil,now:()=>new Date('2026-11-18T12:00:00.000Z'),maxInputTokens:1000});
  const result=await withFactoryApiParent(job,()=>generate({instructions:'Review synthetic code',text:'synthetic requirements',maxOutputTokens:32,maxCostCents:5,signal:new AbortController().signal}));
  assert.equal(result.status,'completed');
  assert.equal(result.costCents,1); // The secondary cents ledger rounds the measured fractional-cent charge upward.

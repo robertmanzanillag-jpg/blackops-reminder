@@ -13,7 +13,7 @@ export class OfficeOpenAIError extends Error {
 // keeps its reservation: this adapter never retries a potentially billed request.
 export function createOfficeOpenAI(options: {
   env?: NodeJS.ProcessEnv; fetch?: typeof fetch; now?: () => Date;
-  authorize?: (limits: { model: string; promptBytes: number; maxOutputTokens: number }) => Promise<void>;
+  authorize?: (limits: { model: string; promptBytes: number; maxOutputTokens: number; requestBytes?: number }) => Promise<void>;
   recordUsage?: (result: Omit<OfficeOpenAIResult, "text">) => Promise<void>;
 } = {}) {
   const transport = options.fetch || fetch;
@@ -38,14 +38,17 @@ export function createOfficeOpenAI(options: {
     const promptBytes = typeof prompt === "string" ? Buffer.byteLength(prompt) : 0;
     if (!promptBytes || !prompt.trim() || promptBytes > 65536) throw new OfficeOpenAIError("invalid_prompt", "El mensaje debe contener texto y no superar 64 KiB.");
     const { key, model, maxOutputTokens } = config();
-    await options.authorize!({ model, promptBytes, maxOutputTokens });
+    // Serialize the fixed request once before authorization. The private byte bound
+    // covers escaping and framing; promptBytes retains the existing token-quota meaning.
+    const requestBody = JSON.stringify({ model, input: prompt, max_output_tokens: maxOutputTokens, service_tier: "default", store: false, tools: [] });
+    await options.authorize!(Object.freeze({ model, promptBytes, maxOutputTokens, requestBytes: Buffer.byteLength(requestBody) }));
     let response: Response;
     let body: any;
     try {
       response = await transport("https://api.openai.com/v1/responses", {
         method: "POST", redirect: "error", signal: AbortSignal.timeout(120000),
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, input: prompt, max_output_tokens: maxOutputTokens, service_tier: "default", store: false, tools: [] }),
+        body: requestBody,
       });
       const reader = response.body?.getReader();
       if (!reader) throw new Error("missing body");

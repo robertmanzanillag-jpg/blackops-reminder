@@ -30,13 +30,13 @@ test("Asistente exact source to tested draft PR charges shared credit once and n
   const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
   const build = createAsistenteFactoryBuild({ ledger, baseBranch, maxFilesPerOrder: 6, maxOutputTokens: 1000, now, maxPolls: 1,
     checks: { workflowId: 7, workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: "isolated", testStep: "test", buildStep: "build", browserStep: "browser" },
-    model: { model: "gpt-4.1-mini-2025-04-14", inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600,
+    model: { apiPrice: { model: "gpt-4.1-mini-2025-04-14", inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600, cachedInputNanoUsdPerToken: 100, cacheWrite30mNanoUsdPerToken: 500, cacheWrite12hNanoUsdPerToken: 800, maxInputTokens:1_049_600, validUntil: "2026-11-20T00:00:00.000Z", evidenceSha256: "a".repeat(64) }, model: "gpt-4.1-mini-2025-04-14", inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600,
       pricingValidUntil: "2026-11-20T00:00:00.000Z", now, maxInputTokens: 1000, request: async (url, init) => {
         modelCalls++; assert.equal(credit.reservations[1].status, "reserved"); assert.equal(credit.reservations[1].consumer, "factory");
         assert.equal(credit.reservations[1].reservedMicroUsd, 20_000); assert.equal(init.signal?.aborted, false);
         if (url.endsWith("/input_tokens")) { calls.push("count"); return json({ object: "response.input_tokens", input_tokens: 100 }); }
         calls.push("model"); const body = JSON.parse(String(init.body)); assert.deepEqual(body.tools, []); assert.equal(body.store, false);
-        return json({ object: "response", model: body.model, status: "completed", usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200 },
+        return json({ object: "response", model: body.model, status: "completed", usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } },
           output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: JSON.stringify({edits:[{path:"server/agent-search.ts",before,after}]}) }] }] });
       } },
     githubRequest: async (url, init) => {

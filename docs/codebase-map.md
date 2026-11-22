@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T10:39:14.143Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-account-quota-nov22`
+Generated: 2026-11-22T10:54:03.381Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-cache-write-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1328 | 1213 | 5018 | 633 | 28841 |
+| 1337 | 1218 | 5034 | 633 | 28901 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 355 | 351 | test:355 |
-| `server` | 297 | 291 | server:297 |
+| `tests` | 357 | 352 | test:357 |
+| `server` | 299 | 292 | server:299 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 151 | 136 | script:151 |
-| `docs` | 83 | 80 | docs:83 |
+| `docs` | 88 | 83 | docs:88 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 48 | 44 | shared:48 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -194,8 +194,10 @@ Package: `rest-express`
 - `tests/developer-health-inventory.test.ts`
 - `tests/dropshipping-ceo.test.ts`
 - `tests/env-loader-core.test.ts`
+- `tests/factory-api-cache-write-coverage.test.ts`
 - `tests/factory-api-invocation.test.ts`
 - `tests/factory-api-request-binding.test.ts`
+- `tests/factory-api-token-cost.test.ts`
 - `tests/factory-office-agents.test.ts`
 - `tests/github-client-security.test.ts`
 - `tests/google-connector.test.ts`

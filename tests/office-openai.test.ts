@@ -47,3 +47,25 @@ test("malformed output is never coerced into verified text", async () => {
   const runner = createOfficeOpenAI({ env, authorize: async () => {}, recordUsage: async () => {}, fetch: (async () => Response.json({ ...result, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: { invalid: true } }] }] })) as typeof fetch });
   await assert.rejects(runner.runOfficeOpenAI("test"), (e: any) => e.code === "invalid_output");
 });
+
+
+test("authorization receives the immutable complete request byte bound and sends the same serialized body", async () => {
+  const prompt = '\"\\\n'.repeat(100) + 'ñ🚀', selectedEnv = {...env};
+  let authorized: {model:string;promptBytes:number;maxOutputTokens:number;requestBytes?:number} | undefined;
+  let sent = "";
+  const runner = createOfficeOpenAI({ env:selectedEnv, authorize:async limits => {
+    authorized = limits;
+    assert.ok(Object.isFrozen(limits));
+    assert.equal(limits.promptBytes,Buffer.byteLength(prompt));
+    selectedEnv.OFFICE_OPENAI_MODEL = "mutated-model";
+  }, recordUsage:async()=>{}, fetch:(async(_url,init)=>{
+    sent = String(init?.body);
+    assert.equal(Buffer.byteLength(sent),authorized?.requestBytes);
+    assert.equal(JSON.parse(sent).model,env.OFFICE_OPENAI_MODEL);
+    assert.equal(JSON.parse(sent).input,prompt);
+    return Response.json(result);
+  }) as typeof fetch });
+  await runner.runOfficeOpenAI(prompt);
+  assert.ok(authorized!.requestBytes! > authorized!.promptBytes);
+  assert.equal(sent,JSON.stringify({model:env.OFFICE_OPENAI_MODEL,input:prompt,max_output_tokens:2048,service_tier:"default",store:false,tools:[]}));
+});

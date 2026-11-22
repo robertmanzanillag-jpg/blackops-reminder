@@ -1,5 +1,5 @@
 import {fixtureFactoryInvocation} from './fixtures/factory-api-budget';
-const factoryPricing=(_provider:unknown,model:string)=>({model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)});
+const factoryPricing=(_provider:unknown,model:string)=>({model,maxInputTokens:1_049_600,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,cachedInputNanoUsdPerToken:100,cacheWrite30mNanoUsdPerToken:500,cacheWrite12hNanoUsdPerToken:1000,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)});
 const createRoutedOpenAI:typeof actualCreateRoutedOpenAI=options=>actualCreateRoutedOpenAI({...options,factoryInvocation:fixtureFactoryInvocation(),factoryPricing});
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -34,7 +34,7 @@ function fakeClients(behaviour: Partial<Record<string, "ok" | "error" | "reject4
       return Promise.resolve({
         id: "c1", model: body.model,
         choices: [{ message: { content: `{"from":"${provider.id}"}` }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 1000, completion_tokens: Math.min(100,body.max_completion_tokens??body.max_tokens??100),prompt_tokens_details:{cached_tokens:0},prompt_cache_hit_tokens:0 },
+        usage: { prompt_tokens: 1000, completion_tokens: Math.min(100,body.max_completion_tokens??body.max_tokens??100),prompt_tokens_details:{cached_tokens:0,cache_write_tokens:0},prompt_cache_hit_tokens:0 },
       });
     };
     return {
@@ -42,7 +42,7 @@ function fakeClients(behaviour: Partial<Record<string, "ok" | "error" | "reject4
       responses: { create: async (body: any) => {
         calls.push({ provider: provider.id, body });
         if ((behaviour[provider.id] ?? "ok") === "error") throw Object.assign(new Error("down"), { status: 500 });
-        return { id:"r1",status:"completed",model: body.model, output_text: "hola", output: [{ type: "message" }], usage: { input_tokens: 2000, output_tokens: 200,input_tokens_details:{cached_tokens:0} } };
+        return { id:"r1",status:"completed",model: body.model, output_text: "hola", output: [{ type: "message" }], usage: { input_tokens: 2000, output_tokens: 200,input_tokens_details:{cached_tokens:0,cache_write_tokens:0} } };
       } },
       audio: { transcriptions: { create: async (body: any) => { calls.push({ provider: provider.id, body }); return { text: "audio" }; } } },
     };
@@ -150,17 +150,16 @@ test("ledger failure: an own-key provider is never called without a reservation"
   assert.equal(calls.length, 0);
 });
 
-test("no own key configured: legacy client is monetary guarded without secondary provider ledger", async () => {
+test("no own key configured: unverified integration holds before dispatch or secondary provider ledger", async () => {
   const ledger = new InMemoryAiProviderLedger();
   const legacyCalls: any[] = [];
-  const legacy: ChatLikeClient = { chat: { completions: { create: async (body: any, opts: any) => { legacyCalls.push({ body, opts }); return {ok:true,id:"legacy",model:body.model,choices:[{finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0}}}; } } } };
+  const legacy: ChatLikeClient = { chat: { completions: { create: async (body: any, opts: any) => { legacyCalls.push({ body, opts }); return {ok:true,id:"legacy",model:body.model,choices:[{finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0,cache_write_tokens:0}}}; } } } };
   const client = createRoutedOpenAI({ tier: "repetitive", label: "t", env: { AI_INTEGRATIONS_OPENAI_API_KEY: "replit-key" }, ledger, legacy: () => legacy,
     makeClient: () => { throw new Error("must not build provider clients"); } });
   assert.equal(client.routed, false);
   const opts = { timeout: 1 };
-  assert.equal((await client.chat.completions.create(chatBody, opts)).ok,true);
-  assert.deepEqual(legacyCalls[0].body, chatBody);assert.notEqual(legacyCalls[0].body,chatBody);
-  assert.equal(legacyCalls[0].opts.maxRetries,0);assert.ok(legacyCalls[0].opts.signal instanceof AbortSignal);
+  await assert.rejects(client.chat.completions.create(chatBody, opts),/INTEGRATION_PROTOCOL_UNVERIFIED/);
+  assert.equal(legacyCalls.length,0);
   assert.equal(ledger.rows.length, 0);
 });
 
@@ -272,7 +271,7 @@ test("BlackOps: router is OFF unless AI_ROUTER_ENABLED=true, even with OPENAI_AP
   assert.equal(deepSeekRouted({ ...env, AI_ROUTER_ENABLED: "true" }), true);
   const legacyCalls: any[] = [];
   const client = createRoutedOpenAI({ tier: "standard", label: "t", env, ledger: new InMemoryAiProviderLedger(),
-    legacy: () => ({ chat: { completions: { create: async (b: any) => { legacyCalls.push(b); return {ok:1,id:"legacy",model:b.model,choices:[{finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0}}}; } } } }),
+    legacy: () => ({ chat: { completions: { create: async (b: any) => { legacyCalls.push(b); return {ok:1,id:"legacy",model:b.model,choices:[{finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0,cache_write_tokens:0}}}; } } } }),
     makeClient: () => { throw new Error("must not build provider clients"); } });
   await client.chat.completions.create(chatBody);
   assert.equal(legacyCalls.length, 1);
