@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {reviewedDispatchMode,validateReviewedDispatch,selectReviewedHourSlot,reviewedDeliverySlot,reviewedHourWindowDueRecords} from '../shared/clippers-reviewed-dispatch.mjs';
+import {validateReviewedDerivativeManifest,reviewedDerivativeDigest,approveReviewedDerivative,reviewedDerivativeGate} from '../shared/clippers-reviewed-derivative.mjs';
+import {derivativeFixture,DERIVATIVE_NOW} from './helpers/reviewed-derivative-fixture.mjs';
+const start='2026-11-22T15:00:00.000Z',end='2026-11-22T16:00:00.000Z',now=Date.parse('2026-11-22T15:16:29.000Z');
+function fixture(){const f=derivativeFixture(DERIVATIVE_NOW),m=f.manifest;m.scheduledAt=start;m.windowStart=start;m.windowEnd=end;m.expiresAt=end;m.dispatch={mode:'owner_hour_window',timezone:'America/New_York',startAt:start,endAt:end};f.proposal.manifestSha256=reviewedDerivativeDigest(m);const r=approveReviewedDerivative(f.proposal,{principal:'fixture-owner',operatorLabel:'TEST ONLY',now,expectedDigest:f.proposal.manifestSha256,attestRights:true,attestExternalQa:true});return{m,r};}
+test('explicit approved NY hour remains valid after nominal start, selects future exact minute after readiness and binds delivery separately',()=>{
+ const{m,r}=fixture();assert.equal(validateReviewedDerivativeManifest(m,now),m);assert.equal(reviewedDispatchMode(m),'owner_hour_window');assert.equal(selectReviewedHourSlot(m,now),'2026-11-22T15:20:00.000Z');assert.throws(()=>reviewedDeliverySlot(r),/resolved_slot_unverified/);
+ r.delivery={resolvedScheduledAt:selectReviewedHourSlot(m,now),dispatchManifestSha256:r.manifestSha256};assert.equal(reviewedDeliverySlot(r),r.delivery.resolvedScheduledAt);assert.equal(reviewedDerivativeGate(r,{owner:'fixture-owner',now,scheduledAt:r.delivery.resolvedScheduledAt}),null);assert.equal(reviewedDerivativeGate(r,{owner:'fixture-owner',now,scheduledAt:start}),'derivative_slot_changed');
+ r.delivery.dispatchManifestSha256='a'.repeat(64);assert.throws(()=>reviewedDeliverySlot(r),/resolved_slot_unverified/);
+});
+test('past/future/missed windows, outside authority, extra fields, shifted anchor and DST repeated hours fail without inventing another slot',()=>{
+ const{m}=fixture();assert.throws(()=>selectReviewedHourSlot(m,Date.parse(start)-1),/not_due/);assert.throws(()=>selectReviewedHourSlot(m,Date.parse(end)-180000),/missed/);assert.throws(()=>validateReviewedDispatch(m,Date.parse(end)),/invalid/);
+ for(const change of [x=>x.dispatch.timezone='UTC',x=>x.dispatch.endAt='2026-11-22T17:00:00.000Z',x=>x.dispatch.startAt='2026-11-22T15:01:00.000Z',x=>x.dispatch.extra=true,x=>x.scheduledAt='2026-11-22T15:01:00.000Z',x=>x.expiresAt='2026-11-22T15:59:00.000Z']){const c=structuredClone(m);change(c);assert.throws(()=>validateReviewedDerivativeManifest(c,now));}
+ for(const s of ['2026-11-01T05:00:00.000Z','2026-11-01T06:00:00.000Z']){const c=structuredClone(m);c.scheduledAt=s;c.dispatch.startAt=s;c.dispatch.endAt=new Date(Date.parse(s)+3600000).toISOString();c.windowStart=s;c.windowEnd=c.expiresAt=c.dispatch.endAt;assert.throws(()=>validateReviewedDispatch(c,Date.parse(s)),/invalid/);}
+ const spring=structuredClone(m);spring.scheduledAt=spring.dispatch.startAt=spring.windowStart='2026-03-08T07:00:00.000Z';spring.dispatch.endAt=spring.windowEnd=spring.expiresAt='2026-03-08T08:00:00.000Z';assert.ok(validateReviewedDispatch(spring,Date.parse(spring.scheduledAt)),'unambiguous 03:00 after DST jump is valid');
+});
+test('due-check excludes proposed/revoked/exact, unknown/staged/known writes and future windows; exact approval is unchanged',()=>{
+ const{r}=fixture(),records={due:r};for(const[status,d]of Object.entries({unknown:{writeStartedAt:start,status:'verification_pending'},staged:{status:'pending_stage',asset:{id:1}},upload:{stageIntent:{name:'unconfirmed'}},scheduled:{status:'scheduled'},unrecognized:{status:'mystery'}})){const c=structuredClone(r);c.delivery=d;records[status]=c;}
+ const proposed=structuredClone(r);proposed.status='proposed';records.proposed=proposed;const exact=derivativeFixture().approved();records.exact=exact;assert.deepEqual(reviewedHourWindowDueRecords({reviewedDerivatives:{records}},{now}),['due']);assert.deepEqual(reviewedHourWindowDueRecords({reviewedDerivatives:{records}},{now:Date.parse(start)-1}),[]);assert.equal(reviewedDispatchMode(exact.manifest),'exact');assert.equal(reviewedDeliverySlot(exact),exact.manifest.scheduledAt);
+});

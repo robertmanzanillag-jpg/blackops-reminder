@@ -1,5 +1,6 @@
 // A manually reviewed final asset is not permission to download its raw source.
 // Only authenticated owner admission may create the approval wrapper below.
+import { validateReviewedDispatch,reviewedDeliverySlot } from './clippers-reviewed-dispatch.mjs';
 import { validateDerivativeAudioReplacement } from './clippers-derivative-audio.mjs';
 import { createHash } from 'node:crypto';
 import { findDestination, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
@@ -43,7 +44,7 @@ export function approvedNativeMediaUrl(value) {
 /** Structural validation only. A valid JSON document is still an UNAPPROVED proposal. */
 export function validateReviewedDerivativeManifest(manifest, now = Date.now()) {
   jsonShape(manifest);
-  object(manifest, ['schemaVersion', 'contentClass', 'id', 'source', 'transform', 'media', 'caption', 'captionSha256', 'qa', 'rights', 'destination', 'scheduledAt', 'windowStart', 'windowEnd', 'expiresAt', 'language', 'thirdPartyCommercial', 'baseline', 'audioReplacement']);
+  object(manifest, ['schemaVersion', 'contentClass', 'id', 'source', 'transform', 'media', 'caption', 'captionSha256', 'qa', 'rights', 'destination', 'scheduledAt', 'windowStart', 'windowEnd', 'expiresAt', 'language', 'thirdPartyCommercial', 'baseline', 'audioReplacement', 'dispatch']);
   if (manifest.schemaVersion !== 1 || manifest.contentClass !== 'reviewed_derivative' || !ID.test(manifest.id ?? '') || !['en', 'es'].includes(manifest.language) || typeof manifest.thirdPartyCommercial !== 'boolean') fail('derivative_manifest_invalid');
   const { source, transform, media, qa, rights } = manifest;
   object(source, ['kind', 'candidateId', 'creatorKey', 'handle', 'url', 'artifactSha256', 'publishedAt', 'startSeconds', 'endSeconds', 'vodId', 'vodOffsetSeconds', 'vodAnchor']);
@@ -90,14 +91,15 @@ export function validateReviewedDerivativeManifest(manifest, now = Date.now()) {
   for(const time of [manifest.scheduledAt,manifest.windowStart,manifest.windowEnd,manifest.expiresAt])if(!Number.isFinite(stamp(time))||new Date(stamp(time)).toISOString()!==time)fail('derivative_time_not_canonical_utc');
   if(manifest.thirdPartyCommercial===true&&manifest.destination.network!=='tiktok')fail('derivative_commercial_network_unsupported');
   const sourceAt = stamp(source.publishedAt), renderedAt = stamp(transform.renderedAt), checkedAt = stamp(qa.checkedAt);
+  const dispatchWindow=validateReviewedDispatch(manifest,now);
   const from = stamp(rights.validFrom), slot = stamp(manifest.scheduledAt), start = stamp(manifest.windowStart), end = stamp(manifest.windowEnd), expiry = stamp(manifest.expiresAt);
-  if (![sourceAt, renderedAt, checkedAt, from, slot, start, end, expiry, now].every(Number.isFinite) || sourceAt > renderedAt || renderedAt > checkedAt || checkedAt > now || renderedAt - sourceAt > 72 * 3600000 || from > now || slot <= now || slot < start || slot >= end || slot >= expiry || expiry <= now || end > expiry || (rights.licenseTerm.kind === 'fixed_until' && expiry > stamp(rights.licenseTerm.notAfter))) fail('derivative_time_scope_invalid');
+  if (![sourceAt, renderedAt, checkedAt, from, slot, start, end, expiry, now].every(Number.isFinite) || sourceAt > renderedAt || renderedAt > checkedAt || checkedAt > now || renderedAt - sourceAt > 72 * 3600000 || from > now || (!dispatchWindow&&slot <= now) || slot < start || slot >= end || slot >= expiry || expiry <= now || end > expiry || (rights.licenseTerm.kind === 'fixed_until' && expiry > stamp(rights.licenseTerm.notAfter))) fail('derivative_time_scope_invalid');
   if (media.audio === 'licensed_instrumental_only') validateDerivativeAudioReplacement(manifest.audioReplacement, {finalSha256:media.sha256,caption:manifest.caption,captionSha256:manifest.captionSha256,durationSeconds:media.durationSeconds,maker:qa.maker,checker:qa.checker,now});
   if(rights.licenseTerm.kind==='conditional_live') {
     if(manifest.destination.network!=='tiktok'||manifest.thirdPartyCommercial!==true||!/#ad(?:\s|$)/i.test(manifest.caption)) fail('derivative_campaign_disclosure_required');
     const m=rights.membership;object(m,['campaignId','joinedObservedAt','evidenceReference','evidenceSha256','leaseExpiresAt','operationalConditionAttested']);
     const observed=stamp(m.joinedObservedAt),lease=stamp(m.leaseExpiresAt);
-    if(!/^[a-f0-9-]{36}$/.test(rights.licenseTerm.campaignId??'')||m.campaignId!==rights.licenseTerm.campaignId||!text(m.evidenceReference)||!SHA.test(m.evidenceSha256??'')||m.operationalConditionAttested!==true||!Number.isFinite(observed)||observed>now||now-observed>24*3600000||!Number.isFinite(lease)||lease<=now||lease>observed+24*3600000||slot>=lease||expiry>lease) fail('derivative_membership_lease_unverified');
+    if(!/^[a-f0-9-]{36}$/.test(rights.licenseTerm.campaignId??'')||m.campaignId!==rights.licenseTerm.campaignId||!text(m.evidenceReference)||!SHA.test(m.evidenceSha256??'')||m.operationalConditionAttested!==true||!Number.isFinite(observed)||observed>now||now-observed>24*3600000||!Number.isFinite(lease)||lease<=now||lease>observed+24*3600000||slot>=lease||expiry>lease||(dispatchWindow&&dispatchWindow.end>lease)) fail('derivative_membership_lease_unverified');
   } else if(rights.membership!==undefined||rights.licenseTerm.campaignId!==undefined) fail('derivative_license_term_invalid');
   return manifest;
 }
@@ -117,7 +119,7 @@ export function reviewedDerivativeGate(record, { owner, now = Date.now(), destin
     const digest = reviewedDerivativeDigest(record.manifest);
     if (record.manifestSha256 !== digest || record.approval.manifestSha256 !== digest || stamp(record.approval.approvedAt) < stamp(record.manifest.qa.checkedAt)) return 'derivative_approval_changed';
     if (destination && destinationKey(destination) !== destinationKey(record.manifest.destination)) return 'derivative_destination_changed';
-    if (scheduledAt && scheduledAt !== record.manifest.scheduledAt) return 'derivative_slot_changed';
+    if (scheduledAt && scheduledAt !== reviewedDeliverySlot(record)) return 'derivative_slot_changed';
     if (record.manifest.rights.licenseTerm.kind === 'conditional_live' && (!liveEligibility || liveEligibility.allowed !== true || liveEligibility.verifierId !== record.manifest.rights.licenseTerm.verifierId || liveEligibility.manifestSha256 !== digest || !Number.isFinite(stamp(liveEligibility.checkedAt)) || stamp(liveEligibility.checkedAt) > now || now - stamp(liveEligibility.checkedAt) > 30000)) return 'derivative_live_eligibility_unverified';
     return null;
   } catch (error) { return error.message; }
