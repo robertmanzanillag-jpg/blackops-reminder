@@ -85,6 +85,7 @@ export function validateReviewedDerivativeManifest(manifest, now = Date.now()) {
   const destination = findDestination(manifest.destination);
   if (!destination || destination.account !== manifest.destination.account || destinationKey(destination) !== destinationKey(manifest.destination)) fail('derivative_destination_invalid');
   for(const time of [manifest.scheduledAt,manifest.windowStart,manifest.windowEnd,manifest.expiresAt])if(!Number.isFinite(stamp(time))||new Date(stamp(time)).toISOString()!==time)fail('derivative_time_not_canonical_utc');
+  if(manifest.thirdPartyCommercial===true&&manifest.destination.network!=='tiktok')fail('derivative_commercial_network_unsupported');
   const sourceAt = stamp(source.publishedAt), renderedAt = stamp(transform.renderedAt), checkedAt = stamp(qa.checkedAt);
   const from = stamp(rights.validFrom), slot = stamp(manifest.scheduledAt), start = stamp(manifest.windowStart), end = stamp(manifest.windowEnd), expiry = stamp(manifest.expiresAt);
   if (![sourceAt, renderedAt, checkedAt, from, slot, start, end, expiry, now].every(Number.isFinite) || sourceAt > renderedAt || renderedAt > checkedAt || checkedAt > now || renderedAt - sourceAt > 72 * 3600000 || from > now || slot <= now || slot < start || slot >= end || slot >= expiry || expiry <= now || end > expiry || (rights.licenseTerm.kind === 'fixed_until' && expiry > stamp(rights.licenseTerm.notAfter))) fail('derivative_time_scope_invalid');

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-22T12:07:22.308Z
+Generated: 2026-11-22T12:16:27.193Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1362 | 1242 | 5146 | 640 | 29253 |
+| 1362 | 1242 | 5146 | 640 | 29254 |
 
 ## Entrypoints
 - `client/src/App.tsx`

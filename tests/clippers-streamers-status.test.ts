@@ -202,3 +202,8 @@ test('self-heal publish orders respect the max-open-orders cap', () => {
   const one = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now, maxPerDay: 5, maxOpenOrders: 1, extraAudits: audits });
   assert.equal(one.created.length, 1);
 });
+
+test('reviewed final-file drafts remain visibly nonpublishing without changing legacy raw status rows',()=>{
+ const raw=stateWith(null,{cloudPublish:{version:1,clips:{},posts:[{id:'reviewed-draft',candidateId:'twitch-vod:123:physical',destinationKey:'6431685:tiktok:streamersus',status:'scheduled',draft:true,origin:'owner_authorized_external_review',metricoolId:'777'}],holds:{},heldQueue:[]}});
+ const view=streamerStatusView(raw,AT);assert.equal(view.cloudPublish?.posts[0].draft,true);assert.equal(view.cloudPublish?.posts[0].origin,'owner_authorized_external_review');
+});

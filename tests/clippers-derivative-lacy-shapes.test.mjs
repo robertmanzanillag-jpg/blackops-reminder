@@ -57,5 +57,6 @@ test('all five actual bounded-provenance shapes dispatch sequentially through on
 test('bounded parent uncertainty is conservative across different physical files while correlated same-file intervals stay disjoint',()=>{
  const a={candidateId:'clip-a',destinationKey:'one',physicalSource:{quality:'verified_physical_file',sha256:'a'.repeat(64),start:0,end:60},segment:{key:'twitch-vod:1',start:99.5,end:160.5}};
  const q={candidateId:'clip-b',destinationKey:'two',physicalSource:{quality:'verified_physical_file',sha256:'b'.repeat(64),start:0,end:10},segment:{key:'twitch-vod:1',start:160.3,end:171.3}};
+ assert.ok(mediaConflict([a],{...q,segment:{key:'twitch-vod:1',start:165}}),'a legacy end-like anchor must not bypass the bounded source interval');
  assert.ok(mediaConflict([a],q));assert.equal(mediaConflict([a],{...q,segment:{key:'twitch-vod:1',start:160.5,end:171.5}}),null);
 });

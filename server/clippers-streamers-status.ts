@@ -77,7 +77,7 @@ export function cloudPublishSummary(c: any) {
   return {
     lastRun: c.lastRun ? { at: c.lastRun.at, status: c.lastRun.status, counts: c.lastRun.counts, heldReasons: c.lastRun.heldReasons, errors: c.lastRun.errors } : null,
     posts: c.posts.slice(-30).reverse().map((p: any) => ({ id: p.id, candidateId: p.candidateId, creatorKey: p.creatorKey, destination: p.destinationKey, scheduledAt: p.scheduledAt,
-      status: p.status, draft:p.draft===true, origin:p.origin??null, metricoolId: p.metricoolId ?? null, hookVariant: p.hookVariant, views: p.observation?.views ?? null })),
+      status: p.status, ...(p.origin==='owner_authorized_external_review'?{draft:p.draft===true,origin:p.origin}:{}), metricoolId: p.metricoolId ?? null, hookVariant: p.hookVariant, views: p.observation?.views ?? null })),
     ownerHolds: ownerHoldsOf(c),
     learning: c.learning ? { evaluatedAt: c.learning.evaluatedAt, samples: c.learning.samples, hookPreference: c.learning.hookPreference, creatorBoost: c.learning.creatorBoost } : null,
     growth: c.growth?.evaluatedAt ? { evaluatedAt: c.growth.evaluatedAt, accounts: c.growth.accounts ?? {}, decisions: growthDecisionLines(c.growth, 30) } : null,

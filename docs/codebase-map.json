@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-22T12:07:22.308Z",
+  "generatedAt": "2026-11-22T12:16:27.193Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22",
   "packageName": "rest-express",
   "scripts": {
@@ -129,23 +129,9 @@
     "filesIndexed": 1242,
     "imports": 5146,
     "routes": 640,
-    "symbols": 29253
+    "symbols": 29254
   },
   "directories": {
-    "docs": {
-      "files": 88,
-      "indexed": 85,
-      "kinds": {
-        "docs": 88
-      }
-    },
-    "script": {
-      "files": 155,
-      "indexed": 139,
-      "kinds": {
-        "script": 155
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -224,12 +210,26 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 88,
+      "indexed": 85,
+      "kinds": {
+        "docs": 88
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 155,
+      "indexed": 139,
+      "kinds": {
+        "script": 155
       }
     },
     "script/office-api-budget-v6": {
@@ -37630,6 +37630,7 @@
         "STOP",
         "WEEKDAY",
         "WEEKEND_FACTOR",
+        "ae",
         "at",
         "autoPublishAllowed",
         "byCreator",

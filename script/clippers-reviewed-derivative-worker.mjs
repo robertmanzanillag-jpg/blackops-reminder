@@ -56,7 +56,7 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
   // A verified native copy after an owner reconciliation can retire its controlled staging, never an unknown write.
   for(const id of ids){const d=initial.reviewedDerivatives.records[id]?.delivery;if(d?.asset&&d.writeStartedAt&&d.copyVerifiedAt&&['scheduled','held_nonpublishing_draft'].includes(d.status)&&approvedNativeMediaUrl(d.confirmedMediaUrl)&&d.confirmedMediaUrl!==d.asset.url){try{if(await stager.remove(d.asset.id)){report.assetsRemoved++;await update(s=>{const current=s.reviewedDerivatives.records[id]?.delivery;if(current?.id===d.id&&current.asset?.id===d.asset.id)current.asset=null;});}}catch{report.held.push('derivative_copied_staging_cleanup_pending');}}}
   // Fence unused staging transactionally before any deletion; a competing writer must see cleanup_fenced.
-  for(const id of ids){const d=initial.reviewedDerivatives.records[id]?.delivery;if(!d||d.writeStartedAt||(!d.asset&&!d.stageIntent&&d.status!=='pending_stage'))continue;
+  for(const id of ids){const d=initial.reviewedDerivatives.records[id]?.delivery;if(!d||d.writeStartedAt||(!d.asset&&!d.stageIntent&&!['pending_stage','cleanup_fenced'].includes(d.status)))continue;
     try{
       const ticket=await update(s=>{const r=s.reviewedDerivatives.records[id],fresh=r?.delivery;if(fresh?.id!==d.id||fresh.writeStartedAt)return null;
         let denied=null;try{gate(s,id,null);}catch(e){denied=e.message;}
@@ -68,18 +68,18 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
       if(!a&&ticket.stageIntent){if(typeof stager.findAsset!=='function')throw Error('derivative_staging_recovery_unavailable');a=await stager.findAsset(ticket.stageIntent.name);}
       if(a){if(!await stager.remove(a.id))throw Error('derivative_staging_cleanup_pending');report.assetsRemoved++;}
       // An active upload can still return an asset: keep its intent until its lease expires or its worker cleans it.
-      if(!a&&ticket.stageIntent&&Date.parse(ticket.leaseUntil)>clock())continue;
-      await update((s,c)=>{const r=s.reviewedDerivatives.records[id];if(r.delivery?.id===ticket.id&&r.delivery.cleanupToken===ticket.cleanupToken&&!r.delivery.writeStartedAt){r.delivery={...r.delivery,status:'held_before_write',asset:null,stageIntent:null,reason:'derivative_unused_stage_reconciled'};c.posts=c.posts.filter(p=>p.id!==ticket.id);c.reviewedDerivativeClaims=(c.reviewedDerivativeClaims??[]).filter(p=>p.claimId!==ticket.id);}});
+      if(!a&&ticket.stageIntent){report.held.push('derivative_staging_upload_outcome_unknown');continue;}
+      await update((s,c)=>{const r=s.reviewedDerivatives.records[id];if(r.delivery?.id===ticket.id&&r.delivery.cleanupToken===ticket.cleanupToken&&r.delivery.status==='cleanup_fenced'&&(r.delivery.asset?.id??null)===(ticket.asset?.id??null)&&(r.delivery.stageIntent?.name??null)===(ticket.stageIntent?.name??null)&&!r.delivery.writeStartedAt){r.delivery={...r.delivery,status:'held_before_write',asset:null,stageIntent:null,reason:'derivative_unused_stage_reconciled'};c.posts=c.posts.filter(p=>p.id!==ticket.id);c.reviewedDerivativeClaims=(c.reviewedDerivativeClaims??[]).filter(p=>p.claimId!==ticket.id);}});
     }catch{report.held.push('derivative_staging_cleanup_pending');}
   }
   const refreshed=await read();
-  const commercialPaused=Object.values(refreshed.reviewedDerivatives.records).some(r=>r.delivery?.reason==='derivative_commercial_disclosure_unverified'&&r.delivery?.writeStartedAt&&!r.delivery?.disclosureReconciledAt);
+  const commercialPaused=Object.values(refreshed.reviewedDerivatives.records).some(r=>r.manifest?.thirdPartyCommercial===true&&r.delivery?.writeStartedAt&&!r.delivery?.disclosureReconciledAt&&!['scheduled','held_nonpublishing_draft'].includes(r.delivery?.status));
   if(commercialPaused)report.held.push('derivative_commercial_lane_reconciliation_required');
   const runIds=ids.filter(id=>{const r=refreshed.reviewedDerivatives.records[id],d=r.delivery;if(commercialPaused&&r.manifest.thirdPartyCommercial===true)return false;if(r.status!=='approved'||d?.writeStartedAt||d?.asset||d?.stageIntent||['pending_stage','pending_write','verification_pending','scheduled','held_staging_reconciliation','cleanup_fenced'].includes(d?.status))return false;
     const slot=Date.parse(r.manifest.scheduledAt);if(slot<=clock())return false;
     if(r.manifest.rights.licenseTerm.kind==='conditional_live'&&(slot-clock()<60000||slot-clock()>300000)){report.held.push('derivative_conditional_just_in_time_required');return false;}return true;
   }).sort((a,b)=>Date.parse(refreshed.reviewedDerivatives.records[a].manifest.scheduledAt)-Date.parse(refreshed.reviewedDerivatives.records[b].manifest.scheduledAt)).slice(0,Math.max(0,Math.min(8,config.clipsPerRun??4)));
-  for(const id of runIds){let sealed,track,asset,claimId,stageIntent,uploadStarted=false,writeStarted=false,confirmed=false;
+  for(const id of runIds){const wasCommercial=initial.reviewedDerivatives.records[id]?.manifest.thirdPartyCommercial===true;let sealed,track,asset,claimId,stageIntent,uploadStarted=false,writeStarted=false,confirmed=false;
     try{
       let state=await read(),record=state.reviewedDerivatives.records[id];
       if(record.status!=='approved')continue;
@@ -122,11 +122,11 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
       if(!known){report.held.push(disclosureOk?'derivative_provider_ack_unverified':'derivative_commercial_disclosure_unverified');report.verificationPending++;break;}
       if(known){report.scheduled++;if(ack.mediaUrl!==asset.url){await verifyReceipt({mediaUrl:ack.mediaUrl,mediaSha256:m.media.sha256,byteLength:m.media.byteLength},{fetch:fetchImpl});if(await stager.remove(asset.id)){report.assetsRemoved++;await update(s=>{s.reviewedDerivatives.records[id].delivery.asset=null;});}}}
     }catch(e){report.held.push(reason(e));
-      if(claimId){if(writeStarted&&!confirmed){report.verificationPending++;await update((s,c)=>{const r=s.reviewedDerivatives.records[id];r.delivery.status='verification_pending';const p=c.posts.find(p=>p.id===claimId);if(p)p.status='verification_pending';});}
+      if(claimId){if(writeStarted&&!confirmed){report.verificationPending++;await update((s,c)=>{const r=s.reviewedDerivatives.records[id];r.delivery.status='verification_pending';const p=c.posts.find(p=>p.id===claimId);if(p)p.status='verification_pending';});if(wasCommercial)break;}
         else if(!writeStarted){
           // A transaction may commit and then lose its response. Inspect durable state before deleting anything.
           const durable=(await read()).reviewedDerivatives.records[id]?.delivery;
-          if(durable?.writeStartedAt){report.verificationPending++;continue;}
+          if(durable?.writeStartedAt){report.verificationPending++;if(wasCommercial)break;continue;}
           let removed=!uploadStarted;
           try{if(!asset&&uploadStarted&&typeof stager.findAsset==='function')asset=await stager.findAsset(stageIntent.name);if(asset)removed=await stager.remove(asset.id);}catch{}
           await update((s,c)=>{const r=s.reviewedDerivatives.records[id];if(r.delivery?.id===claimId&&!r.delivery.writeStartedAt){r.delivery={...r.delivery,status:removed?'held_before_write':'held_staging_reconciliation',reason:reason(e),asset:removed?null:asset,stageIntent:removed?null:stageIntent};if(removed){c.posts=c.posts.filter(p=>p.id!==claimId);c.reviewedDerivativeClaims=(c.reviewedDerivativeClaims??[]).filter(p=>p.claimId!==claimId);}}});}}

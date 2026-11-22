@@ -77,7 +77,7 @@ test('distinct concurrent pipelines reserve per-network hours and active quota; 
 });
 
 test('finished or unknown first records never starve a later due record beyond clipsPerRun',async()=>{
- const f=setup();const fifth=f.state.reviewedDerivatives.records['derivative-fixture'];const records={};for(let i=0;i<4;i++){const r=structuredClone(fifth);r.manifest.id='earlier-'+i;r.delivery={id:'prior-'+i,status:i===0?'verification_pending':'scheduled',writeStartedAt:new Date(NOW-86400000).toISOString()};records[r.manifest.id]=r;}records['derivative-fixture']=fifth;f.state.reviewedDerivatives.records=records;f.args.config.clipsPerRun=4;
+ const f=setup();const fifth=f.state.reviewedDerivatives.records['derivative-fixture'];const records={};for(let i=0;i<4;i++){const r=structuredClone(fifth);r.manifest.id='earlier-'+i;r.manifest.thirdPartyCommercial=false;r.delivery={id:'prior-'+i,status:i===0?'verification_pending':'scheduled',writeStartedAt:new Date(NOW-86400000).toISOString()};records[r.manifest.id]=r;}records['derivative-fixture']=fifth;f.state.reviewedDerivatives.records=records;f.args.config.clipsPerRun=4;
  const report=await runReviewedDerivatives(f.args);assert.equal(report.scheduled,1);assert.equal(f.calls.writes,1);
 });
 
@@ -104,7 +104,7 @@ test('cleanup rechecks/fences durable state before deletion, preserving a concur
  await runReviewedDerivatives(f.args);assert.equal(f.calls.removals,0);assert.equal(f.state.cloudPublish.posts[0].status,'pending_write');assert.equal(f.state.cloudPublish.reviewedDerivativeClaims.length,1);
 });
 test('lease-expired claim-before-intent crash releases only the provably unused reservation, and cleanup status fences before delete',async()=>{
- for(const hasAsset of [false,true]){const f=setup();f.record.delivery={id:'crashed-claim',status:'pending_stage',leaseUntil:new Date(NOW-1).toISOString(),...(hasAsset?{asset:{id:91,url:'https://github.com/fixture/old.mp4'}}:{})};f.state.cloudPublish={version:1,clips:{},posts:[{id:'crashed-claim',status:'pending_stage',candidateId:f.manifest.source.candidateId,destinationKey:destinationKey(f.manifest.destination)}],holds:{},heldQueue:[],reviewedDerivativeClaims:[{claimId:'crashed-claim',candidateId:f.manifest.source.candidateId}]};f.args.config.clipsPerRun=0;
+ for(const hasAsset of [false,true])for(const previousStatus of ['pending_stage','cleanup_fenced']){const f=setup();f.record.delivery={id:'crashed-claim',status:previousStatus,leaseUntil:new Date(NOW-1).toISOString(),...(hasAsset?{asset:{id:91,url:'https://github.com/fixture/old.mp4'}}:{})};f.state.cloudPublish={version:1,clips:{},posts:[{id:'crashed-claim',status:'pending_stage',candidateId:f.manifest.source.candidateId,destinationKey:destinationKey(f.manifest.destination)}],holds:{},heldQueue:[],reviewedDerivativeClaims:[{claimId:'crashed-claim',candidateId:f.manifest.source.candidateId}]};f.args.config.clipsPerRun=0;
  f.args.stager.remove=async()=>{assert.equal(f.state.reviewedDerivatives.records['derivative-fixture'].delivery.status,'cleanup_fenced');return true;};await runReviewedDerivatives(f.args);assert.equal(f.state.cloudPublish.posts.length,0);assert.equal(f.state.cloudPublish.reviewedDerivativeClaims.length,0);assert.equal(f.state.reviewedDerivatives.records['derivative-fixture'].delivery.status,'held_before_write');}
 });
 
@@ -119,4 +119,13 @@ test('missing paid-disclosure readback retains exact UUID/staging/source reserva
 test('persistent commercial pause leaves an independently authorized noncommercial derivative eligible',async()=>{
  const f=setup();f.state.reviewedDerivatives.records['old-commercial']=structuredClone(f.record);f.state.reviewedDerivatives.records['old-commercial'].delivery={id:'prior-paid',status:'verification_pending',writeStartedAt:new Date(NOW).toISOString(),reason:'derivative_commercial_disclosure_unverified'};
  const m=f.manifest;m.thirdPartyCommercial=false;f.record.manifestSha256=reviewedDerivativeDigest(m);f.record.approval.manifestSha256=f.record.manifestSha256;const r=await runReviewedDerivatives(f.args);assert.equal(r.scheduled,1);assert.equal(f.calls.writes,1);assert.ok(r.held.includes('derivative_commercial_lane_reconciliation_required'));
+});
+
+test('commercial provider timeout after write durably pauses later paid runs even without an ACK reason or known UUID',async()=>{
+ const f=setup({schedule:async(_d,p,_s,calls)=>{await p.beforeWrite();calls.writes++;throw Error('provider_timeout_after_write');}});const next=structuredClone(f.record);next.manifest.id='later-paid';next.manifest.scheduledAt=new Date(NOW+4*3600000).toISOString();next.manifest.windowEnd=new Date(NOW+5*3600000).toISOString();next.manifestSha256=reviewedDerivativeDigest(next.manifest);next.approval.manifestSha256=next.manifestSha256;f.state.reviewedDerivatives.records[next.manifest.id]=next;
+ let r=await runReviewedDerivatives(f.args);assert.equal(f.calls.writes,1);assert.equal(f.calls.loads,1);assert.equal(r.verificationPending,1);r=await runReviewedDerivatives(f.args);assert.equal(f.calls.writes,1);assert.equal(f.calls.loads,1);assert.ok(r.held.includes('derivative_commercial_lane_reconciliation_required'));
+});
+test('cleanup cannot overwrite a newly discovered upload asset reported by the original worker catch',async()=>{
+ const f=setup();f.record.delivery={id:'old-claim',status:'pending_stage',asset:{id:81,url:'https://github.com/fixture/old.mp4'},stageIntent:{name:'rdv-old-claim.mp4'},leaseUntil:new Date(NOW-1).toISOString()};f.state.cloudPublish={version:1,clips:{},posts:[{id:'old-claim',status:'pending_stage'}],holds:{},heldQueue:[],reviewedDerivativeClaims:[{claimId:'old-claim'}]};f.args.config.clipsPerRun=0;
+ f.args.stager.remove=async id=>{assert.equal(id,81);const d=f.state.reviewedDerivatives.records['derivative-fixture'].delivery;d.status='held_staging_reconciliation';d.asset={id:99,url:'https://github.com/fixture/late-upload.mp4'};return true;};await runReviewedDerivatives(f.args);const d=f.state.reviewedDerivatives.records['derivative-fixture'].delivery;assert.equal(d.asset.id,99);assert.equal(d.status,'held_staging_reconciliation');assert.equal(f.state.cloudPublish.reviewedDerivativeClaims.length,1);
 });
