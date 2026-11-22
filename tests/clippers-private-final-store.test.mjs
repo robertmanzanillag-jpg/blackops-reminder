@@ -73,3 +73,9 @@ test('malformed legacy external-delivery markers cannot become proof of unused p
   const store=memory(),bytes=Buffer.alloc(1536,0x49),r=recordFor(bytes);await upload(store,r,bytes);r.status='revoked';r.delivery=delivery;await register(store,[r]);assert.equal((await cleanupPrivateFinals({store,owner:'fixture-owner',now:NOW})).retired,0,JSON.stringify(delivery));assert.equal((await privateFinalStatus({store,owner:'fixture-owner',record:r})).ready,true);
  }
 });
+
+test('a reseal reservation lost before replacing older purged metadata recovers only its new unused epoch and preserves prior history',async()=>{
+ const store=memory(),bytes=Buffer.alloc(1536,0x50),old=recordFor(bytes,'old-cached-copy');await upload(store,old,bytes);old.status='revoked';await register(store,[old]);assert.equal((await cleanupPrivateFinals({store,owner:'fixture-owner',now:NOW})).retired,1);
+ const next=recordFor(bytes,'new-unfinished-copy'),original=store.transact;let failOnce=true;store.transact=async(k,fn)=>{if(failOnce&&k.endsWith(':meta')){failOnce=false;throw Error('new_meta_write_lost');}return original(k,fn);};await assert.rejects(reservePrivateFinal({store,owner:'fixture-owner',record:next,now:NOW}),/new_meta_write_lost/);next.status='revoked';await register(store,[old,next]);
+ const result=await cleanupPrivateFinals({store,owner:'fixture-owner',now:NOW+1});assert.equal(result.retired,1);assert.equal(result.bytesReclaimed,bytes.length);const status=await privateFinalStatus({store,owner:'fixture-owner',record:next});assert.equal(status.ownerUsageBytes,0);assert.equal(status.status,'purged');const meta=JSON.parse([...store.data.entries()].find(([k])=>k.endsWith(':meta'))[1]);assert.equal(meta.epoch,2);assert.equal(meta.history[0].epoch,1);assert.equal(meta.history[0].references[old.manifestSha256].proposalId,old.manifest.id);assert.ok([...store.data.entries()].some(([k,v])=>k.includes(':epoch:2:chunk:')&&JSON.parse(v).status==='purged'));
+});

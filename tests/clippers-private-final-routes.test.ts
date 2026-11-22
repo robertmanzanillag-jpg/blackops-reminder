@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { createHash, randomUUID } from 'node:crypto';
 import http from 'node:http';
+import {EventEmitter} from 'node:events';
+import {waitForPrivatePreviewDrain} from '../server/clippers-private-final-routes';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -78,20 +80,20 @@ test('private final upload/readback gives exact owner-only ranges and HEAD, then
 test('real owner browser uploads only the exact private MP4, previews it and then approves without public media or console errors',async()=>{
  const directory=await mkdtemp(path.join(tmpdir(),'private-preview-browser-'));let browser:any,f:Awaited<ReturnType<typeof fixture>>|undefined;
  try{
-  const file=path.join(directory,'preview.mp4');await exec('/opt/homebrew/bin/ffmpeg',['-nostdin','-v','error','-y','-f','lavfi','-i','color=c=black:s=1080x1920:r=1:d=20','-an','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-movflags','+faststart',file]);
+  const file=path.join(directory,'preview.mp4');await exec('ffmpeg',['-nostdin','-v','error','-y','-f','lavfi','-i','color=c=black:s=1080x1920:r=1:d=20','-an','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-movflags','+faststart',file]);
   f=await fixture(await readFile(file),undefined,'real');browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{channel:'chrome'}:{})});const context=await browser.newContext({extraHTTPHeaders:{'x-fixture-auth':'fixture-owner'}}),page=await context.newPage();page.setDefaultTimeout(15000);
   const errors:string[]=[],requests:string[]=[];page.on('pageerror',(error:any)=>errors.push(error.message));page.on('request',(request:any)=>requests.push(request.url()));
   await page.goto(f.base+'/review');await page.locator('#manifest').setInputFiles({name:'private-proposal.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(f.manifest))});await page.getByRole('button',{name:'Preparar para revisar'}).click();await page.locator('legend').filter({hasText:'proposed'}).waitFor();
   const approve=page.getByRole('button',{name:'Aprobar este archivo y horario'});assert.equal(await approve.isDisabled(),true);
   await page.getByLabel('Archivo final privado para '+f.manifest.id,{exact:true}).setInputFiles({name:'wrong.mp4',mimeType:'video/mp4',buffer:Buffer.alloc(f.bytes.length,0x99)});await page.getByRole('button',{name:'Cargar y verificar archivo privado'}).click();await page.getByText('El archivo seleccionado no coincide con la huella revisada.',{exact:true}).first().waitFor();assert.equal(requests.some(url=>url.endsWith('/reserve')),false);
-  await page.getByLabel('Archivo final privado para '+f.manifest.id,{exact:true}).setInputFiles({name:'reviewed.mp4',mimeType:'video/mp4',buffer:f.bytes});await page.getByRole('button',{name:'Cargar y verificar archivo privado'}).click();await page.getByText('Archivo privado verificado. Vista previa disponible; revísala antes de aprobar.',{exact:true}).waitFor();
+  await page.getByLabel('Archivo final privado para '+f.manifest.id,{exact:true}).setInputFiles({name:'reviewed.mp4',mimeType:'video/mp4',buffer:f.bytes});await page.getByRole('button',{name:'Cargar y verificar archivo privado'}).click();await page.getByRole('button',{name:'Ver archivo privado',exact:true}).waitFor();assert.equal(requests.some(url=>url.endsWith('/preview')),false);await page.getByRole('button',{name:'Ver archivo privado',exact:true}).click();await page.getByText('Vista previa cargada del archivo privado verificado. Revisa el video antes de aprobar.',{exact:true}).waitFor();
   assert.equal(await approve.isDisabled(),false);assert.ok(requests.some(url=>url.endsWith('/preview')));assert.equal(requests.some(url=>url.includes('static.metricool.com')||url.includes('github.com')),false);
   await page.getByRole('textbox',{name:'Operador autorizado'}).fill('Owner private upload fixture');for(const check of await page.getByRole('checkbox').all())await check.check();await approve.click();await page.locator('legend').filter({hasText:'approved'}).waitFor();assert.deepEqual(errors,[]);
   const nativeUrl='https://static.metricool.com/fixture/verified-native-preview.mp4';
   await f.backend.transact(STREAMER_STATE_NAMESPACE('fixture-owner'),async raw=>{const state=JSON.parse(raw!);state.reviewedDerivatives.records[f!.manifest.id].delivery={id:'native-copy',status:'scheduled',writeStartedAt:new Date(NOW).toISOString(),copyVerifiedAt:new Date(0).toISOString(),confirmedMediaUrl:nativeUrl,confirmedMediaSha256:f!.manifest.media.sha256,confirmedByteLength:f!.bytes.length};return JSON.stringify(state);});
   const stored=JSON.parse(f.values.get(STREAMER_STATE_NAMESPACE('fixture-owner'))!).reviewedDerivatives.records[f.manifest.id];const reclaimed=await f.call(f.prefix+'/cleanup',{body:{expectedDigest:stored.manifestSha256}});assert.equal(reclaimed.status,200);assert.equal((await reclaimed.json() as any).bytesReclaimed,f.bytes.length);
   await page.route(nativeUrl,async(route:any)=>route.fulfill({status:200,contentType:'video/mp4',body:f!.bytes}));
-  const previousPreviews=requests.filter(url=>url.endsWith('/preview')).length;await page.reload();await page.getByText('Copia nativa verificada. El archivo privado ya se liberó.',{exact:true}).waitFor();assert.equal(await page.locator('video').getAttribute('src'),nativeUrl);assert.equal(requests.filter(url=>url.endsWith('/preview')).length,previousPreviews);
+  const previousPreviews=requests.filter(url=>url.endsWith('/preview')).length;await page.reload();await page.getByRole('button',{name:'Ver copia nativa verificada',exact:true}).click();await page.getByText('Vista previa cargada de la copia nativa verificada. El archivo privado ya se liberó.',{exact:true}).waitFor();assert.equal(await page.locator('video').getAttribute('src'),nativeUrl);assert.equal(requests.filter(url=>url.endsWith('/preview')).length,previousPreviews);
   await f.backend.transact(STREAMER_STATE_NAMESPACE('fixture-owner'),async raw=>{const state=JSON.parse(raw!);state.reviewedDerivatives.records[f!.manifest.id].delivery.confirmedMediaSha256='a'.repeat(64);return JSON.stringify(state);});await page.reload();assert.equal(await page.locator('video').getAttribute('src'),null,'a mismatched native-copy hash must never become a preview source');assert.deepEqual(errors,[]);
  }finally{await browser?.close();await f?.close();await rm(directory,{recursive:true,force:true});}
 });
@@ -152,7 +154,7 @@ test('two unfinished owner uploads reserve admission before binary parsing; a th
 test('hash-ready private bytes cannot be approved unless the real sealed MP4/audio inspection succeeds',async()=>{
  const invalid=await fixture(Buffer.alloc(1536,0x77),undefined,'real');try{const record=await invalid.propose();await invalid.upload(record);const response=await invalid.call('/approve',{body:invalid.approval(record)});assert.equal(response.status,409);assert.equal(JSON.parse(invalid.values.get(STREAMER_STATE_NAMESPACE('fixture-owner'))!).reviewedDerivatives.records[invalid.manifest.id].status,'proposed');}finally{await invalid.close();}
  const directory=await mkdtemp(path.join(tmpdir(),'private-audio-mismatch-'));let f:Awaited<ReturnType<typeof fixture>>|undefined;try{
-  const file=path.join(directory,'unexpected-audio.mp4');await exec('/opt/homebrew/bin/ffmpeg',['-nostdin','-v','error','-y','-f','lavfi','-i','color=c=black:s=1080x1920:r=1:d=20','-f','lavfi','-i','sine=frequency=440:duration=20','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac','-t','20','-movflags','+faststart',file]);
+  const file=path.join(directory,'unexpected-audio.mp4');await exec('ffmpeg',['-nostdin','-v','error','-y','-f','lavfi','-i','color=c=black:s=1080x1920:r=1:d=20','-f','lavfi','-i','sine=frequency=440:duration=20','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac','-t','20','-movflags','+faststart',file]);
   f=await fixture(await readFile(file),undefined,'real');const record=await f.propose();await f.upload(record);const response=await f.call('/approve',{body:f.approval(record)});assert.equal(response.status,409);assert.equal(JSON.parse(f.values.get(STREAMER_STATE_NAMESPACE('fixture-owner'))!).reviewedDerivatives.records[f.manifest.id].status,'proposed');
  }finally{await f?.close();await rm(directory,{recursive:true,force:true});}
 });
@@ -208,4 +210,26 @@ test('raw-body abort releases admission exactly once after the parser aborts, pe
   const next=await f.call(f.prefix+'/chunks/0',{body:f.bytes,binary:true,headers:{'x-derivative-manifest-sha256':record.manifestSha256,'x-chunk-sha256':digest(f.bytes)}});assert.equal(next.status,200);
   const final=await f.call(f.prefix+'/finalize',{body:{expectedDigest:record.manifestSha256}});assert.equal(final.status,200);
  }finally{for(const request of requests)request.destroy();await f.close();}
+});
+
+test('five ready private proposals perform no automatic media fetch and only the explicitly selected preview stays loaded',async()=>{
+ const directory=await mkdtemp(path.join(tmpdir(),'private-preview-five-'));let browser:any,f:Awaited<ReturnType<typeof fixture>>|undefined;
+ try{
+  const file=path.join(directory,'preview.mp4');await exec('ffmpeg',['-nostdin','-v','error','-y','-f','lavfi','-i','color=c=black:s=1080x1920:r=1:d=20','-an','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-movflags','+faststart',file]);
+  f=await fixture(await readFile(file));const original=await f.propose();await f.upload(original);
+  for(let i=1;i<5;i++){const manifest=structuredClone(f.manifest);manifest.id='private-preview-'+i;const response=await f.call('/propose',{body:{manifest}});assert.equal(response.status,201);const record=await response.json() as any;const reserved=await f.call('/private-finals/'+manifest.id+'/reserve',{body:{expectedDigest:record.manifestSha256}});assert.equal(reserved.status,200);assert.equal((await reserved.json() as any).ready,true);}
+  browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{channel:'chrome'}:{})});const context=await browser.newContext({extraHTTPHeaders:{'x-fixture-auth':'fixture-owner'}}),page=await context.newPage();page.setDefaultTimeout(15000);
+  const requests:string[]=[],errors:string[]=[];let busy=0;page.on('request',(request:any)=>requests.push(request.url()));page.on('response',(response:any)=>{if(response.status()===429)busy++;});page.on('pageerror',(error:any)=>errors.push(error.message));
+  await page.goto(f.base+'/review');await page.locator('fieldset').nth(4).waitFor();assert.equal(await page.getByRole('button',{name:'Ver archivo privado',exact:true}).count(),5);assert.equal(requests.some(url=>url.endsWith('/preview')),false);assert.equal(await page.locator('video[src]').count(),0);
+  const last=page.locator('fieldset').nth(4),first=page.locator('fieldset').nth(0);
+  await last.getByRole('button',{name:'Ver archivo privado',exact:true}).click();await last.getByText('Vista previa cargada del archivo privado verificado. Revisa el video antes de aprobar.',{exact:true}).waitFor();assert.equal(await page.locator('video[src]').count(),1);
+  await first.getByRole('button',{name:'Ver archivo privado',exact:true}).click();await first.getByText('Vista previa cargada del archivo privado verificado. Revisa el video antes de aprobar.',{exact:true}).waitFor();assert.equal(await last.locator('video').getAttribute('src'),null);assert.equal(await page.locator('video[src]').count(),1);assert.equal(busy,0);assert.deepEqual(errors,[]);
+ }finally{await browser?.close();await f?.close();await rm(directory,{recursive:true,force:true});}
+});
+
+test('a stalled private preview drain is bounded and destroys its response; successful drains remove idle listeners',async()=>{
+ class Response extends EventEmitter{destroyed=false;destroyCalls=0;destroy(){this.destroyed=true;this.destroyCalls++;this.emit('close');}}
+ const stalled=new Response(),keepAlive=setTimeout(()=>undefined,500);
+ try{await waitForPrivatePreviewDrain(stalled,10);assert.equal(stalled.destroyed,true);assert.equal(stalled.destroyCalls,1);assert.equal(stalled.listenerCount('drain'),0);assert.equal(stalled.listenerCount('close'),0);}finally{clearTimeout(keepAlive);}
+ const flowing=new Response(),done=waitForPrivatePreviewDrain(flowing,100);flowing.emit('drain');await done;assert.equal(flowing.destroyed,false);assert.equal(flowing.listenerCount('drain'),0);assert.equal(flowing.listenerCount('close'),0);
 });

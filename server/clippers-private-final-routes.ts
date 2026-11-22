@@ -16,6 +16,14 @@ function sameOrigin(req:Request) {
     return !!referer && new URL(referer).origin === expected;
   } catch { return false; }
 }
+/** Bound a stalled client without releasing work that is still awaiting an actual stream read. */
+export function waitForPrivatePreviewDrain(res:any,timeoutMs=20000):Promise<void>{
+  return new Promise(resolve=>{let timer:ReturnType<typeof setTimeout>|undefined;let settled=false;
+    const done=()=>{if(settled)return;settled=true;if(timer)clearTimeout(timer);res.off('drain',done);res.off('close',done);resolve();};
+    res.once('drain',done);res.once('close',done);if(res.destroyed){done();return;}
+    timer=setTimeout(()=>{res.destroy();done();},timeoutMs);timer.unref?.();
+  });
+}
 export function registerPrivateFinalRoutes(app:Pick<Express,'get'|'post'>, deps:Dependencies = {}) {
   const store = deps.store ?? (async()=> (await import('./agent-council-store')).getCouncilStore());
   const principal = deps.principal ?? getAuthenticatedCurrentUserId, owner = deps.owner ?? getSystemUserId, now = deps.now ?? Date.now;
@@ -101,7 +109,7 @@ export function registerPrivateFinalRoutes(app:Pick<Express,'get'|'post'>, deps:
       if(req.method==='HEAD'){res.end();return;}
       for await(const bytes of streamPrivateFinalRange({store:backend,owner:actor,record,start,end})){
         if(res.destroyed)return;
-        if(!res.write(bytes))await new Promise<void>(resolve=>{const done=()=>{res.off('drain',done);res.off('close',done);resolve();};res.once('drain',done);res.once('close',done);});
+        if(!res.write(bytes))await waitForPrivatePreviewDrain(res);
         if(res.destroyed)return;
       }
       res.end();
