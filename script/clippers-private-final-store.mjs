@@ -163,7 +163,9 @@ export async function cleanupPrivateFinals({store,owner,now=Date.now(),refs,maxF
   let token;
   try{
    // Reject an overfull historical envelope before taking the cross-key purge fence.
-   encode({...meta,status:'purging',cleanupToken:`${meta.epoch}:${now}:${snapshot.generation}`});
+   const cleanupToken=`${meta.epoch}:${now}:${snapshot.generation}`;
+   encode({...meta,status:'purging',cleanupToken});
+   encode({...meta,status:'purged',cleanupToken,purgedAt:iso(now),pending:null,chunks:{},nextIndex:0});
    token=await mutate(store,k.index,current=>{const e=current?.files?.[ref];if(!e||JSON.stringify(e)!==JSON.stringify(snapshot))fail('private_final_cleanup_changed');e.status='purging';e.cleanupToken=`${meta.epoch}:${now}:${e.generation}`;return{state:current,out:e.cleanupToken};});
    await mutate(store,k.meta,current=>{if(stalePurged&&JSON.stringify(current)===JSON.stringify(observed))current=structuredClone(meta);current??=structuredClone(meta);if(current.epoch!==meta.epoch||current.ownerHash!==k.h||current.sha256!==meta.sha256||JSON.stringify(current.references)!==JSON.stringify(meta.references))fail('private_final_cleanup_changed');current.status='purging';current.cleanupToken=token;return{state:current,out:null};});
    // Tombstone every possible chunk, including unacknowledged/pending writes. A late immutable writer cannot recreate it.
