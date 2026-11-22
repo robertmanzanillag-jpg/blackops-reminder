@@ -27,14 +27,16 @@ test("expired pricing, aliases and cancelled work cannot generate",async()=>{
  const c=new AbortController();c.abort();assert.equal((await createOpenAiFactoryTextProvider({...config,request})({...input(),signal:c.signal})).status,"blocked");assert.equal(calls,0);
 });
 
-test("documented undated Astra snapshot retains exact identity and all budget gates",async()=>{
- for(const responseModel of ["gpt-6-astra","gpt-6-astra-latest"]){
-  let calls=0;const generate=createOpenAiFactoryTextProvider({...config,model:"gpt-6-astra",request:async(_url,init)=>{
-   assert.equal(JSON.parse(String(init.body)).model,"gpt-6-astra");return ++calls===1?count():json({...result(),model:responseModel});
+test("documented undated snapshots retain exact identity and all budget gates",async()=>{
+ for(const snapshot of ["gpt-6-astra","gpt-6.1-sol"]) {
+ for(const responseModel of [snapshot,snapshot+"-latest"]){
+  let calls=0;const generate=createOpenAiFactoryTextProvider({...config,model:snapshot,request:async(_url,init)=>{
+   assert.equal(JSON.parse(String(init.body)).model,snapshot);return ++calls===1?count():json({...result(),model:responseModel});
   }});
-  assert.equal((await generate(input())).status,responseModel==="gpt-6-astra"?"completed":"unknown");assert.equal(calls,2);
+  assert.equal((await generate(input())).status,responseModel===snapshot?"completed":"unknown");assert.equal(calls,2);
  }
- for(const alias of ["gpt-6-astra-latest","gpt-6.1-sol","gpt-4.1"]){
+ }
+ for(const alias of ["gpt-6-astra-latest","gpt-6.1-sol-latest","gpt-6-sol","gpt-4.1"]){
   assert.throws(()=>createOpenAiFactoryTextProvider({...config,model:alias,request:async()=>count()}),/CONFIGURATION/);
  }
  let calls=0;const capped=createOpenAiFactoryTextProvider({...config,model:"gpt-6-astra",outputNanoUsdPerToken:1000000,request:async()=>{calls++;return count();}});

@@ -37,10 +37,28 @@ Bounded text Chat Completions/Responses can run only with initialized monthly
 Factory state, a complete manual historical checkpoint and approved exact pricing.
 No such live checkpoint or pricing configuration is created by this change.
 Streaming, audio, images, hosted tools, remote media/conversation state, priority
-service tiers, unbounded outputs and raw token-counting endpoints stay held before
-SDK/HTTP dispatch. Consequently the existing two-request Factory count/generate
-adapter remains held at its count operation; a separately reviewed bound/receipt
-adapter is required to enable it. The signed-subscription maker remains available.
+service tiers, unbounded outputs and generic raw token-counting endpoints stay held
+before SDK/HTTP dispatch. The installed Factory composition explicitly routes only
+`POST /v1/responses/input_tokens` through `software-factory-openai-count.ts`, inside
+a claimed parent context and with plain-text prompt fields. OpenAI documents that
+[counting endpoint as free](https://help.openai.com/en/articles/4936856-understanding-and-counting-tokens);
+the separate generation request is billed. No paid reservation or settlement is
+invented for the free count. The provider sends the same prompt to both requests
+and requires the generated response's measured input count to match.
+
+This narrow route is wired in `software-factory-asistente-operator.ts`; the generic
+SDK/fetch boundary still refuses a direct count operation. Thus the installed
+Factory count/generate path is not blocked by that generic refusal. Generation
+still requires the complete monetary checkpoint, approved pricing and live parent
+escrow. A successful count grants no paid admission. The signed-subscription maker
+remains available.
+
+`software-factory-openai.ts` recognizes only dated model IDs and the exact undated
+IDs documented as snapshots (`gpt-6-astra`, `gpt-6.1-sol`). It does not accept generic
+rolling aliases or relax exact response-model matching. Allowing the existing
+configured Sol snapshot creates no pricing configuration, credit, model switch or
+activation. The operator must still verify applicable rates and all required
+billing evidence before paid work.
 
 The nonsecret `FACTORY_API_PRICING_CONFIG` is a strict version-1 object with an
 array `prices`. Each row binds an exact `provider` (`openai`, `deepseek`, `gemini`

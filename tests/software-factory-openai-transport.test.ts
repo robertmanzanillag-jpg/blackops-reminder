@@ -46,3 +46,23 @@ test('Factory OpenAI path end to end: unbilled count transport + gated priced cr
  assert.equal(calls.length,2);
  assert.throws(()=>createFactoryOpenAiCountTransport('bad'),/CREDENTIAL_REQUIRED/);
 });
+
+
+test('configured Sol snapshot completes free count then guarded exact-model generation',async()=>{
+ const {createFactoryOpenAiCountTransport,routeFactoryOpenAiRequests}=await import('../server/software-factory-openai-count');
+ const {createOpenAiFactoryTextProvider}=await import('../server/software-factory-openai');
+ const job=parent(),snapshot='gpt-6.1-sol',key='sk-proj-'+'s'.repeat(50),calls:{url:string;body:any}[]=[];
+ const raw=(async(url:string,init:RequestInit)=>{
+  calls.push({url:String(url),body:JSON.parse(String(init.body))});
+  return String(url).endsWith('/input_tokens')?Response.json({object:'response.input_tokens',input_tokens:10}):Response.json({
+   ...output(),object:'response',model:snapshot,output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'bounded result'}]}],
+   usage:{input_tokens:10,output_tokens:5,total_tokens:15,input_tokens_details:{cached_tokens:0}}});
+ }) as typeof fetch;
+ const approvedPrice={...price,model:snapshot,inputNanoUsdPerToken:2000,outputNanoUsdPerToken:10000};
+ const request=routeFactoryOpenAiRequests(createFactoryOpenAiTransport(key,raw,{price:approvedPrice,invoke:fixtureFactoryInvocation(undefined,job)}),createFactoryOpenAiCountTransport(key,raw));
+ const generate=createOpenAiFactoryTextProvider({request,model:snapshot,inputNanoUsdPerToken:2000,outputNanoUsdPerToken:10000,pricingValidUntil:price.validUntil,now:()=>new Date('2026-11-18T12:00:00.000Z'),maxInputTokens:1000});
+ const result=await withFactoryApiParent(job,()=>generate({instructions:'Review synthetic code',text:'synthetic requirements',maxOutputTokens:32,maxCostCents:5,signal:new AbortController().signal}));
+ assert.equal(result.status,'completed');
+ assert.deepEqual(calls.map(c=>c.url),['https://api.openai.com/v1/responses/input_tokens','https://api.openai.com/v1/responses']);
+ assert.deepEqual(calls[1].body,{...calls[0].body,max_output_tokens:32,store:false,tools:[],stream:false,service_tier:'default'});
+});
