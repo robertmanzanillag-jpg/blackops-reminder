@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-22T10:14:31.919Z",
+  "generatedAt": "2026-11-22T10:29:28.642Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-receipts-bridge-nov22",
   "packageName": "rest-express",
   "scripts": {
@@ -125,18 +125,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1327,
-    "filesIndexed": 1212,
+    "filesVisible": 1328,
+    "filesIndexed": 1213,
     "imports": 5018,
     "routes": 633,
-    "symbols": 28816
+    "symbols": 28825
   },
   "directories": {
     "script": {
-      "files": 150,
-      "indexed": 135,
+      "files": 151,
+      "indexed": 136,
       "kinds": {
-        "script": 150
+        "script": 151
       }
     },
     ".": {
@@ -10015,7 +10015,7 @@
       "kind": "script",
       "imports": [
         "./clippers-native-media-receipts.mjs",
-        "./clippers-portfolio-metricool.mjs",
+        "./clippers-observed-accounts.mjs",
         "node:crypto"
       ],
       "exports": [
@@ -10582,6 +10582,25 @@
       "routes": []
     },
     {
+      "path": "script/clippers-observed-accounts.mjs",
+      "kind": "script",
+      "imports": [],
+      "exports": [
+        "OBSERVED_ACCOUNTS",
+        "findObservedAccount",
+        "observedAccountKey",
+        "observedLocalDay"
+      ],
+      "symbols": [
+        "OBSERVED_ACCOUNTS",
+        "aliases",
+        "findObservedAccount",
+        "observedAccountKey",
+        "observedLocalDay"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-operational-readiness.mjs",
       "kind": "script",
       "imports": [
@@ -10751,6 +10770,7 @@
         "byVideo",
         "calendarPublished",
         "candidate",
+        "canonicalPublisherConfirmed",
         "caps",
         "channel",
         "chunks",
@@ -42938,6 +42958,7 @@
       "symbols": [
         "NOW",
         "adapter",
+        "api",
         "bad",
         "base",
         "baseline",
@@ -42950,6 +42971,7 @@
         "creator",
         "d",
         "denied",
+        "destination",
         "digest",
         "dir",
         "discovery",
@@ -42973,6 +42995,7 @@
         "legacy",
         "manifest",
         "memory",
+        "mixed",
         "next",
         "ny",
         "old",

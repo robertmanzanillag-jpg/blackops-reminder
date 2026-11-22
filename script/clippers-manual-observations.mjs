@@ -1,6 +1,6 @@
 // Metadata-only observations. Never a renderer, rights grant, publish receipt or learner input.
 import { createHash } from 'node:crypto';
-import { findDestination, destinationKey, localDay } from './clippers-portfolio-metricool.mjs';
+import { findObservedAccount as findDestination, observedAccountKey as destinationKey, observedLocalDay as localDay } from './clippers-observed-accounts.mjs';
 import { metricoolNativeUrl } from './clippers-native-media-receipts.mjs';
 const SHA=/^[a-f0-9]{64}$/, UUID=/^(?:-?\d{1,30}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 export const manualObservationDigest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');

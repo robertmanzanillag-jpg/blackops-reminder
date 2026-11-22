@@ -326,3 +326,13 @@ test('New York Facebook cannot dispatch without fresh matching identity and publ
   await assert.rejects(adapter.schedule(destination,{caption:'Authorized clip',mediaUrl:'https://static.metricool.com/planner/202611/6595747-file-1.mp4',scheduledAt:'2026-11-23T16:00:00.000Z'}),new RegExp(expected));assert.equal(calls.length,1);assert.equal(calls[0].method,'GET');
  }
 });
+
+
+test('read-only observation identities track current targets and retain legacy aliases without importing writer adapters',async()=>{
+ const {OBSERVED_ACCOUNTS,findObservedAccount,observedAccountKey}=await import('../script/clippers-observed-accounts.mjs');assert.deepEqual(OBSERVED_ACCOUNTS,DESTINATIONS);assert.equal(findObservedAccount({brandId:6595747,network:'tiktok',account:'unknown'}),undefined);assert.equal(observedAccountKey({brandId:6591612,network:'tiktok',account:'ynb4b6r6'}),'6591612:tiktok:news305miami');assert.equal(observedAccountKey({brandId:6431685,network:'tiktok',account:'streamersclips'}),'6431685:tiktok:streamersus');
+});
+
+
+test('installed historical account names remain readable on the wire without admitting duplicate identities',async()=>fixture(async root=>{
+ const r=await base(root);r.accounts=r.accounts.slice(0,4);r.accounts[0].account='streamersclips';r.accounts[0].key='6431685:tiktok:streamersclips';r.accounts[2].account='ynb4b6r6';r.accounts[2].key='6591612:tiktok:ynb4b6r6';assert.ok(parseClippersOrchestraStatus(r,NOW));const bad=structuredClone(r);bad.accounts[1]={...r.accounts[0],account:'streamersus',key:'6431685:tiktok:streamersus'};assert.equal(parseClippersOrchestraStatus(bad,NOW),null);
+}));

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-22T10:14:31.919Z
+Generated: 2026-11-22T10:29:28.642Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-receipts-bridge-nov22`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1327 | 1212 | 5018 | 633 | 28816 |
+| 1328 | 1213 | 5018 | 633 | 28825 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -31,7 +31,7 @@ Package: `rest-express`
 | `tests` | 355 | 351 | test:355 |
 | `server` | 297 | 291 | server:297 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
-| `script` | 150 | 135 | script:150 |
+| `script` | 151 | 136 | script:151 |
 | `docs` | 83 | 80 | docs:83 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 48 | 44 | shared:48 |
@@ -446,11 +446,11 @@ Package: `rest-express`
 - `script/clippers-metricool-autopilot.mjs` (script; 125 symbols, 7 imports)
 - `script/clippers-motivation-shorts.mjs` (script; 158 symbols, 7 imports)
 - `script/clippers-native-media-receipts.mjs` (script; 38 symbols, 9 imports)
+- `script/clippers-observed-accounts.mjs` (script; 5 symbols)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 129 symbols, 10 imports)
-- `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
+- `script/clippers-orchestra-report.mjs` (script; 130 symbols, 10 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

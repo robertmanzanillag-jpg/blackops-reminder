@@ -87,10 +87,10 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
     v.disconnectedDestinations[0].brandId!=='6595747' || !text(v.disconnectedDestinations[0].label) || v.disconnectedDestinations[0].reason!=='destination_not_connected')return null;
   // Read compatibility for the historical four-destination wire payload; new reports contain all five.
   const expectedTargets=Array.isArray(v.accounts)&&v.accounts.length===4?targetKeys.slice(0,4):targetKeys;
-  if(!Array.isArray(v.accounts) || v.accounts.length!==expectedTargets.length || new Set(v.accounts.map((a:any)=>a?.key)).size!==expectedTargets.length)return null;
+  if(!Array.isArray(v.accounts) || v.accounts.length!==expectedTargets.length || new Set(v.accounts.map((a:any)=>legacyTargetKeys[a?.key]??a?.key)).size!==expectedTargets.length)return null;
   for(const a of v.accounts){
     if(!keys(a,['key','brandId','network','account','label','connection','observedAt','dailyTarget','eligibleAssets','confirmedScheduledOrPublished','shortfall','heldReasons','activeVersion','policyStatus','metricAgeBuckets',...(a.analytics===undefined?[]:['analytics'])]) ||
-      !expectedTargets.includes(a.key) || a.key!==[a.brandId,a.network,a.account].join(':') || !text(a.label) ||
+      !expectedTargets.includes(legacyTargetKeys[a.key]??a.key) || a.key!==[a.brandId,a.network,a.account].join(':') || !text(a.label) ||
       !['observed','unverified','disconnected'].includes(a.connection) || !nullableTime(a.observedAt,now) || a.dailyTarget!==5 ||
       ![a.eligibleAssets,a.confirmedScheduledOrPublished,a.shortfall].every(nullableCount) || !codes(a.heldReasons) ||
       !(a.activeVersion===null||code(a.activeVersion)) || !code(a.policyStatus) || !Array.isArray(a.metricAgeBuckets) || a.metricAgeBuckets.length>3)return null;
