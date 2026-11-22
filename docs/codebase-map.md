@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T15:32:18.402Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-legacy-uncertain-retention-nov22`
+Generated: 2026-11-22T20:21:43.321Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-runtime-install-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1391 | 1269 | 5300 | 647 | 29704 |
+| 1391 | 1269 | 5303 | 647 | 29710 |
 
 ## Entrypoints
 - `client/src/App.tsx`

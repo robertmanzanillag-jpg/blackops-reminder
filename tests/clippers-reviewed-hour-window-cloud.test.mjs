@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 import {reviewedHourWindowReadiness,runReviewedHourWindowCloud,reviewedHourWindowMain} from '../script/clippers-reviewed-hour-window-cloud.mjs';
 import {emptyStreamerState,STREAMER_STATE_NAMESPACE} from '../script/clippers-streamer-discovery.mjs';
 const env=()=>({CLIPPERS_REVIEWED_HOUR_WINDOW_ENABLED:'true',CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED:'true',DATABASE_URL:'postgresql://fixture.invalid/not-used',DEFAULT_USER_ID:'fixture-owner',METRICOOL_USER_TOKEN:'fixture-token',METRICOOL_USER_ID:'fixture-user',GITHUB_TOKEN:'fixture-github',GITHUB_REPOSITORY:'robertmanzanillag-jpg/blackops-reminder'});
@@ -64,4 +67,27 @@ test('no-new-due records still receive bounded known-copy and controlled-stage m
  const result=await runReviewedHourWindowCloud({...options,createMetricool:()=>({}),createStager:()=>({}),runWorker:async args=>{called++;assert.equal(args.dispatchMode,'owner_hour_window');return{status:'completed',scheduled:0};}});assert.equal(called,1);assert.equal(result.scheduled,0);assert.equal(result.maintenanceCount,6);
  const negative={...state,reviewedDerivatives:{records:Object.fromEntries(Object.entries(state.reviewedDerivatives.records).filter(([id])=>['noIdentity','unknownBeforeWrite','unapproved','otherOwner','completed'].includes(id)))}};
  assert.deepEqual(await reviewedHourWindowReadiness({...options,store:backend(JSON.stringify(negative))}),{status:'idle',dueCount:0,maintenanceCount:0});
+});
+
+// Reproduces the production npm configuration that omitted the tsx loader before due-check.
+test('production hour-window install explicitly includes the locked TypeScript runtime loader',async()=>{
+ const text=await readFile(new URL('../.github/workflows/clippers-streamers-publish.yml',import.meta.url),'utf8');
+ const hour=text.split('  reviewed-hour-window:\n')[1].split('\n  publish:\n')[0];
+ assert.match(hour,/NODE_ENV: production/);
+ const command=hour.match(/name: Install deterministic runtime dependencies[\s\S]*?run: (npm ci[^\n]+)/)?.[1];
+ assert.ok(command,'deterministic install step exists');
+ const args=command.split(/\s+/).slice(1);
+ assert.equal(args[0],'ci');assert.ok(args.includes('--ignore-scripts'));
+ const pkg=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+ assert.equal(typeof pkg.devDependencies.tsx,'string','tsx remains a locked runtime requirement');
+ assert.match(hour,/node --import tsx script\/clippers-reviewed-hour-window-cloud\.mjs --due-check/);
+ const directory=await mkdtemp(path.join(tmpdir(),'clippers-npm-runtime-config-'));
+ try{
+  const production={...process.env,NODE_ENV:'production'};
+  for(const key of Object.keys(production))if(/^npm_config_(include|omit|production|only|userconfig|globalconfig)$/i.test(key))delete production[key];
+  production.NPM_CONFIG_USERCONFIG=path.join(directory,'absent-user-config');production.NPM_CONFIG_GLOBALCONFIG=path.join(directory,'absent-global-config');
+  const include=flags=>execFileSync('npm',['config','get','include',...flags],{env:production,cwd:directory,encoding:'utf8',timeout:15000}).trim().split(/[,\s]+/).filter(Boolean);
+  assert.ok(include(args.slice(1)).includes('dev'),'effective production install includes tsx from devDependencies');
+  assert.equal(include(args.slice(1).filter(a=>!a.startsWith('--include'))).includes('dev'),false,'regression control reproduces production omission without explicit inclusion');
+ }finally{await rm(directory,{recursive:true,force:true});}
 });
