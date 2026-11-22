@@ -95,10 +95,12 @@ const DAY = 86_400_000;
 const nyHour = at => Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(new Date(at)));
 
 /** Latest known views for a ledger post: matched account analytics row (same account, published within 15 min of the slot) or the 24-48 h observation. */
-export function latestViews(post, accountPosts = []) {
+export function latestViews(post, accountPosts = [], { allowTimeFallback = true } = {}) {
   if (!legacyAttribution(post)) return null;
   const at = Date.parse(post.observation?.publishedAt ?? post.scheduledAt);
-  const match = accountPosts.find(r => (post.observation?.platformPostId && r.id === post.observation.platformPostId) || Math.abs(Date.parse(r.publishedAt) - at) <= 15 * 60_000);
+  // A nearby row must never shadow an exact identity; mixed accounts cannot prove which source a time-only row belongs to.
+  const exactId = post.observation?.platformPostId;
+  const match = exactId ? accountPosts.find(r => r.id === exactId) : allowTimeFallback ? accountPosts.find(r => Math.abs(Date.parse(r.publishedAt) - at) <= 15 * 60_000) : null;
   if (match && Number.isSafeInteger(match.views)) return { views: match.views, ageHours: Number.isFinite(match.actualAgeHours) ? match.actualAgeHours : (Date.parse(match.observedAt ?? '') - Date.parse(match.publishedAt)) / HOUR_MS, platformPostId: match.id, publishedAt: match.publishedAt };
   if (post.observation && Number.isSafeInteger(post.observation.views)) return { views: post.observation.views, ageHours: post.observation.ageHours, platformPostId: post.observation.platformPostId ?? null, publishedAt: post.observation.publishedAt };
   return null;
@@ -107,12 +109,13 @@ const HOUR_MS = 3_600_000;
 
 export function computeGrowth({ posts = [], accountPosts = {}, previous = null, now = Date.now(), override = new Set() }) {
   const out = { evaluatedAt: new Date(now).toISOString(), accounts: {}, kills: [], breakouts: [], doubled: [], decisions: [] };
+  const reviewedAccounts = new Set(posts.filter(p => !legacyAttribution(p) && typeof p.destinationKey === 'string').map(p => canonicalDestinationKey(p.destinationKey)));
   const legacyPosts = posts.filter(legacyAttribution);
   const recent = legacyPosts.filter(p => p && typeof p.destinationKey === 'string' && ['scheduled', 'published'].includes(p.status) && now - Date.parse(p.scheduledAt) <= GROWTH_WINDOW_DAYS * DAY && Date.parse(p.scheduledAt) <= now);
   const keys = new Set([...Object.keys(accountPosts), ...recent.map(p => canonicalDestinationKey(p.destinationKey))]);
   for (const key of keys) {
     const rows = (accountPosts[key] ?? []).filter(r => Number.isSafeInteger(r?.views) && now - Date.parse(r.publishedAt) <= 7 * DAY);
-    const mine = recent.filter(p => canonicalDestinationKey(p.destinationKey) === key).map(p => ({ ...p, latest: latestViews(p, accountPosts[key] ?? []) })).filter(p => p.latest);
+    const mine = recent.filter(p => canonicalDestinationKey(p.destinationKey) === key).map(p => ({ ...p, latest: latestViews(p, accountPosts[key] ?? [], { allowTimeFallback: !reviewedAccounts.has(key) }) })).filter(p => p.latest);
     const weekly = rows.length ? rows.map(r => r.views) : mine.filter(p => now - Date.parse(p.scheduledAt) <= 7 * DAY).map(p => p.latest.views);
     const account = { lane: laneForDestinationKey(key)?.id ?? null, weeklyPosts: weekly.length, weeklyViews: weekly.reduce((a, b) => a + b, 0), weeklyMedian: median(weekly), source: rows.length ? 'metricool_account_analytics' : 'ledger_observations' };
     const earned = autoPublishAllowed(account); // also requires source = metricool_account_analytics
