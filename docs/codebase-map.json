@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T13:15:06.933Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/db-pool-idle-recovery-nov22",
+  "generatedAt": "2026-11-22T13:26:16.415Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-private-final-ingestion-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,41 +125,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1366,
-    "filesIndexed": 1246,
-    "imports": 5169,
-    "routes": 640,
-    "symbols": 29288
+    "filesVisible": 1375,
+    "filesIndexed": 1254,
+    "imports": 5231,
+    "routes": 646,
+    "symbols": 29483
   },
   "directories": {
-    "docs": {
-      "files": 89,
-      "indexed": 86,
-      "kinds": {
-        "docs": 89
-      }
-    },
-    "server": {
-      "files": 302,
-      "indexed": 295,
-      "kinds": {
-        "server": 302
-      }
-    },
-    "tests/helpers": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "test": 3
-      }
-    },
-    "tests": {
-      "files": 366,
-      "indexed": 361,
-      "kinds": {
-        "test": 366
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -238,6 +210,13 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 90,
+      "indexed": 87,
+      "kinds": {
+        "docs": 90
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -247,10 +226,10 @@
       }
     },
     "script": {
-      "files": 155,
-      "indexed": 139,
+      "files": 158,
+      "indexed": 141,
       "kinds": {
-        "script": 155
+        "script": 158
       }
     },
     "script/office-api-budget-v6": {
@@ -281,6 +260,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 303,
+      "indexed": 296,
+      "kinds": {
+        "server": 303
+      }
+    },
     "server/blackroom-team": {
       "files": 17,
       "indexed": 17,
@@ -309,6 +295,13 @@
         "shared": 1
       }
     },
+    "tests": {
+      "files": 369,
+      "indexed": 364,
+      "kinds": {
+        "test": 369
+      }
+    },
     "tests/fixtures": {
       "files": 10,
       "indexed": 8,
@@ -321,6 +314,13 @@
       "indexed": 1,
       "kinds": {
         "test": 1
+      }
+    },
+    "tests/helpers": {
+      "files": 4,
+      "indexed": 4,
+      "kinds": {
+        "test": 4
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -6278,6 +6278,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-private-final-ingestion.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-private-replit-telemetry.md",
       "kind": "docs",
       "imports": [],
@@ -11613,6 +11621,82 @@
       "routes": []
     },
     {
+      "path": "script/clippers-private-final-store.mjs",
+      "kind": "script",
+      "imports": [
+        "../shared/clippers-derivative-audio.mjs",
+        "../shared/clippers-reviewed-derivative.mjs",
+        "./clippers-reviewed-derivative-media.mjs",
+        "./clippers-streamer-discovery.mjs",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "CHUNK_BYTES",
+        "assertPrivateFinalReady",
+        "cleanupPrivateFinals",
+        "finalizePrivateFinal",
+        "inspectPrivateFinalForApproval",
+        "privateFinalStatus",
+        "putPrivateFinalChunk",
+        "reservePrivateFinal",
+        "sealPrivateFinal"
+      ],
+      "symbols": [
+        "CHUNK_BYTES",
+        "METADATA_BYTES",
+        "assertIndex",
+        "assertMeta",
+        "assertPrivateFinalReady",
+        "b",
+        "binding",
+        "cleanupPrivateFinals",
+        "d",
+        "decodeChunk",
+        "digest",
+        "encode",
+        "entry",
+        "expected",
+        "fail",
+        "finalizePrivateFinal",
+        "hash",
+        "inspectPrivateFinalForApproval",
+        "iso",
+        "k",
+        "keys",
+        "m",
+        "meta",
+        "mutate",
+        "observed",
+        "ownerHash",
+        "ownerIndex",
+        "packet",
+        "parse",
+        "priorHistory",
+        "privateFinalStatus",
+        "putPrivateFinalChunk",
+        "reclaimable",
+        "records",
+        "references",
+        "reservePrivateFinal",
+        "reserved",
+        "root",
+        "sealPrivateBytes",
+        "sealPrivateFinal",
+        "stalePurged",
+        "state",
+        "summary",
+        "targetEpoch",
+        "ticket",
+        "transfer",
+        "usage",
+        "wanted"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-reconcile-publications.mjs",
       "kind": "script",
       "imports": [
@@ -11963,6 +12047,32 @@
       "routes": []
     },
     {
+      "path": "script/clippers-reviewed-copy-reconcile.mjs",
+      "kind": "script",
+      "imports": [
+        "../shared/clippers-media-ledger.mjs",
+        "../shared/clippers-reviewed-derivative.mjs",
+        "./clippers-portfolio-metricool.mjs",
+        "./clippers-streamer-discovery.mjs"
+      ],
+      "exports": [
+        "reconcileReviewedDerivativeCopies"
+      ],
+      "symbols": [
+        "c",
+        "goodActive",
+        "goodDraft",
+        "now",
+        "ns",
+        "pending",
+        "proof",
+        "reconcileReviewedDerivativeCopies",
+        "report",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-reviewed-derivative-media.mjs",
       "kind": "script",
       "imports": [
@@ -12022,6 +12132,8 @@
         "../shared/clippers-streamer-policy.mjs",
         "./clippers-derivative-campaign.mjs",
         "./clippers-portfolio-metricool.mjs",
+        "./clippers-private-final-store.mjs",
+        "./clippers-reviewed-copy-reconcile.mjs",
         "./clippers-reviewed-derivative-media.mjs",
         "./clippers-streamer-discovery.mjs",
         "node:crypto"
@@ -23483,12 +23595,67 @@
       "routes": []
     },
     {
+      "path": "server/clippers-private-final-routes.ts",
+      "kind": "server",
+      "imports": [
+        "../script/clippers-private-final-store.mjs",
+        "../script/clippers-streamer-discovery.mjs",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerPrivateFinalRoutes",
+        "waitForPrivatePreviewDrain"
+      ],
+      "symbols": [
+        "Dependencies",
+        "SHA",
+        "Store",
+        "active",
+        "activeTransfers",
+        "actor",
+        "admitTransfer",
+        "backend",
+        "base",
+        "binary",
+        "digestBody",
+        "done",
+        "expected",
+        "expectedDigest",
+        "failure",
+        "guard",
+        "id",
+        "match",
+        "origin",
+        "principal",
+        "rawIndex",
+        "record",
+        "recordFor",
+        "records",
+        "registerPrivateFinalRoutes",
+        "releaseBinary",
+        "sameOrigin",
+        "size",
+        "store",
+        "waitForPrivatePreviewDrain"
+      ],
+      "routes": [
+        "${base}/${route}",
+        "${base}/chunks/:index",
+        "${base}/cleanup",
+        "${base}/preview",
+        "${base}/status"
+      ]
+    },
+    {
       "path": "server/clippers-reviewed-derivative-routes.ts",
       "kind": "server",
       "imports": [
+        "../script/clippers-private-final-store.mjs",
         "../script/clippers-streamer-discovery.mjs",
         "../shared/clippers-derivative-baseline.mjs",
         "../shared/clippers-reviewed-derivative.mjs",
+        "./clippers-private-final-routes",
         "./clippers-reviewed-derivative-ui",
         "./office-routes",
         "./user-context",
@@ -23502,13 +23669,16 @@
         "Store",
         "actor",
         "b",
+        "backend",
         "change",
         "control",
         "digest",
         "guard",
         "m",
         "p",
+        "privateInspections",
         "proof",
+        "proposed",
         "r",
         "record",
         "registerReviewedDerivativeRoutes",
@@ -23533,10 +23703,28 @@
       ],
       "symbols": [
         "base",
+        "bound",
+        "box",
+        "chunk",
         "el",
+        "finished",
+        "label",
         "load",
+        "mediaNote",
+        "operator",
         "request",
-        "reviewedDerivativeReviewHtml"
+        "response",
+        "result",
+        "reviewedDerivativeReviewHtml",
+        "root",
+        "selected",
+        "sha",
+        "stopPrivatePreview",
+        "updateApproval",
+        "upload",
+        "url",
+        "verifiedNativeCopy",
+        "video"
       ],
       "routes": []
     },
@@ -38129,6 +38317,7 @@
         "reviewedDerivativeDigest",
         "reviewedDerivativeGate",
         "reviewedMediaHash",
+        "validPrivateFinalReference",
         "validateReviewedDerivativeManifest"
       ],
       "symbols": [
@@ -38144,9 +38333,11 @@
         "from",
         "jsonShape",
         "m",
+        "native",
         "number",
         "object",
         "observed",
+        "privateFinal",
         "reviewedDerivativeDigest",
         "reviewedDerivativeGate",
         "reviewedMediaHash",
@@ -38156,6 +38347,7 @@
         "stamp",
         "text",
         "url",
+        "validPrivateFinalReference",
         "validateReviewedDerivativeManifest",
         "vodUrl"
       ],
@@ -42541,6 +42733,7 @@
         "../shared/clippers-derivative-audio.mjs",
         "../shared/clippers-reviewed-derivative.mjs",
         "./helpers/reviewed-derivative-fixture.mjs",
+        "./helpers/reviewed-lacy-source-manifest.mjs",
         "node:assert/strict",
         "node:fs/promises",
         "node:test"
@@ -42549,13 +42742,10 @@
       "symbols": [
         "a",
         "args",
-        "c",
-        "manifestOf",
         "pacing",
         "physical",
         "q",
         "r",
-        "shapes",
         "store"
       ],
       "routes": []
@@ -44150,6 +44340,159 @@
       "exports": [],
       "symbols": [
         "show"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-private-final-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-streamer-discovery.mjs",
+        "../server/clippers-private-final-routes",
+        "../server/clippers-reviewed-derivative-routes",
+        "./helpers/reviewed-derivative-fixture.mjs",
+        "express",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:events",
+        "node:fs/promises",
+        "node:http",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "Response",
+        "absentOrigin",
+        "all",
+        "app",
+        "approval",
+        "approve",
+        "approved",
+        "backend",
+        "badRef",
+        "body",
+        "busy",
+        "bytes",
+        "call",
+        "denied",
+        "digest",
+        "directory",
+        "exec",
+        "f",
+        "file",
+        "final",
+        "finalized",
+        "finished",
+        "first",
+        "fixture",
+        "flowing",
+        "headers",
+        "inspectionReceipt",
+        "invalid",
+        "last",
+        "nativeUrl",
+        "next",
+        "observer",
+        "original",
+        "pending",
+        "prefix",
+        "previousPreviews",
+        "proof",
+        "propose",
+        "r",
+        "range",
+        "ready",
+        "reconciled",
+        "record",
+        "recovered",
+        "request",
+        "response",
+        "route",
+        "server",
+        "stalled",
+        "status",
+        "stored",
+        "third",
+        "upload",
+        "values"
+      ],
+      "routes": [
+        "/favicon.ico"
+      ]
+    },
+    {
+      "path": "tests/clippers-private-final-store.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-private-final-store.mjs",
+        "../script/clippers-streamer-discovery.mjs",
+        "../shared/clippers-reviewed-derivative.mjs",
+        "./helpers/reviewed-derivative-fixture.mjs",
+        "node:assert/strict",
+        "node:async_hooks",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approved",
+        "chunk",
+        "collect",
+        "complete",
+        "forged",
+        "hash",
+        "m",
+        "memory",
+        "next",
+        "other",
+        "pending",
+        "record",
+        "recordFor",
+        "register",
+        "result",
+        "store",
+        "upload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-private-final-worker.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-private-final-store.mjs",
+        "../script/clippers-reviewed-copy-reconcile.mjs",
+        "../script/clippers-reviewed-derivative-worker.mjs",
+        "../script/clippers-streamer-discovery.mjs",
+        "../shared/clippers-reviewed-derivative.mjs",
+        "./helpers/reviewed-derivative-fixture.mjs",
+        "./helpers/reviewed-lacy-source-manifest.mjs",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approved",
+        "deps",
+        "evidenceRoot",
+        "hash",
+        "m",
+        "privateRecord",
+        "put",
+        "registry",
+        "report",
+        "state",
+        "store",
+        "storeOf"
       ],
       "routes": []
     },
@@ -46086,6 +46429,25 @@
         "fixtureProbe",
         "manifest",
         "proposal"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/helpers/reviewed-lacy-source-manifest.mjs",
+      "kind": "test",
+      "imports": [
+        "../../shared/clippers-derivative-audio.mjs",
+        "./reviewed-derivative-fixture.mjs",
+        "node:fs/promises"
+      ],
+      "exports": [
+        "lacyManifestOf",
+        "lacyShapes"
+      ],
+      "symbols": [
+        "c",
+        "lacyManifestOf",
+        "lacyShapes"
       ],
       "routes": []
     },
@@ -52317,6 +52679,7 @@
     "tests/clippers-orchestra-endpoint.test.ts",
     "tests/clippers-orchestra.test.ts",
     "tests/clippers-owned-source-scripts.test.ts",
+    "tests/clippers-private-final-routes.test.ts",
     "tests/clippers-reviewed-derivative-routes.test.ts",
     "tests/clippers-runtime-status.test.ts",
     "tests/clippers-streamer-pending-actions-postgres.test.ts",
