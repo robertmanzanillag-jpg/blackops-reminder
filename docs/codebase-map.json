@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T15:21:15.616Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/nov22-github-scout-auth-fix",
+  "generatedAt": "2026-11-22T15:32:18.402Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-legacy-uncertain-retention-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,11 +125,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1389,
-    "filesIndexed": 1267,
-    "imports": 5287,
+    "filesVisible": 1391,
+    "filesIndexed": 1269,
+    "imports": 5300,
     "routes": 647,
-    "symbols": 29667
+    "symbols": 29704
   },
   "directories": {
     ".": {
@@ -211,10 +211,10 @@
       }
     },
     "docs": {
-      "files": 91,
-      "indexed": 88,
+      "files": 92,
+      "indexed": 89,
       "kinds": {
-        "docs": 91
+        "docs": 92
       }
     },
     "examples/clippers-motivation": {
@@ -296,10 +296,10 @@
       }
     },
     "tests": {
-      "files": 376,
-      "indexed": 371,
+      "files": 377,
+      "indexed": 372,
       "kinds": {
-        "test": 376
+        "test": 377
       }
     },
     "tests/fixtures": {
@@ -6188,6 +6188,14 @@
     },
     {
       "path": "docs/clippers-generic-renderer.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/clippers-legacy-uncertain-retention.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -12746,6 +12754,7 @@
         "candidatesById",
         "caption",
         "change",
+        "changed",
         "channelLanguage",
         "channelLanguages",
         "client",
@@ -12799,6 +12808,7 @@
         "iso",
         "item",
         "keep",
+        "keepUrls",
         "key",
         "keys",
         "known",
@@ -12845,6 +12855,7 @@
         "priorAttempts",
         "priorHeld",
         "promoted",
+        "protectedClaims",
         "protectedPosts",
         "publication",
         "publishGate",
@@ -38252,20 +38263,46 @@
       "path": "shared/clippers-media-ledger.mjs",
       "kind": "shared",
       "imports": [
-        "../script/clippers-portfolio-metricool.mjs"
+        "../script/clippers-portfolio-metricool.mjs",
+        "node:crypto"
       ],
       "exports": [
+        "LEGACY_UNCERTAIN_RESERVATION_ORIGIN",
+        "MEDIA_LEDGER_LIMIT",
+        "boundedMediaLedger",
         "cloudPublishOf",
         "emptyCloudPublish",
-        "mediaEntriesOf"
+        "isProtectedMediaClaim",
+        "legacyUncertainAttemptKey",
+        "mediaEntriesOf",
+        "retainLegacyUncertainReservation",
+        "upsertMediaLedgerClaim"
       ],
       "symbols": [
+        "LEGACY_UNCERTAIN_RESERVATION_ORIGIN",
+        "MEDIA_LEDGER_LIMIT",
+        "boundedMediaLedger",
         "c",
+        "capacity",
+        "claims",
+        "clip",
         "cloudPublishOf",
+        "digest",
         "emptyCloudPublish",
         "explicit",
         "fromPosts",
-        "mediaEntriesOf"
+        "identity",
+        "isProtectedMediaClaim",
+        "legacyUncertainAttemptKey",
+        "maybe",
+        "mediaEntriesOf",
+        "prior",
+        "protectedClaims",
+        "reservationId",
+        "result",
+        "retainLegacyUncertainReservation",
+        "uncertainIdentity",
+        "upsertMediaLedgerClaim"
       ],
       "routes": []
     },
@@ -43269,6 +43306,44 @@
         "workspaceRoot",
         "writeContentConfig",
         "writeYoutubeConfigs"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-legacy-uncertain-retention.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-mac-ledger-guard.mjs",
+        "../script/clippers-streamer-cloud-worker.mjs",
+        "../script/clippers-streamer-discovery.mjs",
+        "../shared/clippers-account-lanes.mjs",
+        "../shared/clippers-media-ledger.mjs",
+        "../shared/clippers-streamer-policy.mjs",
+        "./helpers/clippers-source-authorization-fixture.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "DEST",
+        "NOW",
+        "before",
+        "c",
+        "candidate",
+        "dir",
+        "env",
+        "full",
+        "guard",
+        "memory",
+        "outcome",
+        "reconcile",
+        "rows",
+        "state",
+        "stateOf",
+        "store"
       ],
       "routes": []
     },
