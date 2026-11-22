@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T13:28:45.633Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-private-final-ingestion-nov22",
+  "generatedAt": "2026-11-22T13:38:25.510Z",
+  "repoRoot": ".",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,11 +125,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1375,
-    "filesIndexed": 1254,
-    "imports": 5231,
+    "filesVisible": 1382,
+    "filesIndexed": 1259,
+    "imports": 5246,
     "routes": 646,
-    "symbols": 29486
+    "symbols": 29516
   },
   "directories": {
     ".": {
@@ -211,10 +211,10 @@
       }
     },
     "docs": {
-      "files": 90,
-      "indexed": 87,
+      "files": 94,
+      "indexed": 89,
       "kinds": {
-        "docs": 90
+        "docs": 94
       }
     },
     "examples/clippers-motivation": {
@@ -226,10 +226,10 @@
       }
     },
     "script": {
-      "files": 158,
-      "indexed": 141,
+      "files": 159,
+      "indexed": 142,
       "kinds": {
-        "script": 158
+        "script": 159
       }
     },
     "script/office-api-budget-v6": {
@@ -261,10 +261,10 @@
       }
     },
     "server": {
-      "files": 303,
-      "indexed": 296,
+      "files": 304,
+      "indexed": 297,
       "kinds": {
-        "server": 303
+        "server": 304
       }
     },
     "server/blackroom-team": {
@@ -296,10 +296,10 @@
       }
     },
     "tests": {
-      "files": 369,
-      "indexed": 364,
+      "files": 370,
+      "indexed": 365,
       "kinds": {
-        "test": 369
+        "test": 370
       }
     },
     "tests/fixtures": {
@@ -6406,6 +6406,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -7981,10 +7997,45 @@
       "routes": []
     },
     {
+      "path": "script/build-provenance.ts",
+      "kind": "script",
+      "imports": [
+        "../server/build-provenance",
+        "node:child_process",
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [
+        "collectBuildProvenance",
+        "isRuntimeSourcePath"
+      ],
+      "symbols": [
+        "EXACT_FILES",
+        "EXCLUDED",
+        "before",
+        "clean",
+        "collectBuildProvenance",
+        "contents",
+        "env",
+        "full",
+        "git",
+        "hash",
+        "head",
+        "isRuntimeSourcePath",
+        "listed",
+        "paths",
+        "revision",
+        "untracked"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/build.ts",
       "kind": "script",
       "imports": [
         "../server/office-cloud-store",
+        "./build-provenance",
         "child_process",
         "esbuild",
         "fs/promises",
@@ -8002,6 +8053,7 @@
         "externals",
         "pipInstallEnv",
         "pkg",
+        "provenance",
         "runCommand",
         "targetDir",
         "timer"
@@ -21862,6 +21914,21 @@
       "routes": []
     },
     {
+      "path": "server/build-provenance.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "BuildProvenance",
+        "buildProvenance",
+        "unverifiedBuildProvenance"
+      ],
+      "symbols": [
+        "buildProvenance",
+        "unverifiedBuildProvenance"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/calendar-sync.ts",
       "kind": "server",
       "imports": [
@@ -26021,6 +26088,7 @@
         "./background-scheduler-policy",
         "./blackroom-control-routes",
         "./blackroom-remote-control",
+        "./build-provenance",
         "./cybersecurity-agent",
         "./health-check",
         "./local-auth",
@@ -41750,6 +41818,35 @@
       "routes": []
     },
     {
+      "path": "tests/build-provenance.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/build-provenance",
+        "../server/build-provenance",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "a",
+        "absent",
+        "actual",
+        "b",
+        "fixture",
+        "git",
+        "index",
+        "metadata",
+        "prior",
+        "root",
+        "stamp"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ceo-brief-cli.test.ts",
       "kind": "test",
       "imports": [
@@ -52652,6 +52749,7 @@
     "tests/blackroom-team-registry.test.ts",
     "tests/blackroom-team-scheduler.test.ts",
     "tests/blackroom-verified-learning.test.ts",
+    "tests/build-provenance.test.ts",
     "tests/ceo-backup-check-cli.test.ts",
     "tests/ceo-brief-cli.test.ts",
     "tests/ceo-briefing.test.ts",

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T13:28:45.633Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-private-final-ingestion-nov22`
+Generated: 2026-11-22T13:38:25.510Z
+Repo: `.`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1375 | 1254 | 5231 | 646 | 29486 |
+| 1382 | 1259 | 5246 | 646 | 29516 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 369 | 364 | test:369 |
-| `server` | 303 | 296 | server:303 |
+| `tests` | 370 | 365 | test:370 |
+| `server` | 304 | 297 | server:304 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
-| `script` | 158 | 141 | script:158 |
-| `docs` | 90 | 87 | docs:90 |
+| `script` | 159 | 142 | script:159 |
+| `docs` | 94 | 89 | docs:94 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 53 | 47 | shared:53 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -153,6 +153,7 @@ Package: `rest-express`
 - `tests/blackroom-team-registry.test.ts`
 - `tests/blackroom-team-scheduler.test.ts`
 - `tests/blackroom-verified-learning.test.ts`
+- `tests/build-provenance.test.ts`
 - `tests/ceo-backup-check-cli.test.ts`
 - `tests/ceo-brief-cli.test.ts`
 - `tests/ceo-briefing.test.ts`
@@ -421,7 +422,8 @@ Package: `rest-express`
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build-agents-world-client.mjs` (script; 4 imports)
 - `script/build-containment-static.mjs` (script; 7 symbols, 5 imports)
-- `script/build.ts` (script; 12 symbols, 6 imports)
+- `script/build-provenance.ts` (script; 16 symbols, 5 imports)
+- `script/build.ts` (script; 13 symbols, 7 imports)
 - `script/cache-local-news-models.mjs` (script; 1 symbols)
 - `script/ceo-db-check.ts` (script; 8 symbols, 3 imports)
 - `script/ceo-doctor.ts` (script; 3 symbols, 1 imports)
@@ -461,7 +463,6 @@ Package: `rest-express`
 - `script/clippers-observed-accounts.mjs` (script; 5 symbols)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
-- `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
@@ -470,3 +471,11 @@ Package: `rest-express`
 4. Regenerate with `npm run codebase:map` after major file moves, new pages, routes, tests, or server modules.
 5. Do not paste `docs/codebase-map.json` into prompts; use it for local scripts or targeted lookups only.
 
+
+## Build provenance verification
+
+- `script/build-provenance.ts` observes validated Git HEAD and a clean tracked tree before compilation; `script/build.ts` compares the same observation after all outputs and embeds a literal into the server. No startup Git or environment authority is used.
+- `server/build-provenance.ts` exposes the bounded `buildProvenance` field on both `/health` and `/api/health`. Development/unstamped, missing Git, dirty tracked files or any untracked input under runtime roots (including ignored/private inputs, whose contents are never read), and unavailable/unsafe source remain unverified.
+- `tracked-runtime-source-v1` hashes tracked code extensions under client/src, server, shared and script, plus `.replit`, package manifests, client/index.html, Vite/TypeScript/PostCSS/meta-image/UI config and the exact local-news-delivery-policy config. Secret/private/archive/media/data paths are excluded. It is a selected source digest, not a hash of every deployment input or installed dependency. Tracked public/media assets are covered by HEAD/clean status rather than hashed here; build-time environment can vary output from identical source. Retain external artifact hashes when verifying exact output.
+- For a cutover, independently pin the reviewed combined deployment HEAD (including preserved local overrides) and its runtime source SHA. Match those exact values to the build's `dist/build-provenance.json` and native health response; optionally retain an external SHA of `dist/index.cjs`. A stale `OFFICE_WEB_REVISION` is not a substitute. Unknown or mismatching provenance cannot satisfy this verification contract.
+- Verified means a clean local build observation only. It is not cryptographic remote attestation, approval of every financial consumer, proof of current worker activity, or deployment authorization. Replit publication still requires the normal review and human approval.
