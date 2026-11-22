@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, symlink, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -82,4 +82,25 @@ test("compiled health field is literal, immutable through stale env, with matchi
     const index=await import("node:fs/promises").then(fs=>fs.readFile(resolve("server/index.ts"),"utf8"));
     assert.match(index,/buildProvenance: buildProvenance\(\)/);
   } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test("actual buildAll binds client through final worker outputs and removes mixed artifacts", async () => {
+  const source=await readFile(resolve("script/build.ts"),"utf8");
+  const start=source.indexOf("async function buildAll() {"),end=source.indexOf("\nbuildAll().catch",start);
+  assert.ok(start>=0 && end>start);
+  // Execute the real build body; inject only external compilers/resources to avoid network/DB.
+  const body=source.slice(start,end).replace("createRequire(import.meta.url).resolve(","resourceLocator.resolve(");
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  const runBuild=new AsyncFunction("collectBuildProvenance","rm","viteBuild","copyFile","resourceLocator","bundleFreshYtDlp","readFile","allowlist","esbuild","writeFile","createOfficeCloudSchemaSql","console",body+";return buildAll();");
+  for(const mutation of ["none","client_clean_commit","client_dirty","worker_clean_commit"]){
+    const root=await fixture();let bundles=0,metadataWrites=0;const observed: unknown[]=[];
+    const at=(p:string)=>join(root,p),save=async(p:string,v:string)=>{await mkdir(join(at(p),".."),{recursive:true});await writeFile(at(p),v);};
+    const change=async(p:string,commit:boolean)=>{await writeFile(at(p),"export const changed=2;");if(commit){git(root,"add",p);git(root,"-c","user.name=Test","-c","user.email=test@example.invalid","commit","-qm","concurrent change");}};
+    try {
+      const args=[()=>{const x=collectBuildProvenance(root);observed.push(x);return x;},(p:string,o:unknown)=>rm(at(p),o as any),async()=>{await save("dist/public/index.html","client output");if(mutation.startsWith("client_"))await change("client/src/main.ts",mutation==="client_clean_commit");},async()=>save("dist/table.sql","schema"),{resolve:()=>"unused-resource"},async()=>save("dist/bin/tool","resource"),(p:string)=>readFile(at(p),"utf8"),[],async(o:{outfile:string;entryPoints:string[]})=>{bundles++;await save(o.outfile,"compiled output");if(mutation==="worker_clean_commit" && o.entryPoints[0]==="script/software-factory-worker.ts")await change("script/worker.ts",true);},async(p:string,v:string)=>{if(p==="dist/build-provenance.json")metadataWrites++;await save(p,v);},()=>"-- prepared schema",{log(){}}];
+      if(mutation==="none"){await runBuild(...args);assert.equal(metadataWrites,1);assert.deepEqual(JSON.parse(await readFile(at("dist/build-provenance.json"),"utf8")),observed[0]);}
+      else {await assert.rejects(runBuild(...args),/Build source changed during compilation/);assert.equal(metadataWrites,0);await assert.rejects(stat(at("dist")),{code:"ENOENT"});assert.notDeepEqual(observed[0],observed[1]);}
+      assert.equal(bundles,4);
+    } finally {await rm(root,{recursive:true,force:true});}
+  }
 });
