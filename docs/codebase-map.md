@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T11:09:27.131Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-cache-write-nov22`
+Generated: 2026-11-22T11:11:15.467Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-count-receipt-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1337 | 1220 | 5041 | 633 | 28932 |
+| 1344 | 1225 | 5058 | 633 | 28993 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 357 | 352 | test:357 |
+| `tests` | 359 | 354 | test:359 |
 | `server` | 299 | 292 | server:299 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 151 | 136 | script:151 |
-| `docs` | 84 | 81 | docs:84 |
+| `docs` | 89 | 84 | docs:89 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 48 | 44 | shared:48 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -195,6 +195,7 @@ Package: `rest-express`
 - `tests/dropshipping-ceo.test.ts`
 - `tests/env-loader-core.test.ts`
 - `tests/factory-api-cache-write-coverage.test.ts`
+- `tests/factory-api-counted-input.test.ts`
 - `tests/factory-api-invocation.test.ts`
 - `tests/factory-api-request-binding.test.ts`
 - `tests/factory-api-token-cost.test.ts`
@@ -339,6 +340,7 @@ Package: `rest-express`
 - `tests/software-factory-office-ui-evidence.test.ts`
 - `tests/software-factory-once.test.ts`
 - `tests/software-factory-openai-builder.test.ts`
+- `tests/software-factory-openai-count.test.ts`
 - `tests/software-factory-openai-transport.test.ts`
 - `tests/software-factory-openai.test.ts`
 - `tests/software-factory-operator-config.test.ts`

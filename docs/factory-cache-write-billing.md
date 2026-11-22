@@ -105,5 +105,6 @@ order produces 27,864 bytes of file-list text alone. At the documented Sol examp
 10,000 nanoUSD/token, the minimum byte reservation is 154,680 microUSD before
 instructions/schema. The approved discovery escrow remains 100,000 microUSD.
 That case holds before paid dispatch; this patch never increases stage budgets.
-A separately reviewed, one-use exact-prompt/parent-fence-bound free-count receipt
-can tighten the input maximum without weakening the historical reconciliation gate.
+The separately documented [exact free-count adapter](factory-counted-input-admission.md)
+can tighten the input maximum with a private one-use exact-prompt/parent-fence-bound
+receipt, without weakening the historical reconciliation gate.

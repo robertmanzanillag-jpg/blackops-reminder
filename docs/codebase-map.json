@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T11:09:27.131Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-cache-write-nov22",
+  "generatedAt": "2026-11-22T11:11:15.467Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-count-receipt-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,27 +125,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1337,
-    "filesIndexed": 1220,
-    "imports": 5041,
+    "filesVisible": 1344,
+    "filesIndexed": 1225,
+    "imports": 5058,
     "routes": 633,
-    "symbols": 28932
+    "symbols": 28993
   },
   "directories": {
-    "script/office-api-budget-v7-integrity": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "script": 3
-      }
-    },
-    "tests/fixtures": {
-      "files": 9,
-      "indexed": 7,
-      "kinds": {
-        "test": 9
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -225,10 +211,10 @@
       }
     },
     "docs": {
-      "files": 84,
-      "indexed": 81,
+      "files": 89,
+      "indexed": 84,
       "kinds": {
-        "docs": 84
+        "docs": 89
       }
     },
     "examples/clippers-motivation": {
@@ -251,6 +237,13 @@
       "indexed": 8,
       "kinds": {
         "script": 10
+      }
+    },
+    "script/office-api-budget-v7-integrity": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "script": 3
       }
     },
     "script/release-gate": {
@@ -303,10 +296,17 @@
       }
     },
     "tests": {
-      "files": 357,
-      "indexed": 352,
+      "files": 359,
+      "indexed": 354,
       "kinds": {
-        "test": 357
+        "test": 359
+      }
+    },
+    "tests/fixtures": {
+      "files": 9,
+      "indexed": 7,
+      "kinds": {
+        "test": 9
       }
     },
     "tests/harness": {
@@ -6382,6 +6382,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -6465,6 +6481,14 @@
     },
     {
       "path": "docs/factory-cloud.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-counted-input-admission.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -24869,6 +24893,8 @@
         "configuredFactoryApiPrice",
         "context",
         "costError",
+        "countDeadline",
+        "counted",
         "coverage",
         "createFactoryApiInvocation",
         "deadline",
@@ -24881,6 +24907,7 @@
         "invoke",
         "key",
         "matches",
+        "maximumInputTokens",
         "now",
         "parent",
         "price",
@@ -24904,7 +24931,8 @@
         "./factory-api-cache-usage",
         "./factory-api-context",
         "./factory-api-invocation",
-        "./factory-api-token-cost"
+        "./factory-api-token-cost",
+        "./software-factory-openai-count"
       ],
       "exports": [
         "guardFactoryOpenAiClient",
@@ -24930,6 +24958,7 @@
         "configuredTimeout",
         "containsMedia",
         "count",
+        "countedInput",
         "coverage",
         "descriptor",
         "descriptors",
@@ -34440,17 +34469,50 @@
       "path": "server/software-factory-openai-count.ts",
       "kind": "server",
       "imports": [
-        "./factory-api-context"
+        "./factory-api-context",
+        "node:async_hooks",
+        "node:crypto"
       ],
       "exports": [
+        "consumeFactoryOpenAiInputCount",
         "createFactoryOpenAiCountTransport",
         "routeFactoryOpenAiRequests"
       ],
       "symbols": [
         "COUNT_FIELDS",
         "COUNT_URL",
+        "CountBinding",
+        "CountReceipt",
+        "GENERATE_FIELDS",
+        "GENERATE_URL",
+        "MAX_COUNT",
+        "Parent",
+        "binding",
+        "bindings",
+        "bytes",
+        "canonical",
+        "consumeFactoryOpenAiInputCount",
+        "consumedAt",
         "createFactoryOpenAiCountTransport",
-        "routeFactoryOpenAiRequests"
+        "current",
+        "digest",
+        "encoded",
+        "index",
+        "live",
+        "now",
+        "obtainedAt",
+        "parent",
+        "promptDigest",
+        "promptSha256",
+        "reader",
+        "receipt",
+        "remainingMs",
+        "response",
+        "result",
+        "routeFactoryOpenAiRequests",
+        "sameParent",
+        "taggedResponses",
+        "value"
       ],
       "routes": []
     },
@@ -45039,6 +45101,38 @@
       "routes": []
     },
     {
+      "path": "tests/factory-api-counted-input.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/factory-api-context",
+        "../server/factory-api-invocation",
+        "../server/software-factory-api-budget",
+        "../server/software-factory-openai",
+        "../server/software-factory-openai-count",
+        "../server/software-factory-openai-transport",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "count",
+        "f",
+        "fixture",
+        "generate",
+        "generation",
+        "invoke",
+        "job",
+        "now",
+        "price",
+        "provider",
+        "raw",
+        "request",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/factory-api-invocation.test.ts",
       "kind": "test",
       "imports": [
@@ -50415,6 +50509,35 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-openai-count.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/factory-api-context",
+        "../server/software-factory-openai-count",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "COUNT",
+        "body",
+        "changedOrder",
+        "count",
+        "f",
+        "fixture",
+        "gated",
+        "generation",
+        "init",
+        "key",
+        "parent",
+        "prompt",
+        "response",
+        "route"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-openai-transport.test.ts",
       "kind": "test",
       "imports": [
@@ -51549,6 +51672,7 @@
     "tests/dropshipping-ceo.test.ts",
     "tests/env-loader-core.test.ts",
     "tests/factory-api-cache-write-coverage.test.ts",
+    "tests/factory-api-counted-input.test.ts",
     "tests/factory-api-invocation.test.ts",
     "tests/factory-api-request-binding.test.ts",
     "tests/factory-api-token-cost.test.ts",
@@ -51693,6 +51817,7 @@
     "tests/software-factory-office-ui-evidence.test.ts",
     "tests/software-factory-once.test.ts",
     "tests/software-factory-openai-builder.test.ts",
+    "tests/software-factory-openai-count.test.ts",
     "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",
     "tests/software-factory-operator-config.test.ts",
