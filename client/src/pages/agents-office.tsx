@@ -1,6 +1,6 @@
 import { CompanyOffice } from "@/components/company-office/company-office";
 import { SoftwareFactoryPanel } from "@/components/software-factory-panel";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ownerOfficeStorageKey } from "@/lib/owner-office-storage";
 import { defaultAgentLocations as sharedDefaultAgentLocations, loadOfficeLayout, saveOfficeLocations, saveOfficeOffsets, type OfficeRoom } from "@/lib/office-layout";
@@ -1058,6 +1058,21 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const workspace = useWorkspaceRole();
   const handoffKey = ownerOfficeStorageKey(OFFICE_GITHUB_HANDOFF_KEY, ownerId);
   const officeMapRef = useRef<HTMLDivElement | null>(null);
+  const primaryToolbarRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const toolbar = primaryToolbarRef.current;
+    const map = officeMapRef.current;
+    if (!toolbar || !map) return;
+
+    const alignAcademy = () => {
+      // Both are positioned relative to the same section. The toolbar wraps on phones.
+      map.style.setProperty("--office-mobile-tools-bottom", `${toolbar.offsetTop + toolbar.offsetHeight}px`);
+    };
+    alignAcademy();
+    const observer = new ResizeObserver(alignAcademy);
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, []);
   // Agent-chat thread per popup contact: later messages continue the same conversation.
   const agentChatThreadsRef = useRef<Record<string, string>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
@@ -1393,7 +1408,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
             </div>
         </aside>
 
-        <div className="pointer-events-none absolute left-4 right-4 top-[112px] z-[75] flex items-start justify-start gap-4 sm:left-20 sm:right-40 sm:top-5 lg:right-40 lg:items-center lg:justify-between [&_button]:pointer-events-auto [&_a]:pointer-events-auto [&_input]:pointer-events-auto">
+        <div ref={primaryToolbarRef} className="pointer-events-none absolute left-4 right-4 top-[112px] z-[75] flex items-start justify-start gap-4 sm:left-20 sm:right-40 sm:top-5 lg:right-40 lg:items-center lg:justify-between [&_button]:pointer-events-auto [&_a]:pointer-events-auto [&_input]:pointer-events-auto">
             {/* Decorative search box: hidden below 1024px so the view toggle and the KONG buttons fit on screen. */}
             <div className="hidden h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur xl:flex xl:max-w-[620px]">
               <Sparkles className="h-4 w-4 text-cyan-200" />

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T14:46:43.508Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-campaign-leaf-depth-nov22",
+  "generatedAt": "2026-11-22T14:56:51.785Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/nov22-private-final-mobile-fix",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -129,23 +129,9 @@
     "filesIndexed": 1267,
     "imports": 5286,
     "routes": 647,
-    "symbols": 29621
+    "symbols": 29655
   },
   "directories": {
-    "tests": {
-      "files": 376,
-      "indexed": 371,
-      "kinds": {
-        "test": 376
-      }
-    },
-    "tests/fixtures": {
-      "files": 11,
-      "indexed": 9,
-      "kinds": {
-        "test": 11
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -307,6 +293,20 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 376,
+      "indexed": 371,
+      "kinds": {
+        "test": 376
+      }
+    },
+    "tests/fixtures": {
+      "files": 11,
+      "indexed": 9,
+      "kinds": {
+        "test": 11
       }
     },
     "tests/harness": {
@@ -4876,6 +4876,7 @@
         "agentById",
         "agentChatThreadsRef",
         "agents",
+        "alignAcademy",
         "answer",
         "append",
         "approved",
@@ -4913,8 +4914,10 @@
         "legalReportsFromApi",
         "legalSourceErrors",
         "legalSummary",
+        "map",
         "member",
         "moveAgentToRoom",
+        "observer",
         "officeMapRef",
         "openContactChat",
         "openHref",
@@ -4923,6 +4926,7 @@
         "overview",
         "ownerId",
         "pr",
+        "primaryToolbarRef",
         "projectText",
         "projects",
         "queryClient",
@@ -4940,6 +4944,7 @@
         "team",
         "text",
         "threadId",
+        "toolbar",
         "value",
         "walkingRoomShortcuts",
         "workspace"
@@ -44630,9 +44635,12 @@
         "backend",
         "badRef",
         "body",
+        "browser",
         "busy",
         "bytes",
         "call",
+        "context",
+        "controls",
         "denied",
         "digest",
         "directory",
@@ -44649,10 +44657,13 @@
         "inspectionReceipt",
         "invalid",
         "last",
+        "layout",
         "nativeUrl",
         "next",
         "observer",
         "original",
+        "outside",
+        "page",
         "pending",
         "prefix",
         "previousPreviews",
@@ -44673,7 +44684,8 @@
         "stored",
         "third",
         "upload",
-        "values"
+        "values",
+        "visualWidth"
       ],
       "routes": [
         "/favicon.ico"
@@ -49848,14 +49860,36 @@
       "exports": [],
       "symbols": [
         "artifacts",
+        "bottom",
         "context",
+        "covered",
         "dialog",
+        "errors",
+        "hiddenText",
+        "improvements",
+        "inspect",
+        "layout",
+        "left",
+        "mirror",
+        "mirrorRect",
         "open",
+        "origin",
         "page",
+        "panel",
         "pathname",
         "previousTmp",
+        "range",
+        "rect",
         "report",
-        "tempRoot"
+        "request",
+        "right",
+        "tempRoot",
+        "text",
+        "top",
+        "url",
+        "visibleHeight",
+        "visibleWidth",
+        "walker"
       ],
       "routes": []
     },

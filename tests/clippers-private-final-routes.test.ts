@@ -77,6 +77,62 @@ test('private final upload/readback gives exact owner-only ranges and HEAD, then
   const absentOrigin=await fetch(f.base+f.prefix+'/preview',{headers:{'x-fixture-auth':'fixture-owner'}});assert.equal(absentOrigin.status,403);
  }finally{await f.close();}
 });
+test('populated private review proposal stays inside mobile and desktop viewports', async () => {
+ const f = await fixture();
+ try {
+  f.manifest.id = 'private-review-' + 'a'.repeat(80);
+  f.manifest.qa.reportReference = 'fixture-only:' + 'review-proof'.repeat(32);
+  f.manifest.caption += ' ' + 'Synthetic caption for layout testing. '.repeat(16).trim();
+  f.manifest.captionSha256 = f.manifest.qa.captionSha256 = digest(f.manifest.caption);
+  await f.propose();
+
+  const browser = await chromium.launch({ headless: true, ...(process.platform === 'darwin' ? { channel: 'chrome' } : {}) });
+  try {
+   for (const { width, height, isMobile } of [
+    { width: 390, height: 844, isMobile: true },
+    { width: 1440, height: 900, isMobile: false },
+   ]) {
+    const context = await browser.newContext({ viewport: { width, height }, isMobile, hasTouch: isMobile, extraHTTPHeaders: { 'x-fixture-auth': 'fixture-owner' } });
+    try {
+     const page = await context.newPage();
+     await page.goto(f.base + '/review');
+     await page.getByText(f.manifest.id + ' · proposed', { exact: true }).waitFor();
+     await page.getByText('Variable de publicación en este servidor: desactivada. Es informativa. Consulta los recibos en la oficina para conocer el estado del ejecutor programado.', { exact: true }).waitFor();
+     await page.getByText(f.manifest.caption, { exact: true }).waitFor();
+     await page.getByText('Fuente: ' + f.manifest.source.url + ' · Evidencia: ' + f.manifest.qa.reportReference, { exact: true }).waitFor();
+     await page.locator('#manifest').setInputFiles({
+      name: 'proposal-' + 'a'.repeat(80) + '.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(f.manifest)),
+     });
+     await page.getByLabel('Archivo final privado para ' + f.manifest.id, { exact: true }).setInputFiles({
+      name: 'private-final-' + 'a'.repeat(80) + '.mp4', mimeType: 'video/mp4', buffer: f.bytes,
+     });
+
+     const layout = await page.evaluate(() => {
+      const { clientWidth, scrollWidth } = document.documentElement;
+      const visualWidth = window.visualViewport?.width ?? clientWidth;
+      const controls = [...document.querySelectorAll('#manifest, #records fieldset, #records legend, #records input, #records button, #records p, #records label')];
+      const outside = controls.flatMap(element => {
+       const { left, right } = element.getBoundingClientRect();
+       return left < -1 || right > Math.min(clientWidth, visualWidth) + 1 ? [{ tag: element.tagName, left, right }] : [];
+      });
+      return { clientWidth, visualWidth, scrollWidth, outside };
+     });
+     assert.equal(layout.clientWidth, width);
+     assert.equal(layout.visualWidth, width);
+     assert.ok(layout.scrollWidth <= layout.clientWidth, JSON.stringify(layout));
+     assert.deepEqual(layout.outside, [], JSON.stringify(layout));
+    } finally {
+     await context.close();
+    }
+   }
+  } finally {
+   await browser.close();
+  }
+ } finally {
+  await f.close();
+ }
+});
+
 test('real owner browser uploads only the exact private MP4, previews it and then approves without public media or console errors',async()=>{
  const directory=await mkdtemp(path.join(tmpdir(),'private-preview-browser-'));let browser:any,f:Awaited<ReturnType<typeof fixture>>|undefined;
  try{
