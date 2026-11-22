@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-22T13:59:50.721Z",
+  "generatedAt": "2026-11-22T14:03:55.448Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-external-attribution-fence-nov22",
   "packageName": "rest-express",
   "scripts": {
@@ -129,7 +129,7 @@
     "filesIndexed": 1265,
     "imports": 5282,
     "routes": 647,
-    "symbols": 29608
+    "symbols": 29611
   },
   "directories": {
     ".": {
@@ -12464,6 +12464,7 @@
         "done",
         "doubled",
         "earned",
+        "exactId",
         "experiments",
         "expiresAt",
         "groups",
@@ -12490,6 +12491,7 @@
         "ratios",
         "recent",
         "remaining",
+        "reviewedAccounts",
         "rows",
         "s",
         "usable",
@@ -44813,6 +44815,7 @@
         "NOW",
         "external",
         "iso",
+        "isolated",
         "observation",
         "out",
         "post",

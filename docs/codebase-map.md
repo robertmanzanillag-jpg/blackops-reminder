@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-22T13:59:50.721Z
+Generated: 2026-11-22T14:03:55.448Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-external-attribution-fence-nov22`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1387 | 1265 | 5282 | 647 | 29608 |
+| 1387 | 1265 | 5282 | 647 | 29611 |
 
 ## Entrypoints
 - `client/src/App.tsx`
