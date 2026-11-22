@@ -293,7 +293,7 @@ jobs:
           fi
           test -s "$dir/shared-credit.json"
           printf '%s' "$SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON" > "$dir/operator.json"
-          node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' "$dir/shared-credit.json" "$dir/operator.json"
+          node script/validate-factory-private-config.mjs "$dir/shared-credit.json" "$dir/operator.json"
           echo "FACTORY_CONFIG_DIR=$dir" >> "$GITHUB_ENV"
 
       - name: Run the factory once (exits when idle)
