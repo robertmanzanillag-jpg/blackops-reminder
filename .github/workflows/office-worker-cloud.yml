@@ -147,6 +147,8 @@ jobs:
           OFFICE_CAPABILITY_TRAINING_ENABLED: ${{ vars.OFFICE_CAPABILITY_TRAINING_ENABLED || 'false' }}
           OFFICE_CAPABILITY_MAX_CALLS_PER_DAY: ${{ vars.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY }}
           OPENAI_SHARED_CREDITS_REQUIRED: ${{ vars.OFFICE_SHARED_CREDITS_REQUIRED || 'false' }}
+          # Same nonsecret catalog; each existing Office model still needs its own reviewed row.
+          FACTORY_API_PRICING_CONFIG: ${{ vars.FACTORY_API_PRICING_CONFIG }}
           # Office self-heal (finding -> order -> factory -> re-audit). On unless the variable is 'false'.
           # No fixed daily order cap: the daily credit pacer decides (an optional variable can still cap it).
           OFFICE_SELF_HEAL_ENABLED: ${{ vars.OFFICE_SELF_HEAL_ENABLED || 'true' }}
@@ -303,6 +305,8 @@ jobs:
           SOFTWARE_FACTORY_STORAGE_BACKEND: postgres
           AGENT_COUNCIL_STORAGE: postgres
           OPENAI_SHARED_CREDITS_REQUIRED: "true"
+          # Nonsecret reviewed price catalog; missing/expired entries keep paid admission held.
+          FACTORY_API_PRICING_CONFIG: ${{ vars.FACTORY_API_PRICING_CONFIG }}
           # Factory-specific secrets win; otherwise reuse the office ones (same database, owner and ledger).
           DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL || secrets.OFFICE_DATABASE_URL }}
           DEFAULT_USER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
