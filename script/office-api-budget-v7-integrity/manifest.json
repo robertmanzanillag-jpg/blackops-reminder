@@ -43,11 +43,11 @@
     },
     {
       "path": "server/factory-api-invocation.ts",
-      "sha256": "c09c3af8c252138d10120353d36783bd6889ef4f3ef38316a0b2826a4925eba4"
+      "sha256": "2a1535d64e54f3eec1aed51e4b17114d747341f00374a8d3ab75f49ac9b411c0"
     },
     {
       "path": "server/factory-api-sdk.ts",
-      "sha256": "d6f511bf99f26f03d9a90f5688bfb4e7b7d69b91a4f8eb0767ea8cf44a0716c1"
+      "sha256": "68c5089fda5f83f11216e2de19694d1d7eea6eda1ef627cced29ecaeda80fad5"
     },
     {
       "path": "server/factory-api-token-cost.ts",
@@ -127,7 +127,7 @@
     },
     {
       "path": "server/software-factory-openai-count.ts",
-      "sha256": "9f126d826b9837b42ea9abab258a1641c664575f49236a3ba1f653327e9c4abc"
+      "sha256": "fb532f77c5f7a2a8a21b9d29a8d42588ff3bba9a796c6e285fdf6fcf76bd84b1"
     },
     {
       "path": "server/software-factory-openai-transport.ts",

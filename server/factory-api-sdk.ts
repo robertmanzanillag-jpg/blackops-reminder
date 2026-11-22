@@ -1,3 +1,4 @@
+import {consumeFactoryOpenAiInputCount} from './software-factory-openai-count';
 import {requireFactoryCacheWritePrice} from './factory-api-token-cost';
 import {readOpenAiCacheUsage,validateTextOutputTokenDetails} from './factory-api-cache-usage';
 import {currentFactoryApiParent} from "./factory-api-context";
@@ -158,7 +159,8 @@ export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:i
   if(price.model!==bounded.model)throw new FactoryApiBudgetError('FACTORY_API_PRICING_UNVERIFIED');
   try{requireFactoryCacheWritePrice(price);}catch{throw new FactoryApiBudgetError('FACTORY_API_CACHE_WRITE_PRICING_UNVERIFIED');}
   const invoke=options.invoke??await defaultFactoryApiInvocation();
-  const output=await invoke({executionId:options.executionId,consumer:options.consumer??'office',requestSha256:apiEvidenceHash(body),price,...bounded,cacheWriteCoverage:true,signal,
+  const countedInput=consumeFactoryOpenAiInputCount(body);
+  const output=await invoke({...(countedInput?{countedInput}:{}),executionId:options.executionId,consumer:options.consumer??'office',requestSha256:apiEvidenceHash(body),price,...bounded,cacheWriteCoverage:true,signal,
    call:async limits=>{
     const response=await transport(url,{...request,redirect:'error',signal:limits.signal});
     if(!response.ok){await response.body?.cancel();throw Error('http');}

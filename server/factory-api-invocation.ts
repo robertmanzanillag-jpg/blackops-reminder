@@ -29,6 +29,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
  const now=options.now??(()=>new Date());
  const invoke=async function invoke<T>(input:{executionId?:string;consumer:FactoryApiReservation['consumer'];
    requestSha256:string;price:FactoryApiPrice;promptBytes:number;maxOutputTokens:number;cacheWriteCoverage?:boolean;
+   countedInput?:Readonly<{inputTokens:number;evidenceSha256:string;remainingMs:number}>;
    parent?:FactoryApiReservation['parent'];signal?:AbortSignal;
    call:(options:{signal:AbortSignal;maxRetries:0;timeout:number})=>Promise<T>;
    usage:(result:T)=>FactoryApiUsage}):Promise<T>{
@@ -48,8 +49,12 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
   const parent=input.parent??(context?{jobId:context.jobId,fence:context.fence}:undefined);
   const key='api:'+apiEvidenceHash([input.consumer,input.executionId??randomUUID()]);
   const coverage=input.cacheWriteCoverage===true;
-  let maximumMicroUsd:number;try{maximumMicroUsd=Math.max(1,factoryTextMaximumMicroUsd(price,input.promptBytes+1024,input.maxOutputTokens,coverage));}catch(error){costError(error);}
-  const requestSha256=apiEvidenceHash([input.requestSha256,price,input.promptBytes,input.maxOutputTokens,parent??null,coverage?'bounded_30m_12h':'no_cache_write_coverage']);
+  const counted=input.countedInput;
+  if(counted&&(!coverage||!context||!Number.isSafeInteger(counted.inputTokens)||counted.inputTokens<0||counted.inputTokens>1_049_600||!Number.isSafeInteger(counted.remainingMs)||counted.remainingMs<1||counted.remainingMs>120000||!sha.safeParse(counted.evidenceSha256).success))throw new FactoryApiBudgetError('FACTORY_API_INPUT_COUNT_UNVERIFIED');
+  const maximumInputTokens=counted?.inputTokens??input.promptBytes+1024;
+  const countDeadline=counted?now().getTime()+counted.remainingMs:Infinity;
+  let maximumMicroUsd:number;try{maximumMicroUsd=Math.max(1,factoryTextMaximumMicroUsd(price,maximumInputTokens,input.maxOutputTokens,coverage));}catch(error){costError(error);}
+  const requestSha256=apiEvidenceHash([input.requestSha256,price,input.promptBytes,input.maxOutputTokens,parent??null,coverage?'bounded_30m_12h':'no_cache_write_coverage',counted??null]);
   const reservation=await options.store.reserveApi(owner,{key,consumer:input.consumer,requestSha256,
     maximumMicroUsd:maximumMicroUsd!,...(parent?{parent}:{})}).catch(error=>{throw factoryApiAdmissionError(error);});
   if(!reservation.admitted)throw new FactoryApiBudgetError('FACTORY_API_DISPATCH_ALREADY_RESERVED');
@@ -59,7 +64,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    const executionWindow=await options.store.executionWindowApi(owner,key);
    const elapsed=now().getTime()-windowStartedAt;
    if(!Number.isFinite(elapsed)||elapsed<0)throw Error("clock unverified");
-   const deadline=Math.min(executionWindow-elapsed,Date.parse(price.validUntil)-now().getTime());
+   const deadline=Math.min(executionWindow-elapsed,Date.parse(price.validUntil)-now().getTime(),countDeadline-now().getTime());
    if(!Number.isFinite(deadline)||deadline<1)throw Error('expired');
    const timeout=Math.floor(Math.min(120000,deadline)),signal=sourceSignal?AbortSignal.any([sourceSignal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout);
    signal.throwIfAborted();
@@ -67,7 +72,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    const result=await input.call({signal,maxRetries:0,timeout});
    signal.throwIfAborted();if(now().getTime()>=Date.parse(price.validUntil))throw Error("expired");
    const usage=input.usage(result);
-   if(usage.inputTokens>input.promptBytes+1024||usage.outputTokens>input.maxOutputTokens)throw Error('usage bounds');
+   if((counted?usage.inputTokens!==maximumInputTokens:usage.inputTokens>maximumInputTokens)||usage.outputTokens>input.maxOutputTokens)throw Error('usage bounds');
    if(usage.model!==price.model||typeof usage.responseId!=='string'||!usage.responseId||usage.responseId.length>300)throw Error('unverified');
    if(usage.inputTokenDetailsSha256!==undefined)sha.parse(usage.inputTokenDetailsSha256);
    const actualMicroUsd=factoryTextActualMicroUsd(price,{...usage,cachedTokens:usage.cachedInputTokens},coverage);
