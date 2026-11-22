@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T13:57:22.529Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-owner-hour-window-nov22",
+  "generatedAt": "2026-11-22T13:59:50.721Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-external-attribution-fence-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,11 +125,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1386,
-    "filesIndexed": 1264,
-    "imports": 5278,
+    "filesVisible": 1387,
+    "filesIndexed": 1265,
+    "imports": 5282,
     "routes": 647,
-    "symbols": 29595
+    "symbols": 29608
   },
   "directories": {
     ".": {
@@ -296,10 +296,10 @@
       }
     },
     "tests": {
-      "files": 374,
-      "indexed": 369,
+      "files": 375,
+      "indexed": 370,
       "kinds": {
-        "test": 374
+        "test": 375
       }
     },
     "tests/fixtures": {
@@ -12473,6 +12473,8 @@
         "killedHooks",
         "killedHours",
         "latestViews",
+        "legacyAttribution",
+        "legacyPosts",
         "live",
         "livePause",
         "m",
@@ -44794,6 +44796,31 @@
         "value",
         "writeCampaign",
         "writeManifest"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-reviewed-attribution-fence.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-streamer-cloud-learning.mjs",
+        "../shared/clippers-account-lanes.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "external",
+        "iso",
+        "observation",
+        "out",
+        "post",
+        "posts",
+        "raw",
+        "result",
+        "row",
+        "rows"
       ],
       "routes": []
     },

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T13:57:22.529Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-owner-hour-window-nov22`
+Generated: 2026-11-22T13:59:50.721Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-external-attribution-fence-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1386 | 1264 | 5278 | 647 | 29595 |
+| 1387 | 1265 | 5282 | 647 | 29608 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,7 +28,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 374 | 369 | test:374 |
+| `tests` | 375 | 370 | test:375 |
 | `server` | 304 | 297 | server:304 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 160 | 143 | script:160 |
