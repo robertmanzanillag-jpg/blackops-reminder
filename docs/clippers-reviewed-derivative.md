@@ -30,7 +30,7 @@ At dispatch, a complete fresh provider calendar read must exactly match actual I
 
 GraphQL offset estimates are not verified start anchors. Unverified anchors reserve the entire VOD conservatively across different physical files. Only exact, disjoint intervals of the same independently reviewed physical file hash can establish nonoverlap without an absolute anchor. A second file cannot borrow that exception.
 
-Mapped sources and the new original-source interval/file are reserved in the existing shared media ledger. Other pipelines see the same reservation. Unknown writes remain reserved; the runner never retries them. Derivative claims persist separately from the raw post history so its trim/reconciliation cannot erase them. Registry/ledger capacity is bounded with holds, without trimming uncertain reservations.
+Mapped sources and the new original-source interval/file are reserved in the existing shared media ledger. Other pipelines see the same reservation. Unknown writes remain reserved; the runner never retries them. A missing/contradictory commercial disclosure after a write persistently pauses commercial derivatives across later runs while noncommercial work stays independent. Derivative claims persist separately from the raw post history so its trim/reconciliation cannot erase them. Registry/ledger capacity is bounded with holds, without trimming uncertain reservations.
 
 ## Dispatch and cleanup
 
@@ -45,3 +45,9 @@ Rollback: revert the PR while leaving publishing disabled. Existing owner record
 The authoritative derivative calendar read follows the [official Metricool scheduler contract](https://app.metricool.com/resources/apidocs/index.html) without the undocumented `integrationSource` read parameter. This does not claim that the parameter was proven to filter; known native/UI rows still need operational read-back comparison before activation. Legacy raw readers are unchanged.
 
 The provider calendar baseline is freshly verified before staging; the adapter then performs its own fresh per-account quota/duplicate read immediately before the final fence, while the shared transaction also checks local concurrent claims. Native manual writers that bypass the shared lease cannot participate in an atomic source reservation; the owner must keep the single-writer policy in force.
+
+The review desk “Comprobar envío en Metricool” is read-only toward Metricool. It clears a commercial pause only after an exact UUID/ID/content/slot/native-byte read-back retains the paid flag, or proves an explicit nonpublishing draft. An unchecked owner reset, elapsed time or a different UUID cannot clear it. Draft/source reservations remain and no original delivery is replayed. Unknown deliveries without an exact provider identity still need manual reconciliation.
+
+Independently verified bounded VOD anchors retain their explicit ± uncertainty and conservative parent interval; they are never relabeled exact. Shared error for the same physical file does not erase proof that two relative half-open intervals are disjoint.
+
+A separate [cadence/hour-window activation proposal](clippers-derivative-release-proposal.md) describes the remaining operational work without configuring a timer or changing exact-slot approvals.

@@ -53,9 +53,10 @@ export function validateReviewedDerivativeManifest(manifest, now = Date.now()) {
   const clipUrl=source.kind==='clip'&&!sourceUrl.search&&((sourceUrl.hostname==='clips.twitch.tv'&&sourceUrl.pathname===`/${slug}`)||(sourceUrl.hostname==='www.twitch.tv'&&sourceUrl.pathname===`/${source.handle}/clip/${slug}`));
   const vodUrl=source.kind==='vod_context'&&sourceUrl.hostname==='www.twitch.tv'&&sourceUrl.pathname===`/videos/${source.vodId}`&&/^\?t=\d{1,4}h[0-5]\dm[0-5]\ds$/.test(sourceUrl.search);
   if (sourceUrl.protocol !== 'https:' || sourceUrl.port || sourceUrl.href !== source.url || sourceUrl.username || sourceUrl.password || sourceUrl.hash || !(clipUrl||vodUrl)) fail('derivative_source_invalid');
-  object(source.vodAnchor,['quality','evidenceReference','evidenceSha256']);
-  if(!['independently_verified_start','unverified'].includes(source.vodAnchor.quality)||!text(source.vodAnchor.evidenceReference)||!SHA.test(source.vodAnchor.evidenceSha256??'')||
-    !((source.vodId===null&&source.vodOffsetSeconds===null&&source.vodAnchor.quality==='unverified')||(/^\d+$/.test(source.vodId??'')&&(source.vodAnchor.quality==='independently_verified_start'?number(source.vodOffsetSeconds)&&source.vodOffsetSeconds>=0:source.vodOffsetSeconds===null)))) fail('derivative_source_invalid');
+  object(source.vodAnchor,['quality','evidenceReference','evidenceSha256','uncertaintySeconds']);
+  if(!['independently_verified_start','independently_verified_bounded_start','unverified'].includes(source.vodAnchor.quality)||!text(source.vodAnchor.evidenceReference)||!SHA.test(source.vodAnchor.evidenceSha256??'')||
+    !((source.vodId===null&&source.vodOffsetSeconds===null&&source.vodAnchor.quality==='unverified')||(/^\d+$/.test(source.vodId??'')&&(source.vodAnchor.quality!=='unverified'?number(source.vodOffsetSeconds)&&source.vodOffsetSeconds>=0:source.vodOffsetSeconds===null)))) fail('derivative_source_invalid');
+  if(source.vodAnchor.quality==='independently_verified_bounded_start' ? !number(source.vodAnchor.uncertaintySeconds)||source.vodAnchor.uncertaintySeconds<=0||source.vodAnchor.uncertaintySeconds>2 : source.vodAnchor.uncertaintySeconds!==undefined&&source.vodAnchor.uncertaintySeconds!==0)fail('derivative_source_invalid');
   object(transform, ['renderedAt', 'crop', 'audio']);
   const crop = transform.crop;
   if(crop?.mode==='linear_clamped_x') {

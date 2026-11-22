@@ -137,7 +137,7 @@ export function streamKeyOf(candidate) {
 }
 // A segment with an unknown start (start == null, e.g. a Mac render whose cut offset was not recorded) overlaps
 // every segment of the same source: the conservative reading for "one source clip -> one account".
-const overlaps = (a, b) => a.key === b.key && (a.start == null || b.start == null || Math.abs(a.start - b.start) < SEGMENT_OVERLAP_SECONDS);
+const overlaps = (a,b) => a.key===b.key && (a.start==null||b.start==null|| (Number.isFinite(a.end)||Number.isFinite(b.end) ? a.start<(Number.isFinite(b.end)?b.end:b.start+SEGMENT_OVERLAP_SECONDS)&&b.start<(Number.isFinite(a.end)?a.end:a.start+SEGMENT_OVERLAP_SECONDS) : Math.abs(a.start-b.start)<SEGMENT_OVERLAP_SECONDS));
 
 /**
  * Conflict for a new post: an existing ledger entry with the same file hash or an overlapping source segment.

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-22T11:52:56.609Z
+Generated: 2026-11-22T12:07:22.308Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1360 | 1241 | 5145 | 638 | 29239 |
+| 1362 | 1242 | 5146 | 640 | 29253 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -31,8 +31,8 @@ Package: `rest-express`
 | `tests` | 365 | 360 | test:365 |
 | `server` | 301 | 294 | server:301 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
-| `script` | 154 | 139 | script:154 |
-| `docs` | 87 | 84 | docs:87 |
+| `script` | 155 | 139 | script:155 |
+| `docs` | 88 | 85 | docs:88 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 53 | 47 | shared:53 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -63,7 +63,7 @@ Package: `rest-express`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/clippers-orchestra`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/blackroom-team-routes.ts`: `/api/blackroom-team`, `/api/blackroom-team/:id/action/:action`, `/api/blackroom-team/:id/run`, `/api/blackroom-team/:id/status`
 - `server/clippers-orchestra-routes.ts`: `/api/clippers/orchestra/status`
-- `server/clippers-reviewed-derivative-routes.ts`: `/api/clippers/reviewed-derivatives`, `/api/clippers/reviewed-derivatives/approve`, `/api/clippers/reviewed-derivatives/propose`, `/api/clippers/reviewed-derivatives/review`, `/api/clippers/reviewed-derivatives/revoke`
+- `server/clippers-reviewed-derivative-routes.ts`: `/api/clippers/reviewed-derivatives`, `/api/clippers/reviewed-derivatives/approve`, `/api/clippers/reviewed-derivatives/propose`, `/api/clippers/reviewed-derivatives/reconcile`, `/api/clippers/reviewed-derivatives/review`, `/api/clippers/reviewed-derivatives/revoke`
 - `server/clippers-streamers-status.ts`: `/api/clippers/streamers/holds/resolved`, `/api/clippers/streamers/status`, `/api/clippers/streamers/takedown`, `/api/clippers/streamers/takedown/removed`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/kong-mirror-routes.ts`: `/api/kong-mirror/:key/:decision`, `/api/kong-mirror/:key/chat`, `/api/kong-mirror/agents/switch`, `/api/kong-mirror/images/:imageKey`, `/api/kong-mirror/reports`
@@ -90,6 +90,7 @@ Package: `rest-express`
 - `tests/clippers-office-area.test.mjs`: `/`, `/api/auth/me`, `/area.css`, `/area.js`
 - `tests/clippers-orchestra-endpoint.test.ts`: `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/remote`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
+- `tests/clippers-reviewed-derivative-routes.test.ts`: `/favicon.ico`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
 - `tests/kong-office-browser-qa.test.mjs`: `/api/agent-council/state`, `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/app-qa-agent/status`, `/api/ceo/conversation-history`, `/api/ceo/go-live`, `/api/ceo/readiness`, `/api/fixture-owner-boundary`, `/api/github/repos`, `/api/github/repos/fixture/office-fixture/contents`, `/api/github/status`, `/api/legal-compliance/reports`, `/api/monthly-goals`, `/api/projects`, `/health`

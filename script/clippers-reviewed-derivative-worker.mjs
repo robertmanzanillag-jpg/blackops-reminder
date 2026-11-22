@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { STREAMER_STATE_NAMESPACE, parseStreamerStateStrict } from './clippers-streamer-discovery.mjs';
 import { cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 import { destinationKey, findDestination, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
-import { mediaConflict, sourceSegment } from '../shared/clippers-account-lanes.mjs';
-import { reviewedDerivativeGate, reviewedMediaHash } from '../shared/clippers-reviewed-derivative.mjs';
+import { mediaConflict } from '../shared/clippers-account-lanes.mjs';
+import { reviewedDerivativeGate, reviewedMediaHash, approvedNativeMediaUrl } from '../shared/clippers-reviewed-derivative.mjs';
 import { validateDerivativeBaseline, matchDerivativeBaseline } from '../shared/clippers-derivative-baseline.mjs';
 import { takedownBlocks, resolveClipPolicy } from '../shared/clippers-streamer-policy.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
@@ -30,10 +30,9 @@ function quota(c,m,actual,excludeId=null){
 }
 function physicalOf(m){return{quality:'verified_physical_file',sha256:m.source.artifactSha256,start:m.source.startSeconds,end:m.source.endSeconds};}
 function derivativeSegment(m){
- if(m.source.vodAnchor.quality==='independently_verified_start')return sourceSegment(candidateOf(m),{start:m.source.startSeconds});
+ if(m.source.vodAnchor.quality!=='unverified'){const error=m.source.vodAnchor.uncertaintySeconds??0;return{key:`twitch-vod:${m.source.vodId}`,start:Math.max(0,m.source.vodOffsetSeconds+m.source.startSeconds-error),end:m.source.vodOffsetSeconds+m.source.endSeconds+error};}
  return {key:m.source.vodId?`twitch-vod:${m.source.vodId}`:`twitch-creator:${m.source.creatorKey}`,start:null};
 }
-function candidateOf(m){return{id:m.source.candidateId,creatorKey:m.source.creatorKey,platform:'twitch',vodId:m.source.vodId,vodOffset:m.source.vodOffsetSeconds,publishedAt:m.source.publishedAt};}
 function mappedBaseline(m,posts,actual){
   const rows=[...m.baseline.rows];
   for(const row of actual){if(rows.some(r=>r.destinationKey===row.destinationKey&&r.uuid===row.uuid))continue;
@@ -54,6 +53,8 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
   async function update(fn){let out;await store.transact(ns,async raw=>{const s=parseStreamerStateStrict(raw);if(!s)throw Error('derivative_state_invalid');const c=cloudPublishOf(s);s.cloudPublish=c;out=await fn(s,c);return JSON.stringify(s);});return out;}
   function gate(s,id,live){const r=s.reviewedDerivatives?.records?.[id];const e=reviewedDerivativeGate(r,{owner,now:clock(),liveEligibility:live});if(e)throw Error(e);if(r.manifest.rights.licenseTerm.kind==='conditional_live'){const lead=Date.parse(r.manifest.scheduledAt)-clock();if(lead<60000||lead>300000)throw Error('derivative_conditional_just_in_time_required');}validateDerivativeBaseline(r.manifest.baseline,r.manifest);policy(s,r.manifest);if(!config.destinations?.some(d=>destinationKey(d)===destinationKey(r.manifest.destination)))throw Error('derivative_destination_disabled');return r;}
   const initial=await read();const ids=Object.keys(initial.reviewedDerivatives?.records??{}).slice(0,500);
+  // A verified native copy after an owner reconciliation can retire its controlled staging, never an unknown write.
+  for(const id of ids){const d=initial.reviewedDerivatives.records[id]?.delivery;if(d?.asset&&d.writeStartedAt&&d.copyVerifiedAt&&['scheduled','held_nonpublishing_draft'].includes(d.status)&&approvedNativeMediaUrl(d.confirmedMediaUrl)&&d.confirmedMediaUrl!==d.asset.url){try{if(await stager.remove(d.asset.id)){report.assetsRemoved++;await update(s=>{const current=s.reviewedDerivatives.records[id]?.delivery;if(current?.id===d.id&&current.asset?.id===d.asset.id)current.asset=null;});}}catch{report.held.push('derivative_copied_staging_cleanup_pending');}}}
   // Fence unused staging transactionally before any deletion; a competing writer must see cleanup_fenced.
   for(const id of ids){const d=initial.reviewedDerivatives.records[id]?.delivery;if(!d||d.writeStartedAt||(!d.asset&&!d.stageIntent&&d.status!=='pending_stage'))continue;
     try{
@@ -72,7 +73,9 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
     }catch{report.held.push('derivative_staging_cleanup_pending');}
   }
   const refreshed=await read();
-  const runIds=ids.filter(id=>{const r=refreshed.reviewedDerivatives.records[id],d=r.delivery;if(r.status!=='approved'||d?.writeStartedAt||d?.asset||d?.stageIntent||['pending_stage','pending_write','verification_pending','scheduled','held_staging_reconciliation','cleanup_fenced'].includes(d?.status))return false;
+  const commercialPaused=Object.values(refreshed.reviewedDerivatives.records).some(r=>r.delivery?.reason==='derivative_commercial_disclosure_unverified'&&r.delivery?.writeStartedAt&&!r.delivery?.disclosureReconciledAt);
+  if(commercialPaused)report.held.push('derivative_commercial_lane_reconciliation_required');
+  const runIds=ids.filter(id=>{const r=refreshed.reviewedDerivatives.records[id],d=r.delivery;if(commercialPaused&&r.manifest.thirdPartyCommercial===true)return false;if(r.status!=='approved'||d?.writeStartedAt||d?.asset||d?.stageIntent||['pending_stage','pending_write','verification_pending','scheduled','held_staging_reconciliation','cleanup_fenced'].includes(d?.status))return false;
     const slot=Date.parse(r.manifest.scheduledAt);if(slot<=clock())return false;
     if(r.manifest.rights.licenseTerm.kind==='conditional_live'&&(slot-clock()<60000||slot-clock()>300000)){report.held.push('derivative_conditional_just_in_time_required');return false;}return true;
   }).sort((a,b)=>Date.parse(refreshed.reviewedDerivatives.records[a].manifest.scheduledAt)-Date.parse(refreshed.reviewedDerivatives.records[b].manifest.scheduledAt)).slice(0,Math.max(0,Math.min(8,config.clipsPerRun??4)));
@@ -113,9 +116,11 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
           const conflict=mediaConflict(mediaEntriesOf({...c,posts:c.posts.filter(p=>p.id!==claimId),reviewedDerivativeClaims:(c.reviewedDerivativeClaims??[]).filter(p=>p.claimId!==claimId)}),{segment,mediaSha256:m.media.sha256,candidateId:m.source.candidateId,destinationKey:key,physicalSource:physicalOf(m)});if(conflict)throw Error('derivative_source_or_media_duplicate');
           r.delivery={...r.delivery,status:'pending_write',writeStartedAt:iso(clock())};const p=c.posts.find(p=>p.id===claimId);if(!p)throw Error('derivative_delivery_conflict');Object.assign(p,{status:'pending_write',mediaUrl:asset.url,attemptedAt:iso(clock())});});writeStarted=true;};
       const ack=await metricool.schedule(destination,item);if(!writeStarted)throw Error('derivative_write_fence_not_invoked');
-      const known=!!(ack?.id&&ack?.uuid&&ack?.mediaUrl);confirmed=known;
-      await update((s,c)=>{const r=s.reviewedDerivatives.records[id],p=c.posts.find(p=>p.id===claimId);Object.assign(r.delivery,{status:known?'scheduled':'verification_pending',metricoolId:ack?.id??null,metricoolUuid:ack?.uuid??null,confirmedMediaUrl:ack?.mediaUrl??null});Object.assign(p,{status:r.delivery.status,metricoolId:ack?.id??null,metricoolUuid:ack?.uuid??null,confirmedMediaUrl:ack?.mediaUrl??null});});
-      if(known){report.scheduled++;if(ack.mediaUrl!==asset.url){await verifyReceipt({mediaUrl:ack.mediaUrl,mediaSha256:m.media.sha256,byteLength:m.media.byteLength},{fetch:fetchImpl});if(await stager.remove(asset.id)){report.assetsRemoved++;await update(s=>{s.reviewedDerivatives.records[id].delivery.asset=null;});}}}else report.verificationPending++;
+      const disclosureOk=m.destination.network!=='tiktok'||m.thirdPartyCommercial!==true||ack?.commercialDisclosureVerified===true;
+      const known=!!(ack?.id&&ack?.uuid&&ack?.mediaUrl&&disclosureOk);confirmed=known;
+      await update((s,c)=>{const r=s.reviewedDerivatives.records[id],p=c.posts.find(p=>p.id===claimId);Object.assign(r.delivery,{status:known?'scheduled':'verification_pending',reason:known?null:disclosureOk?'derivative_provider_ack_unverified':'derivative_commercial_disclosure_unverified',metricoolId:ack?.id??null,metricoolUuid:ack?.uuid??null,confirmedMediaUrl:ack?.mediaUrl??null});Object.assign(p,{status:r.delivery.status,metricoolId:ack?.id??null,metricoolUuid:ack?.uuid??null,confirmedMediaUrl:ack?.mediaUrl??null});});
+      if(!known){report.held.push(disclosureOk?'derivative_provider_ack_unverified':'derivative_commercial_disclosure_unverified');report.verificationPending++;break;}
+      if(known){report.scheduled++;if(ack.mediaUrl!==asset.url){await verifyReceipt({mediaUrl:ack.mediaUrl,mediaSha256:m.media.sha256,byteLength:m.media.byteLength},{fetch:fetchImpl});if(await stager.remove(asset.id)){report.assetsRemoved++;await update(s=>{s.reviewedDerivatives.records[id].delivery.asset=null;});}}}
     }catch(e){report.held.push(reason(e));
       if(claimId){if(writeStarted&&!confirmed){report.verificationPending++;await update((s,c)=>{const r=s.reviewedDerivatives.records[id];r.delivery.status='verification_pending';const p=c.posts.find(p=>p.id===claimId);if(p)p.status='verification_pending';});}
         else if(!writeStarted){

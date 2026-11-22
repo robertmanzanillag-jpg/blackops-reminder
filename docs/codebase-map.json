@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-22T11:52:56.609Z",
+  "generatedAt": "2026-11-22T12:07:22.308Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22",
   "packageName": "rest-express",
   "scripts": {
@@ -125,18 +125,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1360,
-    "filesIndexed": 1241,
-    "imports": 5145,
-    "routes": 638,
-    "symbols": 29239
+    "filesVisible": 1362,
+    "filesIndexed": 1242,
+    "imports": 5146,
+    "routes": 640,
+    "symbols": 29253
   },
   "directories": {
-    "shared": {
-      "files": 53,
-      "indexed": 47,
+    "docs": {
+      "files": 88,
+      "indexed": 85,
       "kinds": {
-        "shared": 53
+        "docs": 88
+      }
+    },
+    "script": {
+      "files": 155,
+      "indexed": 139,
+      "kinds": {
+        "script": 155
       }
     },
     ".": {
@@ -217,26 +224,12 @@
         "client-page": 28
       }
     },
-    "docs": {
-      "files": 87,
-      "indexed": 84,
-      "kinds": {
-        "docs": 87
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 154,
-      "indexed": 139,
-      "kinds": {
-        "script": 154
       }
     },
     "script/office-api-budget-v6": {
@@ -286,6 +279,13 @@
       "indexed": 9,
       "kinds": {
         "server": 9
+      }
+    },
+    "shared": {
+      "files": 53,
+      "indexed": 47,
+      "kinds": {
+        "shared": 53
       }
     },
     "shared/models": {
@@ -6174,6 +6174,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-derivative-release-proposal.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-generic-renderer.md",
       "kind": "docs",
       "imports": [],
@@ -11206,6 +11214,7 @@
         "account",
         "accountAliases",
         "accountEvidence",
+        "active",
         "analytics",
         "analyticsPost",
         "analyticsPublicationTime",
@@ -11232,6 +11241,8 @@
         "destination",
         "destinationKey",
         "destinationSettings",
+        "disclosure",
+        "draft",
         "draftHours",
         "drafts",
         "e",
@@ -11271,6 +11282,7 @@
         "metric",
         "metrics",
         "metricsFrom",
+        "native",
         "networkOptions",
         "networks",
         "old",
@@ -12012,10 +12024,11 @@
       "symbols": [
         "ack",
         "actual",
-        "candidateOf",
+        "commercialPaused",
         "conflict",
         "creator",
         "derivativeSegment",
+        "disclosureOk",
         "durable",
         "extras",
         "gate",
@@ -23481,15 +23494,19 @@
         "digest",
         "guard",
         "m",
+        "p",
+        "proof",
         "r",
         "record",
         "registerReviewedDerivativeRoutes",
-        "store"
+        "store",
+        "updated"
       ],
       "routes": [
         "/api/clippers/reviewed-derivatives",
         "/api/clippers/reviewed-derivatives/approve",
         "/api/clippers/reviewed-derivatives/propose",
+        "/api/clippers/reviewed-derivatives/reconcile",
         "/api/clippers/reviewed-derivatives/review",
         "/api/clippers/reviewed-derivatives/revoke"
       ]
@@ -42408,6 +42425,7 @@
       "imports": [
         "../script/clippers-portfolio-metricool.mjs",
         "node:assert/strict",
+        "node:crypto",
         "node:test"
       ],
       "exports": [],
@@ -42417,6 +42435,7 @@
         "f",
         "fixture",
         "g",
+        "item",
         "row",
         "rows",
         "u"
@@ -42478,6 +42497,7 @@
       ],
       "exports": [],
       "symbols": [
+        "a",
         "args",
         "c",
         "manifestOf",
@@ -42507,11 +42527,13 @@
       "symbols": [
         "args",
         "calls",
+        "delivery",
         "f",
         "g",
         "html",
         "id",
         "input",
+        "m",
         "metricool",
         "original",
         "p",
@@ -44171,6 +44193,7 @@
       "symbols": [
         "approval",
         "approved",
+        "body",
         "f",
         "fixture",
         "memoryStore",
@@ -44178,9 +44201,12 @@
         "proposed",
         "report",
         "request",
+        "response",
         "server"
       ],
-      "routes": []
+      "routes": [
+        "/favicon.ico"
+      ]
     },
     {
       "path": "tests/clippers-reviewed-derivative.test.mjs",

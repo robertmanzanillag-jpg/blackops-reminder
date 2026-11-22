@@ -144,7 +144,7 @@ async function verifiedMedia(fetcher, row, item) {
     if (length > 250_000_000) return null;
     hash.update(chunk);
   }
-  return length > 0 && hash.digest('hex') === item.mediaSha256 ? media : null;
+  return length > 0 && (!Number.isSafeInteger(item.byteLength)||length===item.byteLength) && hash.digest('hex') === item.mediaSha256 ? media : null;
 }
 function analyticsPost(row, destination, id) {
   const url = row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url;
@@ -484,7 +484,19 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       if (!row || !schedulerId(row)) return null;
       const media = await verifiedMedia(fetcher, row, item);
       if(item.requireUuid===true&&!(typeof row.uuid==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(row.uuid)))return null;
-      return media ? { id: schedulerId(row), mediaUrl: media, ...(item.requireUuid===true?{uuid:row.uuid}:{}) } : null;
+      return media ? { id: schedulerId(row), mediaUrl: media, ...(item.requireUuid===true?{uuid:row.uuid,commercialDisclosureVerified:destination.network==='tiktok'&&item.thirdPartyCommercial===true?row.tiktokData?.commercialContentThirdParty===true:true}:{}) } : null;
+    },
+    /** Read-only owner reconciliation; exact known UUID, no rescheduling or unchecked reset. */
+    async reconcileReviewedDerivative(destination,item) {
+      if(!item.metricoolUuid||!item.requireUuid)throw Error('derivative_reconciliation_identity_required');
+      const rows=await schedule(destination,localDay(new Date(item.scheduledAt)),true,true);
+      const matches=rows.filter(row=>String(row.uuid)===item.metricoolUuid&&String(row.id)===item.metricoolId&&matchingContent(row,item,destination));
+      if(matches.length!==1)return null;const row=matches[0];
+      const native=await verifiedMedia(fetcher,row,{...item,mediaUrl:null,verifiedSchedulerMediaUrl:null});if(!native)return null;
+      const draft=confirmedNonPublishingDraft(row,destination.network);
+      const active=row.autoPublish===true&&row.draft===false&&['scheduled','pending','published','posted'].includes(String(statusOf(row,destination)).toLowerCase());
+      const disclosure=destination.network!=='tiktok'||item.thirdPartyCommercial!==true||row.tiktokData?.commercialContentThirdParty===true;
+      return {id:String(row.id),uuid:String(row.uuid),mediaUrl:native,status:draft?'nonpublishing_draft':active&&disclosure?'scheduled':'unverified',commercialDisclosureVerified:disclosure,confirmedNonPublishingDraft:draft};
     },
     async publication(destination, item, now = new Date()) {
       const rows = await schedule(destination, localDay(new Date(item.scheduledAt)));
