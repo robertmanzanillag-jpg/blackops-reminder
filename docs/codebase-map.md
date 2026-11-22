@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T14:56:51.785Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/nov22-private-final-mobile-fix`
+Generated: 2026-11-22T15:21:15.616Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/nov22-github-scout-auth-fix`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1389 | 1267 | 5286 | 647 | 29655 |
+| 1389 | 1267 | 5287 | 647 | 29667 |
 
 ## Entrypoints
 - `client/src/App.tsx`

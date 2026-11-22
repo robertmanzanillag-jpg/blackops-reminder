@@ -6,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@shared/schema";
-import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, runBugPatrolHandoffs } from "../server/app-qa-agent";
+import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, probeAppQaUrl, runBugPatrolHandoffs } from "../server/app-qa-agent";
+import { evaluateDeveloperReleaseGate } from "../server/developer-autopilot";
 
 function appProject(overrides: Partial<AppProject> = {}): AppProject {
   return {
@@ -570,6 +571,85 @@ test("github scout uses Developer Health URLs when repo homepage is empty", asyn
   assert.equal(report.githubApps[0].checkedUrl, "https://kong.example");
   assert.equal(report.githubApps[0].status, "pass");
   assert.equal(report.findings.some((finding) => finding.title === "Repo app sin URL publica en GitHub"), false);
+});
+
+test("GitHub Scout marks a recognized sign-in page unverified and still blocks release", async () => {
+  const app = appProject();
+  const repo = {
+    id: 44,
+    name: app.repoName!,
+    full_name: app.githubRepo!,
+    description: app.description!,
+    private: true,
+    archived: false,
+    disabled: false,
+    fork: false,
+    html_url: "https://github.com/fixture/protected-office",
+    homepage: app.publicUrl,
+    default_branch: "main",
+    updated_at: "2026-11-22T12:00:00.000Z",
+    pushed_at: "2026-11-22T12:00:00.000Z",
+    open_issues_count: 0,
+    language: "TypeScript",
+  };
+  const signIn = "https://replit.com/silent-auth";
+  const cases = [
+    { name: "HTTP 200 sign-in", response: 200, url: signIn, expected: "warn" },
+    { name: "HTTP 403 sign-in", response: 403, url: signIn, expected: "warn" },
+    { name: "HTTP 500", response: 500, expected: "fail", detail: /500/ },
+    { name: "HTTP 500 at sign-in", response: 500, url: signIn, expected: "fail", detail: /500/ },
+    { name: "HTTP 401 without known sign-in", response: 401, expected: "fail", detail: /401/ },
+    { name: "timeout", response: null, expected: "fail", detail: /Timeout/ },
+  ] as const;
+  for (const scenario of cases) {
+    const probe = (url: string) => probeAppQaUrl(url, 5000, false, async () => {
+      if (scenario.response === null) throw new DOMException("Fixture request aborted", "AbortError");
+      const response = new Response(null, { status: scenario.response });
+      Object.defineProperty(response, "url", { value: "url" in scenario ? scenario.url : url });
+      return response;
+    });
+    const report = await __appQaAgentInternals.analyzeGithubAppRepos([app], [repo], probe);
+    assert.equal(report.status, scenario.expected, scenario.name);
+    assert.equal(report.githubApps[0].status, scenario.expected, scenario.name);
+    assert.equal(report.findings.length, 1, scenario.name);
+    const [finding] = report.findings;
+    if (scenario.expected === "fail") {
+      assert.equal(finding.severity, "high", scenario.name);
+      assert.match(finding.detail, scenario.detail, scenario.name);
+      continue;
+    }
+
+    assert.equal(finding.severity, "medium", scenario.name);
+    assert.match(finding.title, /comprobación autenticada/, scenario.name);
+    assert.match(finding.detail, /queda pendiente/, scenario.name);
+    assert.match(finding.recommendation, /sesión autorizada/, scenario.name);
+    assert.doesNotMatch(report.githubApps[0].notes.join(" "), /Homepage (ok|fallo)/, scenario.name);
+
+    const prUrl = "https://github.com/fixture/protected-office/pull/1";
+    const headSha = "a".repeat(40);
+    const diffSha256 = "b".repeat(64);
+    const completedAt = new Date().toISOString();
+    const gate = evaluateDeveloperReleaseGate({
+      subAgents: [report], summary: report.summary, failCount: 0, warnCount: report.findings.length,
+    }, {
+      prUrl, prHeadSha: headSha, prDiffSha256: diffSha256,
+      claudeReview: {
+        id: "review-fixture", key: "review-fixture", kind: "claude_review", status: "completed",
+        createdAt: completedAt, completedAt, sessionId: "session-fixture",
+        review: { prUrl, headSha, diffSha256, verdict: "pass", findings: [], summary: "Fixture review passed" },
+      },
+    });
+    assert.equal(gate.status, "blocked", scenario.name);
+    assert.equal(gate.canSendForApproval, false, scenario.name);
+    assert.deepEqual(gate.reasons, [
+      "1 App QA warning(s) must be resolved before Replit deployment.",
+      "Subagents not passing: GitHub Scout=warn.",
+    ], scenario.name);
+
+    const insecure = await __appQaAgentInternals.analyzeGithubAppRepos([app], [{ ...repo, homepage: "http://fixture.example" }], probe);
+    assert.equal(insecure.githubApps[0].status, "fail", "auth cannot downgrade the separate HTTPS failure");
+    assert.deepEqual(insecure.findings.map(item => item.severity), ["high", "medium"]);
+  }
 });
 
 test("visual click scout reports setup guidance when base URL is missing", async () => {
