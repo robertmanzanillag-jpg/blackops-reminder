@@ -4,7 +4,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { unverifiedBuildProvenance, type BuildProvenance } from "../server/build-provenance";
 
-const EXACT_FILES = new Set([".replit", "package.json", "package-lock.json", "client/index.html", "vite.config.ts", "tsconfig.json"]);
+const EXACT_FILES = new Set([".replit", "package.json", "package-lock.json", "client/index.html", "vite.config.ts", "tsconfig.json", "postcss.config.js", "vite-plugin-meta-images.ts", "components.json"]);
 const EXCLUDED = /(?:^|\/)(?:\.env[^/]*|credentials?|secrets?|private|backups?|archives?|node_modules|dist|media|uploads|fixtures)(?:\/|\.|$)/i;
 
 /** Only tracked source code and explicitly selected nonsecret build/policy files. */
@@ -28,11 +28,12 @@ export function collectBuildProvenance(root = process.cwd()): BuildProvenance {
     const clean = () => git(["diff", "--quiet", "--no-ext-diff", "--no-textconv", "HEAD", "--"]);
     const before = clean();
     if (before.status !== 0) return unverifiedBuildProvenance(before.status === 1 ? "tracked_dirty" : "git_unavailable");
-    const listed = git(["ls-files", "-z", "--", ".replit", "package.json", "package-lock.json", "client", "server", "shared", "script", "config", "vite.config.ts", "tsconfig.json"]);
+    const listed = git(["ls-files", "-z", "--", ".replit", "package.json", "package-lock.json", "client", "server", "shared", "script", "config", "vite.config.ts", "tsconfig.json", "postcss.config.js", "vite-plugin-meta-images.ts", "components.json"]);
     if (listed.status !== 0) return unverifiedBuildProvenance("git_unavailable");
-    const untracked = git(["ls-files", "--others", "--exclude-standard", "-z"]);
+    // Clean-input admission is broader than the privacy-limited digest. Do not read these files.
+    const untracked = git(["ls-files", "--others", "-z", "--", "client", "server", "shared", "script", "config", ...EXACT_FILES]);
     if (untracked.status !== 0) return unverifiedBuildProvenance("git_unavailable");
-    if (untracked.stdout.split("\0").some(isRuntimeSourcePath)) return unverifiedBuildProvenance("tracked_dirty");
+    if (untracked.stdout.length > 0) return unverifiedBuildProvenance("tracked_dirty");
     const paths = [...new Set(listed.stdout.split("\0").filter(isRuntimeSourcePath))].sort();
     if (!paths.includes("package.json") || !paths.includes("server/index.ts") || paths.length > 5000) return unverifiedBuildProvenance("source_unavailable");
     const hash = createHash("sha256");

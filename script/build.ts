@@ -122,6 +122,7 @@ const allowlist = [
 async function buildAll() {
   // Bind every output, including Vite client assets, to the same source observation.
   const provenance = collectBuildProvenance();
+  if (provenance.status !== "verified") console.log(`[build] source identity unavailable: ${provenance.reason}.`);
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");

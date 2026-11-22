@@ -48,6 +48,19 @@ test("missing Git, dirty tracked files and unsafe source remain unverified", asy
     assert.equal(collectBuildProvenance(root).reason,"source_unavailable");
   } finally { await rm(root,{recursive:true,force:true});await rm(absent,{recursive:true,force:true}); }
 });
+test("untracked build inputs fail closed even outside the private digest allowlist", async () => {
+  const root=await fixture();
+  try {
+    for(const path of ["client/public/banner.svg","server/payload.json","server/media/extra.ts","client/src/fixtures/extra.ts","config/private/data.json"]){
+      await mkdir(join(root,path,".."),{recursive:true});await writeFile(join(root,path),"private excluded input");
+      assert.equal(collectBuildProvenance(root).reason,"tracked_dirty",path);await rm(join(root,path));
+    }
+    await writeFile(join(root,".gitignore"),"server/ignored.json\n");git(root,"add",".gitignore");
+    git(root,"-c","user.name=Test","-c","user.email=test@example.invalid","commit","-qm","ignore");
+    await writeFile(join(root,"server/ignored.json"),"ignored build input");
+    assert.equal(collectBuildProvenance(root).reason,"tracked_dirty");
+  } finally {await rm(root,{recursive:true,force:true});}
+});
 test("digest scope excludes secrets, archives, media, data and documents", () => {
   for (const path of [".env", "server/.env.ts", "secrets/key.ts", "server/private/data.ts", "server/backups/routes.ts", "client/src/media/video.ts", "docs/guide.ts", "server/customer.json", "office-current-source.zip", "../server/index.ts"]) assert.equal(isRuntimeSourcePath(path),false,path);
   for (const path of [".replit","package-lock.json","server/push-notifications.ts","server/storage.ts","shared/clippers-orchestra.ts","script/software-factory-worker.ts","client/src/components/notification-settings.tsx"]) assert.equal(isRuntimeSourcePath(path),true,path);
