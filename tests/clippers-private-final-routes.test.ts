@@ -97,7 +97,7 @@ test('populated private review proposal stays inside mobile and desktop viewport
      const page = await context.newPage();
      await page.goto(f.base + '/review');
      await page.getByText(f.manifest.id + ' · proposed', { exact: true }).waitFor();
-     await page.getByText('Control de publicación de este servidor: desactivado. Este panel no confirma el estado del ejecutor programado. Consulta sus recibos en la oficina.', { exact: true }).waitFor();
+     await page.getByText('Variable de publicación en este servidor: desactivada. Es informativa. Consulta los recibos en la oficina para conocer el estado del ejecutor programado.', { exact: true }).waitFor();
      await page.getByText(f.manifest.caption, { exact: true }).waitFor();
      await page.getByText('Fuente: ' + f.manifest.source.url + ' · Evidencia: ' + f.manifest.qa.reportReference, { exact: true }).waitFor();
      await page.locator('#manifest').setInputFiles({

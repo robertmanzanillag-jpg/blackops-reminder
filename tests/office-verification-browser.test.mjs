@@ -149,6 +149,7 @@ test('compiled Academy text remains visible below wrapped mobile office controls
           const mirror = document.querySelector('[data-testid="office-kong-mirror-slot"] button');
           const mirrorRect = mirror.getBoundingClientRect();
           const covered = [];
+          const hiddenText = [];
           let textRects = 0;
           const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
           while (walker.nextNode()) {
@@ -156,12 +157,14 @@ test('compiled Academy text remains visible below wrapped mobile office controls
             if (!text) continue;
             const range = document.createRange();
             range.selectNodeContents(walker.currentNode);
+            let seen = false;
             for (const line of range.getClientRects()) {
               const left = Math.max(line.left, rect.left, 0);
               const top = Math.max(line.top, rect.top, 0);
               const right = Math.min(line.right, rect.right, visibleWidth);
               const bottom = Math.min(line.bottom, rect.bottom, visibleHeight);
               if (right <= left || bottom <= top) continue;
+              seen = true;
               textRects++;
               // Sample near each edge as well as the middle of the full glyph box.
               for (const x of [left + .25, (left + right) / 2, right - .25]) {
@@ -170,11 +173,12 @@ test('compiled Academy text remains visible below wrapped mobile office controls
                 }
               }
             }
+            if (!seen) hiddenText.push(text);
           }
           return { panelTop: rect.top, panelBottom: rect.bottom, clientWidth, visibleHeight,
-            mirrorBottom: mirrorRect.bottom, textRects, covered };
+            mirrorBottom: mirrorRect.bottom, textRects, covered, hiddenText };
         });
-        for (const mobileWidth of isMobile ? [390, 320, 390] : [width]) {
+        for (const mobileWidth of isMobile ? [390, 320, 640, 390] : [width]) {
           await page.setViewportSize({ width: mobileWidth, height });
           // Let the browser deliver ResizeObserver notifications after wrapping.
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -182,6 +186,7 @@ test('compiled Academy text remains visible below wrapped mobile office controls
           assert.equal(layout.clientWidth, mobileWidth);
           assert.ok(layout.textRects >= 5, JSON.stringify(layout));
           assert.deepEqual(layout.covered, [], JSON.stringify(layout));
+          assert.deepEqual(layout.hiddenText, [], JSON.stringify(layout));
           assert.ok(layout.panelBottom <= layout.visibleHeight, JSON.stringify(layout));
           if (isMobile) assert.ok(layout.panelTop >= layout.mirrorBottom, JSON.stringify(layout));
           else assert.equal(layout.panelTop, 96, 'desktop keeps its existing top offset');

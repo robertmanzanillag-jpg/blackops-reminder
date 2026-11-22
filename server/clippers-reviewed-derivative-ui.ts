@@ -9,7 +9,7 @@ function verifiedNativeCopy(record){const d=record.delivery,m=record.manifest.me
 
 async function sha(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function load(){try{
- stopPrivatePreview();const data=await request();status.textContent=(data.publishingEnabled?'Control de publicación de este servidor: activado. La publicación requiere todas las comprobaciones adicionales.':'Control de publicación de este servidor: desactivado.')+' Este panel no confirma el estado del ejecutor programado. Consulta sus recibos en la oficina.';
+ stopPrivatePreview();const data=await request();status.textContent=(data.publishingEnabled?'Variable de publicación en este servidor: activada.':'Variable de publicación en este servidor: desactivada.')+' Es informativa. Consulta los recibos en la oficina para conocer el estado del ejecutor programado.';
  const root=document.getElementById('records');root.replaceChildren();
  for(const r of data.records){
   const box=el('fieldset'),m=r.manifest,isPrivate=m.media.storageKind==='private_council_v1',privatePath='/private-finals/'+encodeURIComponent(m.id),hourWindow=m.dispatch?.mode==='owner_hour_window';
