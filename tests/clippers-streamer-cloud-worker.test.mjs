@@ -405,7 +405,7 @@ test('B1: staging asset kept while Metricool references it; removed once a Metri
 });
 
 test('B3: live Metricool identities, legacy ledger rows still resolve to the same destination', () => {
-  assert.deepEqual(DESTINATIONS.map(destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami', '6591612:facebook:1193011863901514']);
+  assert.deepEqual(DESTINATIONS.map(destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami', '6591612:facebook:1193011863901514', '6595747:facebook:1198281286708321']);
   const legacy = { brandId: 6431685, network: 'tiktok', account: 'streamersclips' };
   assert.equal(findDestination(legacy).account, 'streamersus');
   assert.equal(destinationKey(legacy), '6431685:tiktok:streamersus');

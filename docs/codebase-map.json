@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T09:06:43.632Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-publication-recovery-nov22",
+  "generatedAt": "2026-11-22T10:14:31.919Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-receipts-bridge-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,32 +125,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1320,
-    "filesIndexed": 1205,
-    "imports": 4994,
+    "filesVisible": 1327,
+    "filesIndexed": 1212,
+    "imports": 5018,
     "routes": 633,
-    "symbols": 28713
+    "symbols": 28816
   },
   "directories": {
-    "shared": {
-      "files": 48,
-      "indexed": 44,
+    "script": {
+      "files": 150,
+      "indexed": 135,
       "kinds": {
-        "shared": 48
-      }
-    },
-    "tests": {
-      "files": 353,
-      "indexed": 349,
-      "kinds": {
-        "test": 353
-      }
-    },
-    "tests/helpers": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "test": 1
+        "script": 150
       }
     },
     ".": {
@@ -232,10 +218,10 @@
       }
     },
     "docs": {
-      "files": 81,
-      "indexed": 78,
+      "files": 83,
+      "indexed": 80,
       "kinds": {
-        "docs": 81
+        "docs": 83
       }
     },
     "examples/clippers-motivation": {
@@ -244,13 +230,6 @@
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 147,
-      "indexed": 132,
-      "kinds": {
-        "script": 147
       }
     },
     "script/office-api-budget-v6": {
@@ -295,11 +274,25 @@
         "server": 9
       }
     },
+    "shared": {
+      "files": 48,
+      "indexed": 44,
+      "kinds": {
+        "shared": 48
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 355,
+      "indexed": 351,
+      "kinds": {
+        "test": 355
       }
     },
     "tests/fixtures": {
@@ -310,6 +303,13 @@
       }
     },
     "tests/harness": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "test": 1
+      }
+    },
+    "tests/helpers": {
       "files": 1,
       "indexed": 1,
       "kinds": {
@@ -6183,6 +6183,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-local-write-fence.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-marketplace-intake.md",
       "kind": "docs",
       "imports": [],
@@ -6474,6 +6482,14 @@
     },
     {
       "path": "docs/factory-order-evidence.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-private-config-recovery.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -9772,6 +9788,61 @@
       "routes": []
     },
     {
+      "path": "script/clippers-install-local-write-fence.mjs",
+      "kind": "script",
+      "imports": [
+        "../shared/clippers-metricool-writer.mjs",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "GUARD_PATH",
+        "INSTALLED_PINS",
+        "applyWriteFence",
+        "hashBytes",
+        "patchInstalledModule",
+        "prepareWriteFence"
+      ],
+      "symbols": [
+        "GUARD_PATH",
+        "GUARD_PIN",
+        "INSTALLED_PINS",
+        "after",
+        "anchor",
+        "applyWriteFence",
+        "backup",
+        "backupParent",
+        "before",
+        "current",
+        "failure",
+        "file",
+        "guardBytes",
+        "handle",
+        "hashBytes",
+        "importLine",
+        "installedPaths",
+        "lock",
+        "main",
+        "parent",
+        "parentStat",
+        "patchInstalledModule",
+        "plainFile",
+        "plan",
+        "prepareWriteFence",
+        "prepared",
+        "previousGuard",
+        "receipt",
+        "replaceOnce",
+        "root",
+        "target",
+        "temporary",
+        "writes"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-local-subtitles.mjs",
       "kind": "script",
       "imports": [
@@ -9936,6 +10007,35 @@
         "words",
         "writeLocal",
         "writeRefusal"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-manual-observations.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-native-media-receipts.mjs",
+        "./clippers-portfolio-metricool.mjs",
+        "node:crypto"
+      ],
+      "exports": [
+        "manualObservationDigest",
+        "manualObservationView",
+        "validatedManualObservations"
+      ],
+      "symbols": [
+        "SHA",
+        "empty",
+        "fields",
+        "identities",
+        "identity",
+        "iso",
+        "key",
+        "latest",
+        "manualObservationDigest",
+        "manualObservationView",
+        "observedAt",
+        "validatedManualObservations"
       ],
       "routes": []
     },
@@ -10426,6 +10526,7 @@
         "node:url"
       ],
       "exports": [
+        "METRICOOL_API_ORIGIN",
         "approvedNativeMedia",
         "externalScheduleCollision",
         "metricoolNativeUrl",
@@ -10439,6 +10540,8 @@
         "verifyMetricoolNativeBytes"
       ],
       "symbols": [
+        "METRICOOL_API_ORIGIN",
+        "OWNER_UI_ORIGIN",
         "REPORT",
         "SHA",
         "actualAt",
@@ -10451,6 +10554,7 @@
         "ids",
         "invalid",
         "item",
+        "knownExternalOrigin",
         "length",
         "lockPath",
         "manifest",
@@ -10460,6 +10564,7 @@
         "nativeReceiptDigest",
         "nativeReceiptMatches",
         "observation",
+        "origin",
         "packet",
         "receipt",
         "reconcileExternalMetricoolSchedule",
@@ -10610,6 +10715,7 @@
       "imports": [
         "../shared/clippers-priority-creators.mjs",
         "../shared/clippers-viral-scout.mjs",
+        "./clippers-manual-observations.mjs",
         "./clippers-native-media-receipts.mjs",
         "./clippers-portfolio-metricool.mjs",
         "./clippers-portfolio-render.mjs",
@@ -10650,6 +10756,7 @@
         "chunks",
         "codes",
         "comparisonsView",
+        "compatibleDestinationRows",
         "confirmedMedia",
         "control",
         "controlViews",
@@ -12187,6 +12294,7 @@
         "account",
         "accountPosts",
         "accountSchedule",
+        "activePost",
         "age",
         "ageHours",
         "api",
@@ -12230,6 +12338,7 @@
         "creatorName",
         "cur",
         "current",
+        "currentCandidate",
         "defaults",
         "destination",
         "destinations",
@@ -12254,6 +12363,7 @@
         "health",
         "heard",
         "held",
+        "heldMediaBindingMatches",
         "heldPick",
         "hours",
         "id",
@@ -12292,6 +12402,7 @@
         "ns",
         "oa",
         "options",
+        "otherDelivery",
         "others",
         "out",
         "outIndex",
@@ -12305,11 +12416,13 @@
         "posts",
         "prior",
         "priorAttempts",
+        "priorHeld",
         "promoted",
         "publication",
         "publishGate",
         "query",
         "queue",
+        "queued",
         "queuedCandidate",
         "queuedOnly",
         "queuedSource",
@@ -12336,6 +12449,7 @@
         "sha",
         "slotConfig",
         "source",
+        "sourceState",
         "stageRights",
         "stageState",
         "stageTarget",
@@ -16109,6 +16223,23 @@
         "response",
         "sourceDir",
         "uploadFile"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/validate-factory-private-config.mjs",
+      "kind": "script",
+      "imports": [
+        "node:fs",
+        "node:url"
+      ],
+      "exports": [
+        "validateFactoryPrivateConfig"
+      ],
+      "symbols": [
+        "stat",
+        "validateFactoryPrivateConfig",
+        "value"
       ],
       "routes": []
     },
@@ -37358,6 +37489,7 @@
         "ClippersComparisonView",
         "ClippersCreatorPreferenceView",
         "ClippersCreatorSelectionView",
+        "ClippersManualObservationView",
         "ClippersMetricAgeBucket",
         "ClippersOrchestraStatus",
         "ClippersRoleEvidence",
@@ -37375,11 +37507,15 @@
         "count",
         "d",
         "denied",
+        "expectedTargets",
         "finite",
+        "id",
         "isTargetKey",
+        "k",
         "keys",
         "knownGroups",
         "l",
+        "m",
         "nullableCount",
         "nullableFinite",
         "nullableTime",
@@ -42310,6 +42446,37 @@
       "routes": []
     },
     {
+      "path": "tests/clippers-local-write-fence.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-install-local-write-fence.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "A",
+        "P",
+        "backupRoot",
+        "failure",
+        "fixture",
+        "guardBytes",
+        "linked",
+        "original",
+        "originalAutopilot",
+        "originalPortfolio",
+        "pins",
+        "prepared",
+        "receipt",
+        "root",
+        "runtimeRoot"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/clippers-mac-ledger-guard.test.mjs",
       "kind": "test",
       "imports": [
@@ -42585,6 +42752,7 @@
         "artifacts",
         "assets",
         "browser",
+        "capturedAt",
         "context",
         "creator",
         "css",
@@ -42775,8 +42943,10 @@
         "baseline",
         "before",
         "candidate",
+        "changed",
         "conflict",
         "controlled",
+        "corrupted",
         "creator",
         "d",
         "denied",
@@ -42790,6 +42960,7 @@
         "experiment",
         "fetchImpl",
         "file",
+        "filename",
         "first",
         "fixture",
         "forged",
@@ -42803,6 +42974,7 @@
         "manifest",
         "memory",
         "next",
+        "ny",
         "old",
         "order",
         "p",
@@ -42819,13 +42991,16 @@
         "role",
         "rows",
         "save",
+        "seal",
         "snapshot",
+        "stale",
         "start",
         "started",
         "state",
         "store",
         "target",
-        "u"
+        "u",
+        "wrong"
       ],
       "routes": []
     },
@@ -43116,6 +43291,7 @@
         "exec",
         "external",
         "f",
+        "file",
         "fixture",
         "good",
         "hasTools",
@@ -43149,6 +43325,7 @@
         "started",
         "state",
         "upload",
+        "url",
         "write"
       ],
       "routes": []
@@ -43440,12 +43617,14 @@
         "asset",
         "at",
         "baseState",
+        "before",
         "bot",
         "c",
         "calls",
         "candidate",
         "capErr",
         "cases",
+        "clear",
         "config",
         "d",
         "data",
@@ -43459,9 +43638,11 @@
         "env",
         "executed",
         "f",
+        "failed",
         "fakeMedia",
         "fakeMetricool",
         "fakeStager",
+        "fb",
         "fbFirst",
         "fetch",
         "file",
@@ -43495,8 +43676,10 @@
         "r3",
         "reason",
         "render",
+        "restored",
         "result",
         "revoke",
+        "revoked",
         "row",
         "run",
         "runCloudPublisher",
@@ -43514,6 +43697,7 @@
         "taken",
         "target",
         "today",
+        "tt",
         "tw",
         "u",
         "w",
@@ -50010,9 +50194,11 @@
       ],
       "exports": [],
       "symbols": [
+        "approvedPrice",
         "body",
         "count",
         "gatedPrice",
+        "generate",
         "generate2",
         "job",
         "model",
@@ -50743,6 +50929,28 @@
       "symbols": [
         "targetNames",
         "uniqueNames"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/validate-factory-private-config.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/validate-factory-private-config.mjs",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "fixture",
+        "lines",
+        "paths",
+        "result",
+        "root"
       ],
       "routes": []
     },

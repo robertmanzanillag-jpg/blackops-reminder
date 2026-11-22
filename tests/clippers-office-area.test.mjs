@@ -49,6 +49,8 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     payload = orchestraFixture(now); replyStatus = 200; verifiedId = "fixture-owner";
     const oldSources=payload.discovery.sources;payload.discovery={...payload.discovery,catalogVersion:2,rotationSize:14,rotationDays:1,sources:ALL_DISCOVERY_CREATORS.map(c=>oldSources.find(row=>row.creatorId===c.id)??{creatorId:c.id,channelId:c.channelId,observedAt:null,status:'not_observed',heldReasons:['source_not_observed'],observations:0})};
+    const capturedAt=new Date(now).toISOString();
+    payload.manualObservations={kind:'external_manual_schedule_observations',pipelineEligibility:false,state:'observed',observedAt:capturedAt,heldReasons:[],posts:[{schemaVersion:1,kind:'external_manual_schedule_observation',origin:'external_metricool_api',observedAt:capturedAt,destination:{brandId:6591612,network:'tiktok',account:'news305miami'},assetId:'qa-manual-only',metricoolId:'437403604',metricoolUuid:'-6646711268348311643',scheduledAt:capturedAt,timezone:'America/New_York',providerState:'ERROR',draft:false,autoPublish:true,caption:'QA authorized clip',mediaUrl:'https://static.metricool.com/planner/202611/6591612-file-12345.mp4',mediaSha256:'a'.repeat(64),sizeBytes:100,sourceUrl:'https://images.nasa.gov/details/example',sourceSha256:'b'.repeat(64),sourcePublishedAt:null,publisherObservationDate:'2026-01-01',exactNativeMediaBytesVerified:true,rawMcpSnapshotSha256:'c'.repeat(64),brandSnapshotSha256:'d'.repeat(64),ownerOperatorReceiptSha256:'e'.repeat(64),mediaQaSha256:'f'.repeat(64),canonicalRendererReceipt:null,canonicalPublishingGrant:null,learnerStateChanged:false,pipelineEligibility:false,providerWrites:0,proofSha256:'1'.repeat(64),day:new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now)),stale:false}]};
     payload.roles[0].heldReasons = ["PRIVATE_REASON_CANARY_1234567890", "__proto__", "constructor"];
     payload.roles[0].outputs = JSON.parse('{"__proto__":0,"constructor":0}');
     payload.accounts[0].analytics = { status: "observed", observedAt: new Date(now).toISOString(), posts: 7, totalViews: 900, actualAgeHoursMin: 24, actualAgeHoursMax: 50, heldReasons: [] };
@@ -67,6 +69,9 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.equal(requests.length, reads);
     await trigger.click();
     await page.getByTestId("clippers-orchestra-report").waitFor();
+    await page.getByRole('region',{name:'Programación externa observada'}).waitFor();
+    assert.match(await page.getByRole('region',{name:'Programación externa observada'}).innerText(),/ERROR/);
+    assert.match(await page.getByRole('region',{name:'Programación externa observada'}).innerText(),/No acredita producción autónoma/);
     assert.equal(await page.locator('[data-testid^="clippers-agent-"]').count(), 9);
     await page.getByText("Ejecutando ahora", { exact: true }).waitFor();
     assert.equal(await page.getByRole("meter", { name: "Vida registrada de Editor" }).getAttribute("value"), "80");
@@ -81,10 +86,10 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.equal(await page.getByText("Ejecutando ahora", { exact: true }).count(), 0);
     await page.getByText("Actividad sin verificar", { exact: true }).waitFor();
     await page.getByRole("tab", { name: "Cuentas y métricas", exact: true }).click();
-    assert.equal(await page.locator('[data-testid^="clippers-account-"]').count(), 4);
+    assert.equal(await page.locator('[data-testid^="clippers-account-"]').count(), 5);
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, "wide metric table must scroll locally without widening the dialog");
-    await page.getByText("NY · sin redes conectadas", { exact: true }).waitFor();
-    assert.equal(await page.getByText("No hay métricas observadas para esta cuenta.", { exact: true }).count(), 3);
+    await page.getByText("New York · TikTok · sin conexión verificada", { exact: true }).waitFor();
+    assert.equal(await page.getByText("No hay métricas observadas para esta cuenta.", { exact: true }).count(), 4);
     const account = page.getByTestId(`clippers-account-${payload.accounts[0].key}`);
     const analytics = page.getByTestId(`clippers-analytics-${payload.accounts[0].key}`);
     await analytics.getByText("7", { exact: true }).waitFor();

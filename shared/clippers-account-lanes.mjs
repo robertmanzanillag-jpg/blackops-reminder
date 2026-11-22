@@ -50,7 +50,7 @@ export const LANES = freeze([
     creators: freeze(['westcol', 'elmariana', 'juansguarnizo', 'rivers', 'spreen', 'ibai', 'auronplay', 'thegrefg', 'rubius', 'vegetta777', 'juega-german']),
     hashtags: freeze(['#miami', '#streamers', '#parati']),
     keywords: /\b(miami|305|wynwood|south beach|hialeah|little havana)\b/ }),
-  // Facebook Reels lane. Brand 6595747 has no connected Facebook Page in the adapter allowlist yet:
+  // Facebook Reels lane. Brand 6595747 Facebook is allowlisted; fresh identity/permission and source grants still gate writes:
   // clips routed here wait (never re-routed to another account) until the owner connects it.
   freeze({ id: 'nyc', label: 'Clipwave NYC', brandId: 6595747, language: 'en', niche: 'nyc_street',
     destinations: freeze([]), creators: freeze(['fanum']),

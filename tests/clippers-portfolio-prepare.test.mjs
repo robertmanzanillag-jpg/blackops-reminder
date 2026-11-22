@@ -91,22 +91,22 @@ test('Drive helper receives the configured owner and only its existing credentia
   assert.deepEqual(Object.keys(cleaned).sort(), ['DEFAULT_USER_ID', 'GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'REPL_IDENTITY']);
 });
 
-test('real original renders prepare all four exact destinations with one upload and preserve publisher switches', { skip: !hasTools }, async t => {
+test('real original renders prepare all five exact destinations with one upload and preserve publisher switches', { skip: !hasTools }, async t => {
   const f = await fixture(t, DESTINATIONS);
   assert.equal(new Set(f.packets.map(x => x.rendered.outputSha256)).size, 1);
   const r = await f.run();
-  assert.equal(r.prepared, 4); assert.equal(r.uploaded, 1); assert.equal(r.paidSpendUsd, 0);
+  assert.equal(r.prepared, 5); assert.equal(r.uploaded, 1); assert.equal(r.paidSpendUsd, 0);
   assert.deepEqual([f.calls.folder, f.calls.upload, f.calls.public], [1, 1, 1]);
   const input = JSON.parse(await readFile(path.join(f.root, CONFIG, 'approved-input.json')));
-  assert.equal(input.publish, false); assert.equal(input.collect, false); assert.equal(input.assets.length, 4);
+  assert.equal(input.publish, false); assert.equal(input.collect, false); assert.equal(input.assets.length, 5);
   const receipts = JSON.parse(await readFile(path.join(f.root, REPORT, 'portfolio-media-receipts.json')));
-  assert.equal(receipts.length, 4); assert.equal(new Set(receipts.map(destinationKey)).size, 4);
+  assert.equal(receipts.length, 5); assert.equal(new Set(receipts.map(destinationKey)).size, 5);
   assert.ok(receipts.every(x => x.renderReceiptSha256 && x.paidSpendAllowed === false));
   assert.equal((await stat(path.join(f.root, REPORT, 'portfolio-media-receipts.json'))).mode & 0o077, 0);
   const learning = await runClippersDailyLearning({ workspaceRoot: f.root, now,
     adapter: new Proxy({}, { get() { throw Error('publisher remains disabled'); } }) });
   assert.ok(learning.destinations.every(row => row.eligible === 1));
-  const again = await f.run(); assert.equal(again.prepared, 4);
+  const again = await f.run(); assert.equal(again.prepared, 5);
   assert.deepEqual([f.calls.folder, f.calls.upload, f.calls.public], [1, 1, 1], 'retries only verify existing public bytes');
 });
 
@@ -310,4 +310,29 @@ test('external observation is durable before failed native import publication, a
  const options={workspaceRoot:f.root,assetId:packet.id,external:{destination:packet.destination,metricoolId:'999',scheduledAt:packet.scheduledAt,caption:packet.caption,mediaUrl:NATIVE_URL,sha256:packet.outputSha256,sizeBytes:f.bytes.length},now,fetcher:f.adapter.nativeFetch,adapter:{confirmSchedule:async()=>({id:'999',mediaUrl:NATIVE_URL})}};
  await assert.rejects(reconcileExternalMetricoolSchedule(options));const rows=JSON.parse(await readFile(path.join(f.root,REPORT,'external-schedules.json')));assert.equal(verifiedExternalSchedules(rows,now).length,1);assert.equal(Object.hasOwn(rows[0],'weeklySourceProof'),true);
  await rm(path.join(f.root,relative),{recursive:true});assert.equal((await reconcileExternalMetricoolSchedule(options)).providerWrites,0);assert.equal((await f.run()).prepared,1);
+});
+
+
+test('external Metricool API observations retain honest origin and immutable first-observation evidence',{skip:!hasTools},async t=>{
+ const f=await nativeFixture(t),{packet}=f.packets[0];
+ const external={origin:'external_metricool_api',destination:packet.destination,metricoolId:'123456',scheduledAt:packet.scheduledAt,caption:packet.caption,mediaUrl:NATIVE_URL,sha256:packet.outputSha256,sizeBytes:f.bytes.length};
+ const options={workspaceRoot:f.root,assetId:packet.id,external,now,adapter:{confirmSchedule:async()=>({id:'123456',mediaUrl:NATIVE_URL}),schedule(){throw Error('must not write provider');}},fetcher:f.adapter.nativeFetch};
+ const result=await reconcileExternalMetricoolSchedule(options);assert.equal(result.origin,'external_metricool_api');assert.equal(result.providerWrites,0);assert.equal(result.learnerStateChanged,false);
+ const file=path.join(f.root,REPORT,'external-schedules.json'),before=await readFile(file,'utf8');
+ assert.equal(JSON.parse(before)[0].origin,'external_metricool_api');assert.equal(verifiedExternalSchedules(JSON.parse(before),now).length,1);
+ await reconcileExternalMetricoolSchedule({...options,now:new Date(+now+1000)});assert.equal(await readFile(file,'utf8'),before);
+ await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,origin:'external_owner_ui'}}),/identity_conflict/);
+ await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,origin:'invented'}}),/origin_invalid/);
+ await assert.rejects(readFile(path.join(f.root,REPORT,'state.json')),/ENOENT/);
+ const report=await buildClippersOrchestraReport({workspaceRoot:f.root,now});const out=report.roles.find(r=>r.stage==='publisher').outputs;
+ assert.equal(out.externalOwnerUiObservations,0);assert.equal(out.externalMetricoolApiObservations,1);
+});
+
+test('actual planner CDN paths preserve exact-byte validation and do not treat embedded upload brand as rights',async()=>{
+ const bytes=Buffer.from('synthetic exact native bytes'),digest=hash(bytes);
+ const url='https://static.metricool.com/planner/202611/6591612-file-5275329444612404299.mp4';
+ assert.equal(metricoolNativeUrl(url),url);
+ assert.equal(await verifyMetricoolNativeBytes(url,digest,bytes.length,{fetcher:async()=>new Response(bytes,{headers:{'content-type':'video/mp4'}})}),true);
+ for(const bad of [url+'?token=x',url+'#x',url.replace('/planner/','/arbitrary/'),url.replace('-file-','-file-../'),url.replace('6591612-file-','notabrand-file-')])assert.equal(metricoolNativeUrl(bad),null);
+ assert.equal(await verifyMetricoolNativeBytes(url,'0'.repeat(64),bytes.length,{fetcher:async()=>new Response(bytes,{headers:{'content-type':'video/mp4'}})}),false);
 });

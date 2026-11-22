@@ -472,7 +472,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     const report = {
       schemaVersion: 1, date, generatedAt: now.toISOString(), paidSpendUsd: 0, ...counts,
       status: outcomes.some(row => row.shortfall > 0) ? 'held_or_partial' : 'completed',
-      destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, reason: 'destination_not_connected' }],
+      destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, network: 'tiktok', reason: 'destination_not_connected' }],
       creatorSelection, observations: state.observations.length, missedSnapshots: missedSnapshots(state, now),
       proposalCount: proposals.length, proposals, qualifiedCandidates: qualifiedCandidates(state, proposals), versions: exportedVersionState(state),
       automaticPromotion: false, rendererPolicyBinding: 'required_for_experiments_and_candidate_versions',

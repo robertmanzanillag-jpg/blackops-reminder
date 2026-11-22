@@ -171,7 +171,7 @@ test('worker: each clip goes to exactly one account, as a Metricool draft, in it
   assert.equal(mc.calls.schedule.find(c => c.item.candidateId === 'twitch-clip:b').item.language, 'es');
   assert.equal(mc.calls.cross.length, 2, 'cross-account Metricool check before each write');
   assert.ok(report.heldReasons.includes('lane_unrouted:language_not_served:ja'));
-  assert.equal(mc.calls.analytics, 4, 'growth loop read every allowlisted account (read-only)');
+  assert.equal(mc.calls.analytics, 5, 'growth loop read every allowlisted account (read-only)');
   assert.equal(store.state.cloudPublish.mediaLedger.length, 2);
   assert.equal(store.state.cloudPublish.mediaLedger.find(e => e.candidateId === 'twitch-clip:a').segment.start, 105);
 });

@@ -22,8 +22,8 @@ async function base(root:string){return buildClippersOrchestraReport({workspaceR
 function memory(){let raw:string|null=null;return {async read(_owner:string){return raw;},async transact(_owner:string,update:any){raw=await update(raw);return raw!;},get raw(){return raw;}};}
 const envelope=(report:any,nonce=randomUUID())=>({version:1,nonce,generatedAt:report.generatedAt,report});
 
-test('empty workspace is disconnected, not four fake zero accounts or nine running workers',async()=>fixture(async root=>{
- const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.sourceFreshness.state,'disconnected');assert.equal(r.accounts.length,4);assert.equal(r.disconnectedDestinations[0].brandId,'6595747');
+test('empty workspace is disconnected, not five fake zero accounts or nine running workers',async()=>fixture(async root=>{
+ const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.sourceFreshness.state,'disconnected');assert.equal(r.accounts.length,5);assert.equal(r.disconnectedDestinations[0].brandId,'6595747');
  assert.ok(r.accounts.every((a:any)=>a.eligibleAssets===null&&a.confirmedScheduledOrPublished===null&&a.analytics.status==='unavailable'));
  assert.ok(r.roles.every((a:any)=>a.state==='disconnected'&&a.heartbeatAt===null&&a.activeUntil===null&&!a.career.registered&&a.career.battery===null&&a.outcomes.length===0));
  assert.equal(r.discovery.eligibleAssets,null);assert.equal(r.learning.promotions,null);assert.equal(r.safety.paidSpendUsd,0);
@@ -57,8 +57,8 @@ test('single public observation is initial baseline; fresh paired actual growth 
 }));
 test('whole-account collector reads every exact target, never NY/KONG/BlackRoom, then reuses same-day receipt',async()=>fixture(async root=>{
  const called:string[]=[];const adapter={async accountAnalytics(d:any){called.push(destinationKey(d));return {posts:[post(d)],receivedRows:1,rejectedRows:0};}};
- const first=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(first.accounts.length,4);assert.deepEqual(called,DESTINATIONS.map(destinationKey));assert.equal(first.readOnly,true);assert.equal(first.paidSpendUsd,0);
- await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(called.length,4);
+ const first=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(first.accounts.length,5);assert.deepEqual(called,DESTINATIONS.map(destinationKey));assert.equal(first.readOnly,true);assert.equal(first.paidSpendUsd,0);
+ await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(called.length,5);
  const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.ok(r.accounts.every((a:any)=>a.analytics.posts===1&&a.analytics.totalViews===100&&a.analytics.actualAgeHoursMin===24));assert.equal(r.learning.eligibleComparisons,null);
  assert.equal(r.roles.find((r:any)=>r.stage==='publisher').outcomes.length,0,'analytics never creates publication evidence');
 }));
@@ -233,7 +233,7 @@ test('analytics non-JSON, invalid JSON, unknown shape and HTTP errors stay held 
   [()=>Response.json({private:'not a list'}),'metricool_list_unrecognized'],
   [()=>new Response('private denial',{status:403}),'analytics_http_403'],
  ]as const){
-  const adapter=createPortfolioMetricool({token:'synthetic-token-valid',userId:'123',fetcher:async(input:any)=>{const u=new URL(input);if(u.pathname.endsWith('simpleProfiles'))return Response.json(DESTINATIONS.map(d=>({blogId:d.brandId,ownerUserId:'123',isShared:false,tiktokUsername:DESTINATIONS.find(x=>x.brandId===d.brandId&&x.network==='tiktok')?.account,facebook:d.brandId===6591612?'1193011863901514':undefined})).filter((d,i,a)=>a.findIndex(x=>x.blogId===d.blogId)===i));return response();}});
+  const adapter=createPortfolioMetricool({token:'synthetic-token-valid',userId:'123',fetcher:async(input:any)=>{const u=new URL(input);if(u.pathname.endsWith('simpleProfiles'))return Response.json(DESTINATIONS.map(d=>({blogId:d.brandId,ownerUserId:'123',isShared:false,tiktokUsername:DESTINATIONS.find(x=>x.brandId===d.brandId&&x.network==='tiktok')?.account,facebook:DESTINATIONS.find(x=>x.brandId===d.brandId&&x.network==='facebook')?.account})).filter((d,i,a)=>a.findIndex(x=>x.blogId===d.blogId)===i));return response();}});
   const receipt=await collectClippersAccountAnalytics({workspaceRoot:root,now:new Date(NOW+3600000*8),env:{},adapter});assert.ok(receipt.accounts.every((a:any)=>a.status==='held'&&a.observedAt===null&&a.reason===code));
   assert.ok(!JSON.stringify(receipt).includes('private'));await rm(path.join(root,'reports/clippers-account-analytics/latest.json'));
  }
@@ -242,8 +242,8 @@ test('analytics non-JSON, invalid JSON, unknown shape and HTTP errors stay held 
 test('a receipt from the rejected date contract is refreshed once, then the corrected contract reuses its cache',async()=>fixture(async root=>{
  await save(root,'reports/clippers-account-analytics/latest.json',{schemaVersion:1,date:'2026-11-18',generatedAt:now().toISOString(),readOnly:true,paidSpendUsd:0,accounts:DESTINATIONS.map(d=>({...d,status:'held',reason:'analytics_provider_read_unavailable',posts:[]}))});
  let calls=0;const adapter={async accountAnalytics(){calls++;return {posts:[],receivedRows:0,rejectedRows:0};}};
- const r=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(r.reused,false);assert.equal(r.adapterContract,'utc-local-v1');assert.equal(calls,4);
- assert.equal((await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter})).reused,true);assert.equal(calls,4);
+ const r=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(r.reused,false);assert.equal(r.adapterContract,'utc-local-v1');assert.equal(calls,5);
+ assert.equal((await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter})).reused,true);assert.equal(calls,5);
 }));
 
 test('real discovery producer receipts project empty success, stable replay freshness and same-channel paired growth',async()=>fixture(async root=>{
@@ -281,4 +281,36 @@ test('external owner UI observations survive wire validation without learner ACK
  await save(root,'reports/clippers-daily-learning/external-schedules.json',rows);
  const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.accounts[0].confirmedScheduledOrPublished,5);assert.equal(r.accounts[0].shortfall,0);assert.equal(r.accounts[1].confirmedScheduledOrPublished,null);
  const publisher=r.roles.find((v:any)=>v.stage==='publisher');assert.equal(publisher.outputs.externalOwnerUiObservations,5);assert.equal(publisher.lastRunAt,now().toISOString());assert.equal(publisher.outcomes.length,0);assert.equal(publisher.heartbeatAt,null);assert.equal(publisher.career.points,null);
+}));
+
+
+test('New York Facebook is represented while NY TikTok and historical four-account payloads stay honest',async()=>fixture(async root=>{
+ const report=await base(root);const ny=report.accounts.find((x:any)=>x.key==='6595747:facebook:1198281286708321');
+ assert.ok(ny);assert.equal(ny.connection,'unverified');assert.equal(ny.confirmedScheduledOrPublished,null);assert.match(report.disconnectedDestinations[0].label,/TikTok/);
+ assert.ok(parseClippersOrchestraStatus(report,NOW));
+ const legacy=structuredClone(report);legacy.accounts=legacy.accounts.filter((x:any)=>x.brandId!=='6595747');legacy.disconnectedDestinations[0].label='New York';assert.ok(parseClippersOrchestraStatus(legacy,NOW),'existing four-account payloads remain readable');
+ const wrong=structuredClone(report);wrong.accounts.pop();wrong.accounts[0]=ny;assert.equal(parseClippersOrchestraStatus(wrong,NOW),null,'a mixed partial current set is not a historical payload');
+}));
+
+
+test('historical four-destination reports preserve known values without inventing New York Facebook supply',async()=>fixture(async root=>{
+ const old=DESTINATIONS.slice(0,4);
+ await save(root,'reports/clippers-daily-learning/latest.json',{schemaVersion:1,date:'2026-11-18',generatedAt:now().toISOString(),paidSpendUsd:0,destinations:old.map((d:any)=>({...d,eligible:0,confirmedScheduledOrPublished:0,shortfall:5,blockers:[]}))});
+ await save(root,'reports/clippers-account-analytics/latest.json',{schemaVersion:1,adapterContract:'utc-local-v1',date:'2026-11-18',generatedAt:now().toISOString(),readOnly:true,paidSpendUsd:0,accounts:old.map(d=>({...d,status:'observed',observedAt:now().toISOString(),posts:[]}))});
+ const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.ok(r.accounts.slice(0,4).every((a:any)=>a.eligibleAssets===0&&a.shortfall===5&&a.analytics.status==='observed'));
+ const ny=r.accounts[4];assert.equal(ny.eligibleAssets,null);assert.equal(ny.shortfall,null);assert.equal(ny.analytics.status,'unavailable');assert.equal(ny.label,'New York · Facebook');
+}));
+
+test('manual Metricool observations remain separate from canonical execution and learner outcomes',async()=>fixture(async root=>{
+ const {manualObservationDigest}=await import('../script/clippers-manual-observations.mjs');
+ const row:any={schemaVersion:1,kind:'external_manual_schedule_observation',origin:'external_metricool_api',observedAt:now().toISOString(),destination:DESTINATIONS[2],assetId:'manual-nasa-01',metricoolId:'437403604',metricoolUuid:'-6646711268348311643',scheduledAt:'2026-11-19T16:00:00.000Z',timezone:'America/New_York',providerState:'PENDING',draft:false,autoPublish:true,caption:'Authorized educational clip',mediaUrl:'https://static.metricool.com/planner/202611/6591612-file-12345.mp4',mediaSha256:'a'.repeat(64),sizeBytes:100,sourceUrl:'https://images.nasa.gov/details/example',sourceSha256:'b'.repeat(64),sourcePublishedAt:null,publisherObservationDate:'2026-11-17',exactNativeMediaBytesVerified:true,rawMcpSnapshotSha256:'c'.repeat(64),brandSnapshotSha256:'d'.repeat(64),ownerOperatorReceiptSha256:'e'.repeat(64),mediaQaSha256:'f'.repeat(64),canonicalRendererReceipt:null,canonicalPublishingGrant:null,learnerStateChanged:false,pipelineEligibility:false,providerWrites:0};
+ const seal=(r:any)=>({...r,proofSha256:manualObservationDigest(r)});
+ const filename='reports/clippers-daily-learning/manual-metricool-observations.json';await save(root,filename,[seal(row)]);
+ let r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.manualObservations.state,'observed');assert.equal(r.manualObservations.posts[0].day,'2026-11-19');assert.equal(r.manualObservations.posts[0].pipelineEligibility,false);
+ assert.equal(r.sourceFreshness.state,'disconnected');assert.ok(r.accounts.every((a:any)=>a.confirmedScheduledOrPublished===null));assert.ok(r.roles.every((r:any)=>r.outcomes.length===0));
+ for(const post of [null,1,'invalid']){const bad=structuredClone(r);bad.manualObservations.posts=[post];assert.equal(parseClippersOrchestraStatus(bad,NOW),null);}
+ const corrupted=structuredClone(r);corrupted.manualObservations.posts[0].pipelineEligibility=true;assert.equal(parseClippersOrchestraStatus(corrupted,NOW),null);
+ const stale=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+27*3600000)});assert.equal(stale.manualObservations.state,'stale');assert.equal(stale.manualObservations.posts[0].stale,true);assert.ok(parseClippersOrchestraStatus(stale,NOW+27*3600000));
+ const changed={...row,observedAt:new Date(NOW-1000).toISOString(),providerState:'ERROR'};await save(root,filename,[seal(changed),seal(row)]);r=await base(root);assert.equal(r.manualObservations.posts.length,1);assert.equal(r.manualObservations.posts[0].providerState,'PENDING');
+ for(const rows of [[seal({...row,pipelineEligibility:true})],[seal({...row,mediaSha256:'invalid'})],[seal(row),seal(row)],[seal({...changed,metricoolId:'999'}),seal(row)]]){await save(root,filename,rows);r=await base(root);assert.equal(r.manualObservations.state,'invalid');assert.equal(r.manualObservations.posts.length,0);assert.ok(parseClippersOrchestraStatus(r,NOW));}
 }));

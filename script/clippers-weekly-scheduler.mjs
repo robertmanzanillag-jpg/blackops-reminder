@@ -60,7 +60,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       const outcome={destination:destinationKey(raw),assetId:typeof raw.id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,99}$/.test(raw.id)?raw.id:'unverified_asset',scheduledAt:raw.scheduledAt,status:'held',reason:null};report.outcomes.push(outcome);
       if(!within()){outcome.reason='weekly_cycle_deadline';break;}
       if(counts.get(destinationKey(raw)+':'+raw.id)!==1){outcome.reason='duplicate_asset_identity';continue;}
-      if(external.some(r=>destinationKey(r.destination)===destinationKey(raw)&&(r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl))){outcome.reason='external_owner_ui_schedule_observed_no_replay';continue;}
+      if(external.some(r=>destinationKey(r.destination)===destinationKey(raw)&&(r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl))){outcome.reason='external_schedule_observed_no_replay';continue;}
       let item=await validateApprovedClippersAsset(raw,root,current(),receipts,state,window);
       if(!item){outcome.reason='weekly_asset_rights_media_or_render_unverified';continue;}
       if(external.some(row=>externalScheduleCollision(row,item))||state.deliveries.some(row=>weeklyDeliveryCollision(row,item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&canonicalAccount(row.metricoolBlogId,item.network,row.account)===item.account&&

@@ -8,7 +8,7 @@ export function orchestraFixture(now = Date.now()) {
     version: 1, generatedAt: at, evidenceAt: at,
     sourceFreshness: { state: "connected", transport: "authenticated_ingest", receivedAt: at, reportedAt: at, ageMinutes: 0, staleAfterMinutes: 30, heldReasons: [] },
     transport: { state: "connected", lastIngestAt: at, maxAgeMs: 90_000 },
-    disconnectedDestinations: [{ brandId: "6595747", label: "NY", reason: "destination_not_connected" }],
+    disconnectedDestinations: [{ brandId: "6595747", label: "New York · TikTok", reason: "destination_not_connected" }],
     accounts: DESTINATIONS.map(destination => ({
       key: destinationKey(destination), brandId: String(destination.brandId), network: destination.network, account: destination.account,
       label: destination.account, connection: "unverified", observedAt: null, dailyTarget: 5,
