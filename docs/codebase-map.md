@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-22T11:46:51.264Z
+Generated: 2026-11-22T11:52:56.609Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1362 | 1243 | 5145 | 638 | 29237 |
+| 1360 | 1241 | 5145 | 638 | 29239 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -32,9 +32,9 @@ Package: `rest-express`
 | `server` | 301 | 294 | server:301 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 154 | 139 | script:154 |
-| `docs` | 91 | 86 | docs:91 |
+| `docs` | 87 | 84 | docs:87 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `shared` | 51 | 47 | shared:51 |
+| `shared` | 53 | 47 | shared:53 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
 | `server/replit_integrations` | 9 | 9 | server:9 |

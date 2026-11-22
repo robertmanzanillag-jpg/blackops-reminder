@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-22T11:46:51.264Z",
+  "generatedAt": "2026-11-22T11:52:56.609Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22",
   "packageName": "rest-express",
   "scripts": {
@@ -125,13 +125,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1362,
-    "filesIndexed": 1243,
+    "filesVisible": 1360,
+    "filesIndexed": 1241,
     "imports": 5145,
     "routes": 638,
-    "symbols": 29237
+    "symbols": 29239
   },
   "directories": {
+    "shared": {
+      "files": 53,
+      "indexed": 47,
+      "kinds": {
+        "shared": 53
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -211,10 +218,10 @@
       }
     },
     "docs": {
-      "files": 91,
-      "indexed": 86,
+      "files": 87,
+      "indexed": 84,
       "kinds": {
-        "docs": 91
+        "docs": 87
       }
     },
     "examples/clippers-motivation": {
@@ -279,13 +286,6 @@
       "indexed": 9,
       "kinds": {
         "server": 9
-      }
-    },
-    "shared": {
-      "files": 51,
-      "indexed": 47,
-      "kinds": {
-        "shared": 51
       }
     },
     "shared/models": {
@@ -6390,22 +6390,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -12040,7 +12024,6 @@
         "item",
         "key",
         "known",
-        "live",
         "local",
         "mappedBaseline",
         "ns",
@@ -12058,6 +12041,7 @@
         "runReviewedDerivatives",
         "segment",
         "slot",
+        "ticket",
         "update"
       ],
       "routes": []
@@ -42529,8 +42513,10 @@
         "id",
         "input",
         "metricool",
+        "original",
         "p",
         "r",
+        "records",
         "report",
         "row",
         "second",

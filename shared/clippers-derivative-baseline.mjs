@@ -1,12 +1,12 @@
 // Owner-attributed provenance is separate from provider read-back and from a rights grant.
-import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, localDay } from '../script/clippers-portfolio-metricool.mjs';
 import { reviewedMediaHash, approvedNativeMediaUrl } from './clippers-reviewed-derivative.mjs';
 const SHA = /^[a-f0-9]{64}$/;
 const day = value => /^\d{4}-\d{2}-\d{2}$/.test(value ?? '') && Number.isFinite(Date.parse(value));
 export function validateDerivativeBaseline(baseline, manifest) {
   if (!baseline || Object.keys(baseline).some(k => !['fromDay','throughDay','sourceOriginAt','originEvidenceReference','originEvidenceSha256','rows'].includes(k)) || !day(baseline.fromDay) || !day(baseline.throughDay) || !Array.isArray(baseline.rows) || baseline.rows.length > 500 ||
       !Number.isFinite(Date.parse(baseline.sourceOriginAt)) || !baseline.originEvidenceReference || !SHA.test(baseline.originEvidenceSha256 ?? '') ||
-      baseline.fromDay > new Date(Date.parse(baseline.sourceOriginAt) - 86400000).toISOString().slice(0,10) || baseline.throughDay < new Date(Date.parse(manifest.scheduledAt) + 86400000).toISOString().slice(0,10) ||
+      baseline.fromDay > localDay(new Date(Date.parse(baseline.sourceOriginAt) - 86400000)) || baseline.throughDay < localDay(new Date(Date.parse(manifest.scheduledAt) + 86400000)) ||
       Date.parse(baseline.throughDay) - Date.parse(baseline.fromDay) > 31 * 86400000 || Date.parse(baseline.sourceOriginAt) > Date.parse(manifest.source.publishedAt)) throw Error('derivative_baseline_scope_invalid');
   const seen = new Set();
   for (const row of baseline.rows) {

@@ -379,8 +379,9 @@ export function createGithubReleaseStager({ token, repo, fetch: fetchImpl = glob
       return { id: asset.id, url: asset.browser_download_url, createdAt: asset.created_at ?? new Date().toISOString() };
     },
     async findAsset(name) {
-      const r=await ensure();const assets=await api(`https://api.github.com/repos/${repo}/releases/${r.id}/assets?per_page=100`);
-      if(!Array.isArray(assets)||assets.length>=100)throw Error('DERIVATIVE_STAGING_LIST_UNVERIFIED');
+      const r=await ensure(),assets=[];let complete=false;
+      for(let page=1;page<=20;page++){const batch=await api(`https://api.github.com/repos/${repo}/releases/${r.id}/assets?per_page=100&page=${page}`);if(!Array.isArray(batch))throw Error('DERIVATIVE_STAGING_LIST_UNVERIFIED');assets.push(...batch);if(batch.length<100){complete=true;break;}}
+      if(!complete)throw Error('DERIVATIVE_STAGING_LIST_UNVERIFIED');
       const matches=assets.filter(a=>a.name===name);if(matches.length>1)throw Error('DERIVATIVE_STAGING_LIST_UNVERIFIED');const a=matches[0];
       return a?{id:a.id,url:a.browser_download_url,createdAt:a.created_at,name:a.name}:null;
     },
@@ -471,7 +472,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   // 1) Reconcile uncertain writes (read-only; never resend) and collect 24-48 h analytics.
   if (metricool && !config.missing.length) {
     for (const post of ledger0.posts) {
-      if(post.origin==='owner_authorized_external_review')continue; // A distinct lane owns these exact final-file receipts.
+      if(post.origin==='owner_authorized_external_review')continue; // Manual reconciliation only for these distinct final-file receipts.
       try {
         if (['verification_pending', 'pending_write'].includes(post.status)) {
           const found = await metricool.confirmSchedule(post.destination, post);

@@ -16,7 +16,7 @@ const reason=e=>/^derivative_[a-z_]+$/.test(e?.message??'')?e.message:'derivativ
 function policy(state,m){
   const creator=state.creators?.[m.source.creatorKey],candidate=state.candidates?.find(c=>c.id===m.source.candidateId);
   if(!creator?.policy||creator.policy.source==='not_checked')throw Error('derivative_creator_policy_unverified');
-  if(creator.policy.status==='prohibited'||candidate?.clipPolicy?.status==='prohibited'||takedownBlocks(state.takedowns,{candidateId:m.source.candidateId,creatorKey:m.source.creatorKey,creatorGroupId:creator.creatorGroupId})||resolveClipPolicy({creatorKey:m.source.creatorKey,creatorGroupId:creator.creatorGroupId,candidateId:m.source.candidateId,takedowns:state.takedowns,knownProhibited:KNOWN_PROHIBITED_CREATORS}).status==='prohibited')throw Error('derivative_takedown_or_prohibited');
+  if(creator.policy.status==='prohibited'||candidate?.clipPolicy?.status==='prohibited'||(takedownBlocks(state.takedowns,{candidateId:m.source.candidateId,creatorKey:m.source.creatorKey,creatorGroupId:creator.creatorGroupId})||(m.source.vodId&&takedownBlocks(state.takedowns,{candidateId:`twitch-vod:${m.source.vodId}`,creatorKey:m.source.creatorKey,creatorGroupId:creator.creatorGroupId})))||resolveClipPolicy({creatorKey:m.source.creatorKey,creatorGroupId:creator.creatorGroupId,candidateId:m.source.candidateId,takedowns:state.takedowns,knownProhibited:KNOWN_PROHIBITED_CREATORS}).status==='prohibited')throw Error('derivative_takedown_or_prohibited');
   if(state.cloudPublish?.holds?.[destinationKey(m.destination)]?.status==='held_owner_action')throw Error('derivative_destination_owner_hold');
 }
 function quota(c,m,actual,excludeId=null){
@@ -54,22 +54,25 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
   async function update(fn){let out;await store.transact(ns,async raw=>{const s=parseStreamerStateStrict(raw);if(!s)throw Error('derivative_state_invalid');const c=cloudPublishOf(s);s.cloudPublish=c;out=await fn(s,c);return JSON.stringify(s);});return out;}
   function gate(s,id,live){const r=s.reviewedDerivatives?.records?.[id];const e=reviewedDerivativeGate(r,{owner,now:clock(),liveEligibility:live});if(e)throw Error(e);if(r.manifest.rights.licenseTerm.kind==='conditional_live'){const lead=Date.parse(r.manifest.scheduledAt)-clock();if(lead<60000||lead>300000)throw Error('derivative_conditional_just_in_time_required');}validateDerivativeBaseline(r.manifest.baseline,r.manifest);policy(s,r.manifest);if(!config.destinations?.some(d=>destinationKey(d)===destinationKey(r.manifest.destination)))throw Error('derivative_destination_disabled');return r;}
   const initial=await read();const ids=Object.keys(initial.reviewedDerivatives?.records??{}).slice(0,500);
-  // A pre-write staging lease prevents cleanup racing another active process. Unknown provider writes never expire.
-  for(const id of ids){const r=initial.reviewedDerivatives.records[id],d=r.delivery;if(!d||d.writeStartedAt||(!d.asset&&!d.stageIntent))continue;
-    let denied=null;try{gate(initial,id,null);}catch(e){denied=e.message;}
-    const rightsDenied=denied&&!['derivative_live_eligibility_unverified','derivative_conditional_just_in_time_required'].includes(denied);
-    if(!rightsDenied&&Date.parse(d.leaseUntil)>clock())continue;
+  // Fence unused staging transactionally before any deletion; a competing writer must see cleanup_fenced.
+  for(const id of ids){const d=initial.reviewedDerivatives.records[id]?.delivery;if(!d||d.writeStartedAt||(!d.asset&&!d.stageIntent&&d.status!=='pending_stage'))continue;
     try{
-      let a=d.asset;
-      if(!a&&d.stageIntent){if(typeof stager.findAsset!=='function')throw Error('derivative_staging_recovery_unavailable');a=await stager.findAsset(d.stageIntent.name);}
+      const ticket=await update(s=>{const r=s.reviewedDerivatives.records[id],fresh=r?.delivery;if(fresh?.id!==d.id||fresh.writeStartedAt)return null;
+        let denied=null;try{gate(s,id,null);}catch(e){denied=e.message;}
+        const rightsDenied=denied&&!['derivative_live_eligibility_unverified','derivative_conditional_just_in_time_required'].includes(denied);
+        if(!rightsDenied&&Date.parse(fresh.leaseUntil)>clock())return null;
+        r.delivery={...fresh,status:'cleanup_fenced',cleanupToken:randomUUID()};return {...r.delivery};});
+      if(!ticket)continue;
+      let a=ticket.asset;
+      if(!a&&ticket.stageIntent){if(typeof stager.findAsset!=='function')throw Error('derivative_staging_recovery_unavailable');a=await stager.findAsset(ticket.stageIntent.name);}
       if(a){if(!await stager.remove(a.id))throw Error('derivative_staging_cleanup_pending');report.assetsRemoved++;}
-      // No known request has started. After lease expiry a complete API read can reconcile an interrupted upload.
-      if(!a&&Date.parse(d.leaseUntil)>clock())continue;
-      await update((s,c)=>{const x=s.reviewedDerivatives.records[id];if(x.delivery?.id===d.id&&!x.delivery.writeStartedAt){x.delivery={...x.delivery,status:'held_before_write',asset:null,stageIntent:null,reason:rightsDenied?denied:'derivative_unused_stage_reconciled'};c.posts=c.posts.filter(p=>p.id!==d.id);c.reviewedDerivativeClaims=(c.reviewedDerivativeClaims??[]).filter(p=>p.claimId!==d.id);}});
+      // An active upload can still return an asset: keep its intent until its lease expires or its worker cleans it.
+      if(!a&&ticket.stageIntent&&Date.parse(ticket.leaseUntil)>clock())continue;
+      await update((s,c)=>{const r=s.reviewedDerivatives.records[id];if(r.delivery?.id===ticket.id&&r.delivery.cleanupToken===ticket.cleanupToken&&!r.delivery.writeStartedAt){r.delivery={...r.delivery,status:'held_before_write',asset:null,stageIntent:null,reason:'derivative_unused_stage_reconciled'};c.posts=c.posts.filter(p=>p.id!==ticket.id);c.reviewedDerivativeClaims=(c.reviewedDerivativeClaims??[]).filter(p=>p.claimId!==ticket.id);}});
     }catch{report.held.push('derivative_staging_cleanup_pending');}
   }
   const refreshed=await read();
-  const runIds=ids.filter(id=>{const r=refreshed.reviewedDerivatives.records[id],d=r.delivery;if(r.status!=='approved'||d?.writeStartedAt||d?.asset||d?.stageIntent||['pending_stage','pending_write','verification_pending','scheduled','held_staging_reconciliation'].includes(d?.status))return false;
+  const runIds=ids.filter(id=>{const r=refreshed.reviewedDerivatives.records[id],d=r.delivery;if(r.status!=='approved'||d?.writeStartedAt||d?.asset||d?.stageIntent||['pending_stage','pending_write','verification_pending','scheduled','held_staging_reconciliation','cleanup_fenced'].includes(d?.status))return false;
     const slot=Date.parse(r.manifest.scheduledAt);if(slot<=clock())return false;
     if(r.manifest.rights.licenseTerm.kind==='conditional_live'&&(slot-clock()<60000||slot-clock()>300000)){report.held.push('derivative_conditional_just_in_time_required');return false;}return true;
   }).sort((a,b)=>Date.parse(refreshed.reviewedDerivatives.records[a].manifest.scheduledAt)-Date.parse(refreshed.reviewedDerivatives.records[b].manifest.scheduledAt)).slice(0,Math.max(0,Math.min(8,config.clipsPerRun??4)));
@@ -78,13 +81,14 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
       let state=await read(),record=state.reviewedDerivatives.records[id];
       if(record.status!=='approved')continue;
       if(record.delivery?.writeStartedAt||['pending_stage','pending_write','verification_pending','scheduled'].includes(record.delivery?.status)){report.held.push('derivative_existing_delivery_requires_reconciliation');continue;}
-      const live=await liveCheck(record,{fetch:fetchImpl,clock});record=gate(await read(),id,live);const m=record.manifest,destination=findDestination(m.destination);
+      let live=await liveCheck(record,{fetch:fetchImpl,clock});record=gate(await read(),id,live);const m=record.manifest,destination=findDestination(m.destination);
       sealed=await loadFinal(m.media,{fetch:fetchImpl});
       if(m.media.audio==='licensed_instrumental_only'){track=await loadTrack({fetch:fetchImpl});await verifyAudio({file:sealed.file,licensedTrackFile:track.file,profile:m.audioReplacement,finalSha256:m.media.sha256,caption:m.caption,captionSha256:m.captionSha256,durationSeconds:m.media.durationSeconds,maker:m.qa.maker,checker:m.qa.checker,now:clock()});}
       // Complete fresh provider view plus exact native bytes. Unknown manual rows hold rather than create capacity.
       const actual=await metricool.reviewedDerivativeCalendar(m.baseline);state=await read();const baseline=mappedBaseline(m,cloudPublishOf(state).posts,actual);const entries=matchDerivativeBaseline(baseline,actual);
       for(const row of baseline.rows)await verifyReceipt(row,{fetch:fetchImpl});
       const segment=derivativeSegment(m),key=destinationKey(destination);
+      live=await liveCheck(record,{fetch:fetchImpl,clock});
       claimId=randomUUID();
       await update((s,c)=>{const fresh=gate(s,id,live);if(fresh.manifestSha256!==record.manifestSha256||fresh.delivery?.writeStartedAt||['pending_stage','pending_write','verification_pending','scheduled'].includes(fresh.delivery?.status))throw Error('derivative_delivery_conflict');
         quota(c,m,actual);
@@ -94,11 +98,11 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
         c.posts.push({id:claimId,origin:'owner_authorized_external_review',candidateId:m.source.candidateId,sourceId:m.source.candidateId,segment,physicalSource:physicalOf(m),destinationKey:key,mediaSha256:m.media.sha256,byteLength:m.media.byteLength,caption:m.caption,scheduledAt:m.scheduledAt,status:'pending_stage'});
         c.reviewedDerivativeClaims=[...(c.reviewedDerivativeClaims??[]),{claimId,candidateId:m.source.candidateId,sourceId:m.source.candidateId,segment,physicalSource:physicalOf(m),mediaSha256:m.media.sha256,destinationKey:key,origin:'owner_authorized_external_review',at:iso(clock())}];
         fresh.delivery={id:claimId,status:'pending_stage',reservedAt:iso(clock()),leaseUntil:iso(clock()+10*60000)};});
-      await verifyFile(sealed.file,m.media);gate(await read(),id,await liveCheck(record,{fetch:fetchImpl,clock}));
+      live=await liveCheck(record,{fetch:fetchImpl,clock});await verifyFile(sealed.file,m.media);gate(await read(),id,live);
       stageIntent={name:`rdv-${claimId}-${m.media.sha256}.mp4`,at:iso(clock())};
       await update(s=>{const r=gate(s,id,live);if(r.delivery?.id!==claimId||Date.parse(r.delivery.leaseUntil)<=clock())throw Error('derivative_delivery_conflict');r.delivery.stageIntent=stageIntent;});
       uploadStarted=true;asset=await stager.upload(sealed.file,stageIntent.name);
-      await update(s=>{const r=s.reviewedDerivatives.records[id];if(r.delivery?.id!==claimId)throw Error('derivative_delivery_conflict');r.delivery.asset=asset;});
+      await update(s=>{const r=s.reviewedDerivatives.records[id];if(r.delivery?.id!==claimId||r.delivery.status!=='pending_stage'||Date.parse(r.delivery.leaseUntil)<=clock())throw Error('derivative_delivery_conflict');r.delivery.asset=asset;});
       gate(await read(),id,await liveCheck(record,{fetch:fetchImpl,clock}));
       const item={id:claimId,caption:m.caption,mediaUrl:asset.url,mediaSha256:m.media.sha256,scheduledAt:m.scheduledAt,thirdPartyCommercial:m.thirdPartyCommercial,draft:false,dailyLimit:5,requireUuid:true};
       await metricool.preflight(destination,item);await metricool.crossAccountPreflight(destination,item);
