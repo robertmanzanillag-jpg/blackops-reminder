@@ -17,7 +17,7 @@ function unavailable(env,config){
 }
 function maintenanceCount(state,owner){
  return Object.values(state.reviewedDerivatives?.records??{}).slice(0,500).filter(r=>{
-  if(r?.proposedBy!==owner||!['approved','revoked'].includes(r.status)||r.manifest?.dispatch?.mode!=='owner_hour_window')return false;
+  if(r?.proposedBy!==owner||!['approved','revoked'].includes(r.status))return false;
   const d=r.delivery;if(!d)return false;
   const known=!!(d.writeStartedAt&&/^[0-9]+$/.test(String(d.metricoolId??''))&&/^[A-Za-z0-9_-]{1,100}$/.test(d.metricoolUuid??''));
   if(known&&!d.copyVerifiedAt)return true;

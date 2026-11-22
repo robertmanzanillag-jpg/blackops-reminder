@@ -54,7 +54,7 @@ async function load(){try{
   if(hourWindow){
    const label=r.status==='approved'?'Ventana autorizada':r.status==='revoked'?'Ventana revocada':'Ventana propuesta';
    box.append(el('p',m.destination.account+' · '+m.destination.network),el('p',label+' de una hora (Nueva York, America/New_York): '+nyTime(m.dispatch.startAt)+' a '+nyTime(m.dispatch.endAt)+'; fin excluido.'),el('p','Límites UTC: '+m.dispatch.startAt+' a '+m.dispatch.endAt));
-   box.append(el('p',r.delivery?.resolvedScheduledAt?'Horario seleccionado para el envío: '+nyTime(r.delivery.resolvedScheduledAt)+' (Nueva York). UTC: '+r.delivery.resolvedScheduledAt:'Horario de envío pendiente: se seleccionará dentro de esa hora después de las comprobaciones.'));
+   box.append(el('p',r.delivery?.resolvedScheduledAt&&r.delivery?.status!=='held_before_write'?'Horario seleccionado para el envío: '+nyTime(r.delivery.resolvedScheduledAt)+' (Nueva York). UTC: '+r.delivery.resolvedScheduledAt:'Horario de envío pendiente: se seleccionará dentro de esa hora después de las comprobaciones.'));
    box.append(el('p','Una ventana autorizada o una hora seleccionada no confirman programación ni publicación.'));
   }else box.append(el('p',m.destination.account+' · '+m.destination.network+' · '+m.scheduledAt));
   box.append(el('p','Titular: '+m.rights.holder+' · Revisión: '+m.qa.checker+' · Válido hasta: '+m.expiresAt),el('p','Fuente: '+m.source.url+' · Evidencia: '+m.qa.reportReference),el('p','Huella de aprobación: '+r.manifestSha256));

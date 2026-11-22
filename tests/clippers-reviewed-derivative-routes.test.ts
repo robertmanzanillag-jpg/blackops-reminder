@@ -72,3 +72,16 @@ test('authenticated reconciliation cannot clear a paid pause by unchecked owner 
   proof={...proof,status:'nonpublishing_draft',confirmedNonPublishingDraft:true};assert.equal((await f.request('/reconcile',body)).status,200);const s=JSON.parse(f.raw());const d=s.reviewedDerivatives.records[f.manifest.id].delivery;assert.equal(d.status,'held_nonpublishing_draft');assert.equal(d.disclosureReconciledBy,'fixture-owner');assert.equal(s.cloudPublish.posts[0].draft,true);assert.equal(s.cloudPublish.reviewedDerivativeClaims.length,1);
  }finally{await f.close();}
 });
+
+test('real owner HTTP admits an immutable hour window, approves after its nominal start and dispatches a separate exact slot through dummy providers',async()=>{
+ const f=await fixture();try{
+  const start='2026-11-22T15:00:00.000Z',end='2026-11-22T16:00:00.000Z',ready=Date.parse('2026-11-22T15:16:00.000Z');
+  Object.assign(f.manifest,{scheduledAt:start,windowStart:start,windowEnd:end,expiresAt:end,dispatch:{mode:'owner_hour_window',timezone:'America/New_York',startAt:start,endAt:end}});
+  const proposed=await f.request('/propose',{manifest:f.manifest});assert.equal(proposed.status,201);const record=await proposed.json() as any;assert.equal(record.approval,undefined);
+  f.setClock(ready);const approval={id:f.manifest.id,expectedDigest:record.manifestSha256,operatorLabel:'TEST ONLY owner operator',attestRights:true,attestExternalQa:true,attestSourceBaseline:true,attestMembership:true};
+  assert.equal((await f.request('/approve',{...approval,dispatch:{mode:'owner_hour_window'}})).status,409,'request JSON cannot add or change a window');assert.equal((await f.request('/approve',approval,'other-owner')).status,403);assert.equal((await f.request('/approve',approval)).status,200);
+  await f.store.transact('fixture-only',async raw=>{const s=JSON.parse(raw);s.creators[f.manifest.source.creatorKey]={policy:{status:'allowed_unless_prohibited',source:'TEST ONLY checked policy'}};return JSON.stringify(s);});let writes=0,selected='';
+  const out=await runReviewedDerivatives({owner:'fixture-owner',store:f.store,dispatchMode:'owner_hour_window',config:{enabled:true,killSwitch:false,dryRun:false,destinations:[f.manifest.destination]},clock:()=>ready,loadFinal:async()=>({file:'/TEST_ONLY_FINAL',cleanup:async()=>{}}),verifyFile:async()=>true,verifyReceipt:async()=>true,liveCheck:async()=>null,stager:{upload:async()=>({id:11,url:'https://github.com/TEST_ONLY/stage.mp4'}),remove:async()=>true},metricool:{reviewedDerivativeCalendar:async()=>[],preflight:async()=>{},crossAccountPreflight:async()=>{},schedule:async(_d:any,item:any)=>{await item.beforeWrite();writes++;selected=item.scheduledAt;return{id:'777',uuid:'window-http-777',mediaUrl:f.manifest.media.url,commercialDisclosureVerified:true};}}});
+  assert.equal(out.scheduled,1,JSON.stringify(out));assert.equal(writes,1);assert.equal(selected,'2026-11-22T15:19:00.000Z');const actual=JSON.parse(f.raw()).reviewedDerivatives.records[f.manifest.id];assert.equal(actual.manifest.scheduledAt,start);assert.equal(actual.manifestSha256,record.manifestSha256);assert.equal(actual.delivery.resolvedScheduledAt,selected);assert.equal(actual.delivery.dispatchManifestSha256,record.manifestSha256);
+ }finally{await f.close();}
+});

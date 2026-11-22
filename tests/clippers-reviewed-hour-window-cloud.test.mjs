@@ -38,6 +38,7 @@ test('workflow reuses one writer concurrency and existing trigger; opt-in runner
  assert.match(text,/group: clippers-streamers-publish\n  cancel-in-progress: false/);assert.match(text,/workflow_run:\n    workflows: \["Office worker \(cloud\)"\]/);assert.doesNotMatch(text,/\n\s+schedule:/);
  assert.match(hour,/CLIPPERS_REVIEWED_HOUR_WINDOW_ENABLED == 'true'/);assert.match(raw,/CLIPPERS_REVIEWED_HOUR_WINDOW_ENABLED != 'true'/);
  for(const guard of ["CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED == 'true'","CLIPPERS_STREAMER_CLOUD_KILL_SWITCH != 'true'","github.ref != 'refs/heads/main'",'inputs.growth_only','inputs.dry_run'])assert.ok(hour.includes(guard),guard);
+ assert.doesNotMatch(hour,/\$\{\{ env\.CLIPPERS_DRY_RUN_REQUESTED/,'job-level env cannot reference the env context');
  assert.match(hour,/timeout-minutes: 20/);assert.match(hour,/node-version: 22/);assert.match(hour,/persist-credentials: false/);assert.ok(hour.indexOf('--due-check')<hour.indexOf('apt-get install'));
  assert.match(hour,/if: steps\.due\.outputs\.run == 'true'/);assert.doesNotMatch(hour,/yt-dlp|whisper|TWITCH_CLIENT|YOUTUBE_API|--respect-interval|CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL/);assert.match(raw,/Clock gate \(New York 09:00-19:59, minute < 15/);
 });
@@ -59,8 +60,8 @@ test('no-new-due records still receive bounded known-copy and controlled-stage m
   completed:{...base,delivery:{writeStartedAt:'2026-11-22T10:00:00.000Z',metricoolId:'126',metricoolUuid:'uuid126',copyVerifiedAt:'2026-11-22T10:01:00.000Z',status:'scheduled'}}
  }};
  const store=backend(JSON.stringify(state)),options={env:env(),store,dueRecords:async()=>[]};
- assert.deepEqual(await reviewedHourWindowReadiness(options),{status:'maintenance',dueCount:0,maintenanceCount:5});let called=0;
- const result=await runReviewedHourWindowCloud({...options,createMetricool:()=>({}),createStager:()=>({}),runWorker:async args=>{called++;assert.equal(args.dispatchMode,'owner_hour_window');return{status:'completed',scheduled:0};}});assert.equal(called,1);assert.equal(result.scheduled,0);assert.equal(result.maintenanceCount,5);
- const negative={...state,reviewedDerivatives:{records:Object.fromEntries(Object.entries(state.reviewedDerivatives.records).filter(([id])=>['noIdentity','unknownBeforeWrite','exact','unapproved','otherOwner','completed'].includes(id)))}};
+ assert.deepEqual(await reviewedHourWindowReadiness(options),{status:'maintenance',dueCount:0,maintenanceCount:6});let called=0;
+ const result=await runReviewedHourWindowCloud({...options,createMetricool:()=>({}),createStager:()=>({}),runWorker:async args=>{called++;assert.equal(args.dispatchMode,'owner_hour_window');return{status:'completed',scheduled:0};}});assert.equal(called,1);assert.equal(result.scheduled,0);assert.equal(result.maintenanceCount,6);
+ const negative={...state,reviewedDerivatives:{records:Object.fromEntries(Object.entries(state.reviewedDerivatives.records).filter(([id])=>['noIdentity','unknownBeforeWrite','unapproved','otherOwner','completed'].includes(id)))}};
  assert.deepEqual(await reviewedHourWindowReadiness({...options,store:backend(JSON.stringify(negative))}),{status:'idle',dueCount:0,maintenanceCount:0});
 });
