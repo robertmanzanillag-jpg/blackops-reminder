@@ -20,6 +20,7 @@ import { initializeRevenueEnginePersistence } from "./revenue-engine";
 import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-control";
 import { shouldStartResourceIntensiveSchedulers } from "./background-scheduler-policy";
 import { officeWebProtocol } from "./office-protocol";
+import { buildProvenance } from "./build-provenance";
 import {officeWebSourceStatus,startOfficeWebSourceExporter} from "./office-web-source-scheduler";
 import {officeEditorialSourceStatus} from "./office-editorial-scheduler";
 
@@ -38,6 +39,7 @@ app.get(["/health", "/api/health"], (_req, res) => {
     ready: true,
     service: "blackops-reminder",
     officeProtocol: officeWebProtocol(),
+    buildProvenance: buildProvenance(),
     officeSources:officeWebSourceStatus(),
     officeEditorialSources:officeEditorialSourceStatus(),
     instanceId,

@@ -4,6 +4,7 @@ import { mkdir, rm, readFile, copyFile, writeFile } from "fs/promises";
 import { spawn } from "child_process";
 import { createRequire } from "node:module";
 import { createOfficeCloudSchemaSql } from "../server/office-cloud-store";
+import { collectBuildProvenance } from "./build-provenance";
 
 function pipInstallEnv(): NodeJS.ProcessEnv {
   return {
@@ -119,6 +120,8 @@ const allowlist = [
 ];
 
 async function buildAll() {
+  // Bind every output, including Vite client assets, to the same source observation.
+  const provenance = collectBuildProvenance();
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");
@@ -145,6 +148,7 @@ async function buildAll() {
     format: "cjs",
     outfile: "dist/index.cjs",
     define: {
+      __BLACKOPS_BUILD_PROVENANCE__: JSON.stringify(provenance),
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
@@ -185,6 +189,12 @@ async function buildAll() {
   });
   // Prepared artifact only: building never applies this migration.
   await writeFile("dist/office-cloud-schema.sql", createOfficeCloudSchemaSql(), "utf8");
+  // Never leave mixed client/server outputs claiming a later clean source identity.
+  if (JSON.stringify(collectBuildProvenance()) !== JSON.stringify(provenance)) {
+    await rm("dist", { recursive: true, force: true });
+    throw new Error("Build source changed during compilation; rebuild from a stable tree.");
+  }
+  await writeFile("dist/build-provenance.json", JSON.stringify(provenance) + "\n", "utf8");
 }
 
 buildAll().catch((err) => {

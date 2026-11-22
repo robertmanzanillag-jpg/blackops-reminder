@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T13:15:06.933Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/db-pool-idle-recovery-nov22",
+  "generatedAt": "2026-11-22T13:34:05.082Z",
+  "repoRoot": ".",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,39 +125,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1366,
-    "filesIndexed": 1246,
-    "imports": 5169,
+    "filesVisible": 1369,
+    "filesIndexed": 1249,
+    "imports": 5184,
     "routes": 640,
-    "symbols": 29288
+    "symbols": 29318
   },
   "directories": {
-    "docs": {
-      "files": 89,
-      "indexed": 86,
+    "script": {
+      "files": 156,
+      "indexed": 140,
       "kinds": {
-        "docs": 89
+        "script": 156
       }
     },
     "server": {
-      "files": 302,
-      "indexed": 295,
+      "files": 303,
+      "indexed": 296,
       "kinds": {
-        "server": 302
-      }
-    },
-    "tests/helpers": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "test": 3
+        "server": 303
       }
     },
     "tests": {
-      "files": 366,
-      "indexed": 361,
+      "files": 367,
+      "indexed": 362,
       "kinds": {
-        "test": 366
+        "test": 367
       }
     },
     ".": {
@@ -238,19 +231,19 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 89,
+      "indexed": 86,
+      "kinds": {
+        "docs": 89
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 155,
-      "indexed": 139,
-      "kinds": {
-        "script": 155
       }
     },
     "script/office-api-budget-v6": {
@@ -321,6 +314,13 @@
       "indexed": 1,
       "kinds": {
         "test": 1
+      }
+    },
+    "tests/helpers": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "test": 3
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -7973,10 +7973,45 @@
       "routes": []
     },
     {
+      "path": "script/build-provenance.ts",
+      "kind": "script",
+      "imports": [
+        "../server/build-provenance",
+        "node:child_process",
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [
+        "collectBuildProvenance",
+        "isRuntimeSourcePath"
+      ],
+      "symbols": [
+        "EXACT_FILES",
+        "EXCLUDED",
+        "before",
+        "clean",
+        "collectBuildProvenance",
+        "contents",
+        "env",
+        "full",
+        "git",
+        "hash",
+        "head",
+        "isRuntimeSourcePath",
+        "listed",
+        "paths",
+        "revision",
+        "untracked"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/build.ts",
       "kind": "script",
       "imports": [
         "../server/office-cloud-store",
+        "./build-provenance",
         "child_process",
         "esbuild",
         "fs/promises",
@@ -7994,6 +8029,7 @@
         "externals",
         "pipInstallEnv",
         "pkg",
+        "provenance",
         "runCommand",
         "targetDir",
         "timer"
@@ -21749,6 +21785,21 @@
       "routes": []
     },
     {
+      "path": "server/build-provenance.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "BuildProvenance",
+        "buildProvenance",
+        "unverifiedBuildProvenance"
+      ],
+      "symbols": [
+        "buildProvenance",
+        "unverifiedBuildProvenance"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/calendar-sync.ts",
       "kind": "server",
       "imports": [
@@ -25832,6 +25883,7 @@
         "./background-scheduler-policy",
         "./blackroom-control-routes",
         "./blackroom-remote-control",
+        "./build-provenance",
         "./cybersecurity-agent",
         "./health-check",
         "./local-auth",
@@ -41557,6 +41609,35 @@
       "routes": []
     },
     {
+      "path": "tests/build-provenance.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/build-provenance",
+        "../server/build-provenance",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "a",
+        "absent",
+        "actual",
+        "b",
+        "fixture",
+        "git",
+        "index",
+        "metadata",
+        "prior",
+        "root",
+        "stamp"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ceo-brief-cli.test.ts",
       "kind": "test",
       "imports": [
@@ -52287,6 +52368,7 @@
     "tests/blackroom-team-registry.test.ts",
     "tests/blackroom-team-scheduler.test.ts",
     "tests/blackroom-verified-learning.test.ts",
+    "tests/build-provenance.test.ts",
     "tests/ceo-backup-check-cli.test.ts",
     "tests/ceo-brief-cli.test.ts",
     "tests/ceo-briefing.test.ts",
