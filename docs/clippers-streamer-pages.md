@@ -180,3 +180,21 @@ This gate does not prove five publications per account per day. Rights supply, F
 actual provider limits and the existing brand-wide quota accounting must be reconciled separately;
 five scheduled or draft rows are not five published videos. Keep the kill switch on until the exact
 reviewed code, current rights evidence and pending-write reconciliation are verified.
+
+
+### Revocation and existing deliveries
+
+Rights changes are observed on the next non-paused worker pass; they are not a push subscription.
+A revoked/expired or unbound held source moves to `held_rights`. Its temporary public staging asset
+is removed when no send for that candidate is uncertain, even while Facebook identity remains held.
+The queue/source metadata stays available. Restoring valid permission requires a fresh render/staging
+binding if that asset was removed; the old URL is never resent. Unknown prior sends must first be
+reconciled, and their staging assets remain protected pending that reconciliation.
+
+**Revoking a source grant does not cancel an already scheduled Metricool post or remove a published
+post.** The owner/operator must immediately pause the publisher, reconcile the exact post UUIDs and
+cancel future unauthorized posts in Metricool (and remove published copies where required), then
+remove any remaining public staging assets once uncertain sends are resolved. A paused worker does
+not perform cleanup. Do not interpret this PR or a ledger revocation as completed takedown. This
+manual cancellation/reconciliation step is required before activation; no automatic unschedule
+operation is introduced by this change.

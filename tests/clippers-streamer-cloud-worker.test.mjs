@@ -632,3 +632,54 @@ test('publish policy: a fresh candidate prohibition after preflight blocks the o
   const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-new-prohibition': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() });
   assert.equal(m.calls.schedule.length, 0); assert.ok(report.heldReasons.includes('clip_prohibited')); assert.equal(store.state.cloudPublish.posts.length, 0);
 });
+
+
+test('rights: destination or public staging denial never uploads a public asset', async () => {
+  for (const denial of ['destination', 'staging']) {
+    const c = candidate(`deny-${denial}`, 'twitch:100', 'thegrefg'), state = baseState([c]);
+    if (denial === 'destination') state.sourceAuthorizations[c.id].destinations = ['6431687:tiktok:streamersclipusa'];
+    else state.sourceAuthorizations[c.id].scope.publicMediaStaging = false;
+    const stager = fakeStager(), m = fakeMetricool();
+    const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store: memoryStore(state), approvals: approvals({ [`pa-deny-${denial}`]: 'approved' }), metricool: m, stager, fetch: okFetch, ...fakeMedia() });
+    assert.equal(stager.uploaded.length, 0); assert.equal(m.calls.schedule.length, 0);
+    assert.ok(report.heldReasons.includes(denial === 'destination' ? 'rights_destination_mismatch' : 'rights_scope_incomplete'));
+  }
+});
+
+test('rights: revoked/expired legacy held staging is removed while Facebook remains held, but uncertain writes protect it', async () => {
+  for (const scenario of ['revoked', 'expired', 'legacy_source', 'uncertain']) {
+    const c = candidate(`public-${scenario}`, 'twitch:100', 'thegrefg'), state = baseState([c]);
+    const d = DESTINATIONS.find(d => d.network === 'facebook'), key = destinationKey(d), url = 'https://github.com/o/r/releases/download/t/public-held.mp4';
+    const grant = state.sourceAuthorizations[c.id];
+    if (scenario === 'expired') grant.validUntil = new Date(NOW).toISOString(); else grant.status = 'revoked';
+    state.cloudPublish = { version: 1, clips: { [c.id]: { status: 'held_owner_action', attempts: 1, mediaAsset: { id: 1, url } } },
+      posts: scenario === 'uncertain' ? [{ id: 'unknown', candidateId: c.id, destination: d, destinationKey: key, status: 'verification_pending', scheduledAt: new Date(NOW + 2 * 3600000).toISOString() }] : [],
+      holds: { [key]: { status: 'held_owner_action' } }, heldQueue: [{ id: 'held-public', candidateId: c.id, creatorKey: c.creatorKey,
+        ...(scenario === 'legacy_source' ? {} : { sourceUrl: c.sourceUrl }), destination: d, destinationKey: key, caption: c.caption, mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
+    const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia(); m.confirmSchedule = async () => null;
+    await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager, fetch: okFetch, ...media });
+    assert.deepEqual(stager.removed, scenario === 'uncertain' ? [] : [1], scenario);
+    assert.equal(store.state.cloudPublish.heldQueue[0].status, 'held_rights');
+    assert.equal(m.calls.schedule.length, 0); assert.equal(media.calls.render.length, 0);
+    if (scenario !== 'uncertain') assert.equal(store.state.cloudPublish.clips[c.id].mediaAsset, null);
+    else assert.equal(store.state.cloudPublish.posts[0].status, 'verification_pending');
+  }
+});
+
+test('rights: restored permission re-renders removed held media with a fresh queue binding', async () => {
+  const c = candidate('restore-public', 'twitch:100', 'thegrefg'), state = baseState([c]);
+  const d = DESTINATIONS.find(d => d.network === 'facebook'), key = destinationKey(d);
+  state.sourceAuthorizations[c.id].status = 'revoked';
+  state.cloudPublish = { version: 1, posts: [], holds: { [key]: { status: 'held_owner_action' } },
+    clips: { [c.id]: { status: 'held_owner_action', attempts: 1, mediaAsset: { id: 7, url: 'https://github.com/o/r/releases/download/t/old.mp4' } } },
+    heldQueue: [{ id: 'held-old', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: key, caption: c.caption, mediaSha256: 'b'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
+  const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia();
+  const args = { env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-restore-public': 'approved' }), metricool: m, stager, fetch: okFetch, ...media };
+  await runCloudPublisher(args); assert.deepEqual(stager.removed, [7]);
+  const next = store.state; next.sourceAuthorizations[c.id].status = 'approved'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(next));
+  await runCloudPublisher(args);
+  assert.equal(media.calls.render.length, 1); assert.equal(m.calls.schedule.length, 0);
+  assert.equal(store.state.cloudPublish.heldQueue.length, 1);
+  assert.equal(store.state.cloudPublish.heldQueue[0].mediaSha256, 'a'.repeat(64));
+  assert.equal(store.state.cloudPublish.heldQueue[0].status, 'held_owner_action');
+});

@@ -178,8 +178,10 @@ function localDaysAround(now) { const today = localDay(new Date(now)); return [l
  */
 export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
   const posts = ledger.posts.filter(p => p.candidateId === candidateId);
-  if ((ledger.heldQueue ?? []).some(q => q.candidateId === candidateId)) return false; // queued copy still needs the media
   if (posts.some(p => UNCERTAIN.has(p.status))) return false;
+  const queued = (ledger.heldQueue ?? []).filter(q => q.candidateId === candidateId);
+  if (queued.some(q => q.status === 'held_rights')) return true; // revoked/expired staging must not stay public
+  if (queued.length) return false; // a permissioned queued copy still needs the media
   return posts.filter(p => p.status === 'scheduled').every(p =>
     (p.confirmedMediaUrl && p.confirmedMediaUrl !== assetUrl) || now >= Date.parse(p.scheduledAt) + 2 * HOUR);
 }
@@ -516,6 +518,14 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const fresh = cloudPublishOf(parseStreamerState(await store.read(ns)));
       const mediaUrl = fresh.clips[q.candidateId]?.mediaAsset?.url;
       const drop = () => update((s, c) => { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); });
+      if (!mediaUrl && q.status === 'held_rights') {
+        const sourceState = parseStreamerStateStrict(await store.read(ns));
+        const source = { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl };
+        const rights = sourceRightsGate(sourceState, source, { now: clock(), destinationKey: destinationKey(destination) });
+        if (!rights) { await drop(); report.heldReasons.push('held_release:authorized_rerender_required'); }
+        else report.heldReasons.push(`held_release_gate:${rights}`);
+        continue; // a fresh render is required; never send a removed public asset
+      }
       if (!mediaUrl || !await verifyPublicMedia(mediaUrl, fetchImpl)) { await drop(); report.heldReasons.push('held_release:media_unavailable'); continue; }
       // Lane copies keep the lane's per-account slots/cap; the 1k auto-publish gate is re-evaluated now.
       const plan = q.lane ? accountSchedule(fresh, destination, now) : null;
@@ -575,6 +585,20 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   // 2) Remove staged media once no write for that clip is still uncertain; sweep leftovers after 48 h.
   if (stager && !config.dryRun) {
     try {
+      // Rights can expire while Facebook is still held. Recheck every queued source before deciding
+      // which temporary public assets to retain, even when the release loop skipped that destination.
+      await update((s, c) => {
+        for (const q of c.heldQueue) {
+          const reason = sourceRightsGate(s, { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl }, { now: clock(), destinationKey: q.destinationKey });
+          if (reason) {
+            q.status = 'held_rights'; q.rightsHoldReason = reason;
+            const activePost = c.posts.some(p => p.candidateId === q.candidateId && !['deferred', 'not_found', 'blocked'].includes(p.status));
+            if (!activePost && c.clips[q.candidateId]) Object.assign(c.clips[q.candidateId], { status: 'deferred', reason });
+          } else if (q.status === 'held_rights' && c.clips[q.candidateId]?.mediaAsset?.url) {
+            q.status = HOLD_OWNER_ACTION; delete q.rightsHoldReason;
+          }
+        }
+      });
       const current = cloudPublishOf(parseStreamerState(await store.read(ns)));
       const keep = new Set();
       for (const [candidateId, clip] of Object.entries(current.clips)) {
@@ -835,7 +859,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             c.posts.push({ ...item, attemptedAt: iso(clock()) });
             return null;
           });
-          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') report.counts.blocked++; gateBlocked = blocked; at = null; break; }
+          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') report.counts[blocked.startsWith('rights_') ? 'deferred' : 'blocked']++; gateBlocked = blocked; at = null; break; }
           let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
           try {
             await metricool.preflight(p.destination, item);
@@ -870,7 +894,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             const rights = publishGate(current, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt: item.scheduledAt });
             if (rights) {
               await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
-              report.heldReasons.push(rights); report.counts.deferred++; dropReason = rights; at = null; break;
+              report.heldReasons.push(rights); report.counts[rights.startsWith('rights_') ? 'deferred' : 'blocked']++;
+              if (rights.startsWith('rights_')) dropReason = rights; else gateBlocked = rights; at = null; break;
             }
             const found = await metricool.schedule(p.destination, item);
             status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null;
@@ -890,7 +915,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           for (const h of heldTargets) {
             const key = destinationKey(h.destination);
             const id = `held-${sha(`${candidate.id}|${key}`).slice(0, 24)}`;
-            if (c.heldQueue.some(q => q.id === id) || c.posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === key && x.status !== 'deferred')) continue;
+            const priorHeld = c.heldQueue.find(q => q.id === id || (q.candidateId === candidate.id && canonicalDestinationKey(q.destinationKey) === key));
+            if ((priorHeld && priorHeld.status !== 'held_rights') || c.posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === key && x.status !== 'deferred')) continue;
+            c.heldQueue = c.heldQueue.filter(q => q.id !== id && q.id !== priorHeld?.id);
             const lane = h.lane ? { lane: h.lane.lane, language: h.lane.language, streamKey: h.lane.streamKey,
               segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }), dailyLimit: h.lane.dailyLimit, draft: h.lane.draft, countDrafts: true, allowDuetStitch: true } : null;
             c.heldQueue.push({ id, candidateId: candidate.id, creatorKey: candidate.creatorKey, sourceUrl: candidate.sourceUrl, destination: { ...h.destination }, destinationKey: key, index: h.index,
