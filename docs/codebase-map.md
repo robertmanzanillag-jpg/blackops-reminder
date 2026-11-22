@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T10:29:28.642Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-receipts-bridge-nov22`
+Generated: 2026-11-22T10:39:14.143Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-account-quota-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1328 | 1213 | 5018 | 633 | 28825 |
+| 1328 | 1213 | 5018 | 633 | 28841 |
 
 ## Entrypoints
 - `client/src/App.tsx`
