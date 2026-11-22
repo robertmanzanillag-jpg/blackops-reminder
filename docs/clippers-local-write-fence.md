@@ -21,14 +21,18 @@ so inherited cloud or override flags cannot reactivate the Mac writer. Brands643
    that process exits. This tool neither stops nor starts jobs.
 3. Only after independent review and operator coordination, use
    `--apply RUNTIME_ROOT PLAN_FILE NEW_BACKUP_DIRECTORY --quiesced`. The backup directory must
-   not exist and must lie outside the runtime tree. Its parent must already be owner-controlled.
+   not exist and must lie outside the runtime tree. Its parent must be canonical (no symlink),
+   owned by the current user, and not writable by other users.
    The explicit quiescence acknowledgement is required, not a process-liveness assertion by the tool.
 
 Apply rechecks all before hashes under an exclusive maintenance lock, stores unchanged originals
 and the plan in an owner-only backup, installs the dependency first, then replaces each adapter
 using a same-directory rename and verifies its digest. It writes `applied.json` only after all
 three readbacks pass. Any mismatched bytes, symlink, concurrent change or reused backup fails
-closed. A partial filesystem failure is not an applied receipt: inspect the backup before recovery.
+closed. A partial filesystem failure is not an applied receipt: the maintenance lock is retained and
+`failed.json` records changed paths in the backup and lock when storage permits. The retained
+lock prevents a second install even if a full disk prevents that receipt. Inspect the backup
+and partial code state before operator recovery.
 
 Rollback is an operator action while writers are stopped: restore the exact original adapter
 bytes from that backup. Remove the new shared guard only if no installed module imports it.

@@ -18,6 +18,7 @@ function replaceOnce(text, anchor, replacement) {
 }
 export function patchInstalledModule(relative, original) {
   let text = original.toString('utf8');
+  if (text.startsWith('#!')) throw Error('WRITE_FENCE_SHEBANG_UNSUPPORTED');
   const importLine = `import { metricoolWriteRefusal } from '../shared/clippers-metricool-writer.mjs';\n`;
   if (relative === 'script/clippers-portfolio-metricool.mjs') {
     const anchor = '    async schedule(destination, item) {\n';
@@ -50,8 +51,8 @@ export async function prepareWriteFence({ runtimeRoot, guardBytes, pins = INSTAL
   for (const [relative, pin] of Object.entries(pins)) {
     if (!(relative in INSTALLED_PINS)) throw Error('WRITE_FENCE_PATH_DENIED');
     const before = await plainFile(root, relative);
-    const after = patchInstalledModule(relative, before.bytes);
     if (hashBytes(before.bytes) !== pin) throw Error('WRITE_FENCE_INSTALLED_PIN_MISMATCH');
+    const after = patchInstalledModule(relative, before.bytes);
     writes.push({ relative, before, after });
   }
   const previousGuard = await plainFile(root, GUARD_PATH, true);
@@ -64,14 +65,20 @@ export async function prepareWriteFence({ runtimeRoot, guardBytes, pins = INSTAL
   return { plan, writes };
 }
 
-export async function applyWriteFence(prepared, { expectedPlan, backupRoot, quiesced = false }) {
+export async function applyWriteFence(prepared, { expectedPlan, backupRoot, quiesced = false, renameFile = rename }) {
   if (!quiesced) throw Error('WRITE_FENCE_QUIESCENCE_REQUIRED');
   if (JSON.stringify(expectedPlan) !== JSON.stringify(prepared.plan)) throw Error('WRITE_FENCE_PLAN_MISMATCH');
   const root = prepared.plan.runtimeRoot;
   const backup = path.resolve(backupRoot);
+  const backupParent = path.dirname(backup);
+  if (await realpath(backupParent) !== backupParent) throw Error('WRITE_FENCE_BACKUP_SYMLINK_DENIED');
+  const parentStat = await lstat(backupParent);
+  if (parentStat.mode & 0o022 || typeof process.getuid === 'function' && parentStat.uid !== process.getuid()) throw Error('WRITE_FENCE_BACKUP_PARENT_UNSAFE');
   if (backup === root || backup.startsWith(root + path.sep) || root.startsWith(backup + path.sep)) throw Error('WRITE_FENCE_BACKUP_LOCATION_INVALID');
   const lock = path.join(root, '.clippers-local-write-fence.lock');
   await mkdir(lock, { mode: 0o700 });
+  const installedPaths = [];
+  let retainLock = false;
   try {
     // Recheck every byte under the lock before saving or changing anything.
     for (const write of prepared.writes) {
@@ -91,13 +98,23 @@ export async function applyWriteFence(prepared, { expectedPlan, backupRoot, quie
       const temporary = target + `.write-fence-${process.pid}`;
       const handle = await open(temporary, 'wx', write.before?.mode ?? 0o600);
       try { await handle.writeFile(write.after); await handle.sync(); } finally { await handle.close(); }
-      await rename(temporary, target);
+      await renameFile(temporary, target);
+      installedPaths.push(write.relative);
       if (hashBytes(await readFile(target)) !== hashBytes(write.after)) throw Error('WRITE_FENCE_READBACK_FAILED');
     }
     const receipt = { ...prepared.plan, applied: true, backupRoot: backup, installedAt: new Date().toISOString() };
     await writeFile(path.join(backup, 'applied.json'), JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
     return receipt;
-  } finally { await rm(lock, { recursive: true, force: true }); }
+  } catch (error) {
+    if (installedPaths.length) {
+      // Keep the maintenance fence even if a full disk prevents writing a failure receipt.
+      retainLock = true;
+      const failure = JSON.stringify({ status: 'partial_apply_failed', installedPaths, requiresOperatorRecovery: true }, null, 2) + '\n';
+      await writeFile(path.join(backup, 'failed.json'), failure, { mode: 0o600, flag: 'wx' }).catch(() => {});
+      await writeFile(path.join(lock, 'failed.json'), failure, { mode: 0o600, flag: 'wx' }).catch(() => {});
+    }
+    throw error;
+  } finally { if (!retainLock) await rm(lock, { recursive: true, force: true }); }
 }
 
 async function main(argv) {

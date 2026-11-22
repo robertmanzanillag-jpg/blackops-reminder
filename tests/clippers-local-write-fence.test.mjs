@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, realpath, rename, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -76,4 +76,25 @@ test('autopilot fence returns blocked without reaching unfenced transport for cl
     assert.deepEqual(run({item:{itemId:'clip-1'},blogId}), [{itemId:'clip-1',status:'blocked',blockers:['cloud_owned_brand_mac_write_refused']}]);
   }
   assert.throws(()=>run({item:{itemId:'clip-1'},blogId:6475033}), /unfenced/);
+}));
+
+
+test('symlinked backup parents and shebang inputs are refused', () => fixture(async ({root,runtimeRoot,pins}) => {
+  const prepared=await prepareWriteFence({runtimeRoot,guardBytes,pins});
+  const linked=path.join(root,'linked');await symlink(runtimeRoot,linked);
+  await assert.rejects(applyWriteFence(prepared,{expectedPlan:prepared.plan,backupRoot:path.join(linked,'backup'),quiesced:true}), /BACKUP_SYMLINK_DENIED/);
+  assert.throws(()=>patchInstalledModule(P,Buffer.from('#!/usr/bin/env node\n'+originalPortfolio)), /SHEBANG_UNSUPPORTED/);
+}));
+
+test('partial replacement failure records changed paths and retains the maintenance lock', () => fixture(async ({root,runtimeRoot,pins}) => {
+  const prepared=await prepareWriteFence({runtimeRoot,guardBytes,pins});
+  const backupRoot=path.join(root,'backup');let calls=0;
+  await assert.rejects(applyWriteFence(prepared,{expectedPlan:prepared.plan,backupRoot,quiesced:true,
+    renameFile:async(from,to)=>{if(++calls===2)throw Error('injected replacement failure');await rename(from,to);}}), /injected/);
+  const failure=JSON.parse(await readFile(path.join(backupRoot,'failed.json'),'utf8'));
+  assert.equal(failure.status,'partial_apply_failed');
+  assert.deepEqual(failure.installedPaths,[GUARD_PATH]);
+  assert.equal((await lstat(path.join(runtimeRoot,'.clippers-local-write-fence.lock'))).isDirectory(),true);
+  assert.deepEqual(await readFile(path.join(runtimeRoot,P)),originalPortfolio);
+  await assert.rejects(readFile(path.join(backupRoot,'applied.json')),{code:'ENOENT'});
 }));
