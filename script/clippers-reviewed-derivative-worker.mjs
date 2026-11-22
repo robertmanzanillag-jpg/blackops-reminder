@@ -1,4 +1,6 @@
 // Exact final-file lane: never downloads/renders Twitch or invents canonical producer ACKs.
+import {reconcileReviewedDerivativeCopies} from './clippers-reviewed-copy-reconcile.mjs';
+import {sealPrivateFinal,cleanupPrivateFinals} from './clippers-private-final-store.mjs';
 import { randomUUID } from 'node:crypto';
 import { STREAMER_STATE_NAMESPACE, parseStreamerStateStrict } from './clippers-streamer-discovery.mjs';
 import { cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
@@ -43,7 +45,7 @@ function mappedBaseline(m,posts,actual){
 }
 /** Injectable dependencies permit real HTTP/UI tests with dummy providers; production supplies trusted services. */
 export async function runReviewedDerivatives({owner,store,metricool,stager,config,clock=Date.now,fetch:fetchImpl=globalThis.fetch,
-  loadFinal=loadSealedReviewedDerivative,verifyFile=verifySealedDerivativeFile,verifyReceipt=verifyNativeDerivativeReceipt,
+  loadFinal=loadSealedReviewedDerivative,loadPrivate=sealPrivateFinal,verifyFile=verifySealedDerivativeFile,verifyReceipt=verifyNativeDerivativeReceipt,
   loadTrack=loadApprovedDerivativeInstrumental,verifyAudio=verifyDerivativeAudioReplacement,liveCheck=checkDerivativeCampaign}={}){
   const report={status:'disabled',scheduled:0,held:[],verificationPending:0,assetsRemoved:0};
   if(!config?.enabled||config.killSwitch||config.dryRun)return report;
@@ -52,6 +54,7 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
   async function read(){const s=parseStreamerStateStrict(await store.read(ns));if(!s)throw Error('derivative_state_invalid');return s;}
   async function update(fn){let out;await store.transact(ns,async raw=>{const s=parseStreamerStateStrict(raw);if(!s)throw Error('derivative_state_invalid');const c=cloudPublishOf(s);s.cloudPublish=c;out=await fn(s,c);return JSON.stringify(s);});return out;}
   function gate(s,id,live){const r=s.reviewedDerivatives?.records?.[id];const e=reviewedDerivativeGate(r,{owner,now:clock(),liveEligibility:live});if(e)throw Error(e);if(r.manifest.rights.licenseTerm.kind==='conditional_live'){const lead=Date.parse(r.manifest.scheduledAt)-clock();if(lead<60000||lead>300000)throw Error('derivative_conditional_just_in_time_required');}validateDerivativeBaseline(r.manifest.baseline,r.manifest);policy(s,r.manifest);if(!config.destinations?.some(d=>destinationKey(d)===destinationKey(r.manifest.destination)))throw Error('derivative_destination_disabled');return r;}
+  if(typeof metricool.reconcileReviewedDerivative==='function'){const copy=await reconcileReviewedDerivativeCopies({store,owner,metricool,clock,limit:8});report.copiesVerified=copy.verified;if(copy.held.length)report.held.push(...copy.held);}
   const initial=await read();const ids=Object.keys(initial.reviewedDerivatives?.records??{}).slice(0,500);
   // A verified native copy after an owner reconciliation can retire its controlled staging, never an unknown write.
   for(const id of ids){const d=initial.reviewedDerivatives.records[id]?.delivery;if(d?.asset&&d.writeStartedAt&&d.copyVerifiedAt&&['scheduled','held_nonpublishing_draft'].includes(d.status)&&approvedNativeMediaUrl(d.confirmedMediaUrl)&&d.confirmedMediaUrl!==d.asset.url){try{if(await stager.remove(d.asset.id)){report.assetsRemoved++;await update(s=>{const current=s.reviewedDerivatives.records[id]?.delivery;if(current?.id===d.id&&current.asset?.id===d.asset.id)current.asset=null;});}}catch{report.held.push('derivative_copied_staging_cleanup_pending');}}}
@@ -85,7 +88,7 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
       if(record.status!=='approved')continue;
       if(record.delivery?.writeStartedAt||['pending_stage','pending_write','verification_pending','scheduled'].includes(record.delivery?.status)){report.held.push('derivative_existing_delivery_requires_reconciliation');continue;}
       let live=await liveCheck(record,{fetch:fetchImpl,clock});record=gate(await read(),id,live);const m=record.manifest,destination=findDestination(m.destination);
-      sealed=await loadFinal(m.media,{fetch:fetchImpl});
+      sealed=m.media.storageKind==='private_council_v1'?await loadPrivate({store,owner,record,now:clock()}):await loadFinal(m.media,{fetch:fetchImpl});
       if(m.media.audio==='licensed_instrumental_only'){track=await loadTrack({fetch:fetchImpl});await verifyAudio({file:sealed.file,licensedTrackFile:track.file,profile:m.audioReplacement,finalSha256:m.media.sha256,caption:m.caption,captionSha256:m.captionSha256,durationSeconds:m.media.durationSeconds,maker:m.qa.maker,checker:m.qa.checker,now:clock()});}
       // Complete fresh provider view plus exact native bytes. Unknown manual rows hold rather than create capacity.
       const actual=await metricool.reviewedDerivativeCalendar(m.baseline);state=await read();const baseline=mappedBaseline(m,cloudPublishOf(state).posts,actual);const entries=matchDerivativeBaseline(baseline,actual);
@@ -120,7 +123,7 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
       const known=!!(ack?.id&&ack?.uuid&&ack?.mediaUrl&&disclosureOk);confirmed=known;
       await update((s,c)=>{const r=s.reviewedDerivatives.records[id],p=c.posts.find(p=>p.id===claimId);Object.assign(r.delivery,{status:known?'scheduled':'verification_pending',reason:known?null:disclosureOk?'derivative_provider_ack_unverified':'derivative_commercial_disclosure_unverified',metricoolId:ack?.id??null,metricoolUuid:ack?.uuid??null,confirmedMediaUrl:ack?.mediaUrl??null});Object.assign(p,{status:r.delivery.status,metricoolId:ack?.id??null,metricoolUuid:ack?.uuid??null,confirmedMediaUrl:ack?.mediaUrl??null});});
       if(!known){report.held.push(disclosureOk?'derivative_provider_ack_unverified':'derivative_commercial_disclosure_unverified');report.verificationPending++;break;}
-      if(known){report.scheduled++;if(ack.mediaUrl!==asset.url){await verifyReceipt({mediaUrl:ack.mediaUrl,mediaSha256:m.media.sha256,byteLength:m.media.byteLength},{fetch:fetchImpl});if(await stager.remove(asset.id)){report.assetsRemoved++;await update(s=>{s.reviewedDerivatives.records[id].delivery.asset=null;});}}}
+      if(known){report.scheduled++;if(ack.mediaUrl!==asset.url){await verifyReceipt({mediaUrl:ack.mediaUrl,mediaSha256:m.media.sha256,byteLength:m.media.byteLength},{fetch:fetchImpl});await update(s=>{const d=s.reviewedDerivatives.records[id].delivery;d.copyVerifiedAt=iso(clock());d.confirmedMediaSha256=m.media.sha256;d.confirmedByteLength=m.media.byteLength;});if(await stager.remove(asset.id)){report.assetsRemoved++;await update(s=>{s.reviewedDerivatives.records[id].delivery.asset=null;});}}}
     }catch(e){report.held.push(reason(e));
       if(claimId){if(writeStarted&&!confirmed){report.verificationPending++;await update((s,c)=>{const r=s.reviewedDerivatives.records[id];r.delivery.status='verification_pending';const p=c.posts.find(p=>p.id===claimId);if(p)p.status='verification_pending';});if(wasCommercial)break;}
         else if(!writeStarted){
@@ -133,5 +136,6 @@ export async function runReviewedDerivatives({owner,store,metricool,stager,confi
       await update(s=>{const r=s.reviewedDerivatives.records[id];if(r)r.lastCheck={at:iso(clock()),status:'held',reason:reason(e)};});
     }finally{await sealed?.cleanup();await track?.cleanup();}
   }
+  if(ids.some(id=>initial.reviewedDerivatives.records[id]?.manifest.media.storageKind==='private_council_v1'))try{const storage=await cleanupPrivateFinals({store,owner,now:clock()});report.privateBytesReclaimed=storage.bytesReclaimed;if(storage.held.length)report.held.push(...storage.held);}catch{report.held.push('private_final_cleanup_unavailable');}
   return report;
 }
