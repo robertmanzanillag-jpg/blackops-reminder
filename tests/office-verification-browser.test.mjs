@@ -97,3 +97,106 @@ test('compiled office verification journeys: owner, errors, keyboard, map and mo
     }
   } finally { await browser?.close(); await fixture.close(); }
 });
+
+test('compiled Academy text remains visible below wrapped mobile office controls', { timeout: 60000 }, async () => {
+  const previousTmp = process.env.TMPDIR;
+  let fixture;
+  try {
+    const tempRoot = path.resolve('.cache/office-verification');
+    await mkdir(tempRoot, { recursive: true });
+    process.env.TMPDIR = tempRoot;
+    fixture = await launchOfficeUiFixture(path.resolve('dist/public'), 'a'.repeat(40));
+  } finally {
+    if (previousTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = previousTmp;
+  }
+
+  let browser;
+  try {
+    browser = await chromium.launch({ channel: process.env.OFFICE_QA_BROWSER_CHANNEL || undefined, args: ['--no-sandbox'] });
+    for (const { width, height, isMobile } of [
+      { width: 390, height: 844, isMobile: true },
+      { width: 1440, height: 900, isMobile: false },
+    ]) {
+      const context = await browser.newContext({ viewport: { width, height }, isMobile, hasTouch: isMobile, serviceWorkers: 'block' });
+      try {
+        const origin = new URL(fixture.baseUrl).origin;
+        await context.route('**/*', route => {
+          const request = route.request();
+          const url = new URL(request.url());
+          if (url.origin === origin && request.method() === 'GET') return route.continue();
+          if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
+          return route.abort();
+        });
+        assert.equal((await context.request.post(new URL('/api/auth/login', origin).href, { data: { username: 'fixture-owner', password: 'local-fixture-password' } })).status(), 200);
+        await context.route('**/api/workspace/me', route => route.fulfill({ json: { role: 'owner', canManagePartners: true, blackRoomScope: null } }));
+        const page = await context.newPage();
+        page.setDefaultTimeout(15000);
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await page.goto(new URL('/agents-office', origin).href);
+        const improvements = page.getByTestId('office-kong-mirror-slot').getByRole('button', { name: /Mejoras KONG/ });
+        await improvements.waitFor();
+        await page.getByTestId('world-blackroom-academy').click();
+        const panel = page.getByTestId('world-blackroom-academy-panel');
+        await panel.getByText(/evaluaciones hoy/).waitFor();
+
+        const inspect = () => panel.evaluate(element => {
+          const { clientWidth, clientHeight } = document.documentElement;
+          const { width: visualWidth, height: visualHeight } = window.visualViewport ?? { width: clientWidth, height: clientHeight };
+          const rect = element.getBoundingClientRect();
+          const visibleWidth = Math.min(clientWidth, visualWidth);
+          const visibleHeight = Math.min(clientHeight, visualHeight);
+          const mirror = document.querySelector('[data-testid="office-kong-mirror-slot"] button');
+          const mirrorRect = mirror.getBoundingClientRect();
+          const covered = [];
+          let textRects = 0;
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) {
+            const text = walker.currentNode.textContent.trim();
+            if (!text) continue;
+            const range = document.createRange();
+            range.selectNodeContents(walker.currentNode);
+            for (const line of range.getClientRects()) {
+              const left = Math.max(line.left, rect.left, 0);
+              const top = Math.max(line.top, rect.top, 0);
+              const right = Math.min(line.right, rect.right, visibleWidth);
+              const bottom = Math.min(line.bottom, rect.bottom, visibleHeight);
+              if (right <= left || bottom <= top) continue;
+              textRects++;
+              // Sample near each edge as well as the middle of the full glyph box.
+              for (const x of [left + .25, (left + right) / 2, right - .25]) {
+                for (const y of [top + .25, (top + bottom) / 2, bottom - .25]) {
+                  if (!element.contains(document.elementFromPoint(x, y))) covered.push({ text, x, y });
+                }
+              }
+            }
+          }
+          return { panelTop: rect.top, panelBottom: rect.bottom, clientWidth, visibleHeight,
+            mirrorBottom: mirrorRect.bottom, textRects, covered };
+        });
+        for (const mobileWidth of isMobile ? [390, 320, 390] : [width]) {
+          await page.setViewportSize({ width: mobileWidth, height });
+          // Let the browser deliver ResizeObserver notifications after wrapping.
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          const layout = await inspect();
+          assert.equal(layout.clientWidth, mobileWidth);
+          assert.ok(layout.textRects >= 5, JSON.stringify(layout));
+          assert.deepEqual(layout.covered, [], JSON.stringify(layout));
+          assert.ok(layout.panelBottom <= layout.visibleHeight, JSON.stringify(layout));
+          if (isMobile) assert.ok(layout.panelTop >= layout.mirrorBottom, JSON.stringify(layout));
+          else assert.equal(layout.panelTop, 96, 'desktop keeps its existing top offset');
+        }
+
+        await panel.getByRole('button', { name: 'Cerrar academia Black Room', exact: true }).click();
+        await panel.waitFor({ state: 'hidden' });
+        await improvements.click({ trial: true });
+        assert.deepEqual(errors, []);
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await browser?.close();
+    await fixture.close();
+  }
+});

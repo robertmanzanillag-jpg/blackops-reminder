@@ -26,7 +26,7 @@ const PURPOSE_TEXT: Record<BlackRoomAcademyRow["purpose"], string> = {
 export function BlackRoomAcademyPanel({ company, onClose }: { company: CompanyState | null | undefined; onClose: () => void }) {
   const summary = blackRoomAcademySummary(company);
   return (
-    <section aria-label="Academia Black Room" className="absolute right-3 top-[220px] z-30 sm:top-36 lg:top-24 max-h-[55%] w-[min(440px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-fuchsia-200/25 bg-[#12061a]/95 p-4 text-xs text-white shadow-2xl" data-testid="world-blackroom-academy-panel">
+    <section aria-label="Academia Black Room" className="absolute right-3 z-30 [--academy-top:max(220px,calc(var(--office-mobile-tools-bottom,0px)_+_0.75rem))] top-[var(--academy-top)] max-h-[min(55%,calc(100dvh_-_var(--academy-top)_-_0.75rem))] sm:top-36 sm:max-h-[55%] lg:top-24 w-[min(440px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-fuchsia-200/25 bg-[#12061a]/95 p-4 text-xs text-white shadow-2xl" data-testid="world-blackroom-academy-panel">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-bold text-fuchsia-100">Academia Black Room</h2>
         <button type="button" onClick={onClose} aria-label="Cerrar academia Black Room">Cerrar</button>

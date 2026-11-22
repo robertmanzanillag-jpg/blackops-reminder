@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T14:46:43.508Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-campaign-leaf-depth-nov22`
+Generated: 2026-11-22T14:54:54.244Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/nov22-private-final-mobile-fix`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1389 | 1267 | 5286 | 647 | 29621 |
+| 1389 | 1267 | 5286 | 647 | 29654 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -388,7 +388,7 @@ Package: `rest-express`
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
 - `client/src/pages/agent-chat.tsx` (client-page; 29 symbols, 6 imports)
-- `client/src/pages/agents-office.tsx` (client-page; 98 symbols, 24 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 103 symbols, 24 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)
