@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-22T10:54:03.381Z
+Generated: 2026-11-22T11:09:27.131Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-cache-write-nov22`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1337 | 1218 | 5034 | 633 | 28901 |
+| 1337 | 1220 | 5041 | 633 | 28932 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -32,7 +32,7 @@ Package: `rest-express`
 | `server` | 299 | 292 | server:299 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 151 | 136 | script:151 |
-| `docs` | 88 | 83 | docs:88 |
+| `docs` | 84 | 81 | docs:84 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 48 | 44 | shared:48 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -40,8 +40,9 @@ Package: `rest-express`
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `script/office-api-budget-v6` | 10 | 8 | script:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
-| `tests/fixtures` | 8 | 6 | test:8 |
+| `tests/fixtures` | 9 | 7 | test:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
+| `script/office-api-budget-v7-integrity` | 3 | 3 | script:3 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
@@ -51,7 +52,6 @@ Package: `rest-express`
 | `tests/helpers` | 1 | 1 | test:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `.github` | 1 | 0 | other:1 |
-| `.github/workflows` | 12 | 0 | other:12 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agent-chat`, `/agents-office`, `/agents-office/panel`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`

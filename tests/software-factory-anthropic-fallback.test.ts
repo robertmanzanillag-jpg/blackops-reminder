@@ -56,12 +56,13 @@ function openAiRequest(mode: "complete" | "refusal" | "count-fails") {
       return Response.json({ object: "response.input_tokens", input_tokens: 10 });
     }
     const content = mode === "refusal" ? [{ type: "refusal", refusal: "no" }] : [{ type: "output_text", text: "{\"ok\":true}" }];
-    return Response.json({ object: "response", model: "gpt-6-astra", status: "completed", usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+    return Response.json({ object: "response", model: "gpt-6-astra", status: "completed", usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15, input_tokens_details:{cached_tokens:0,cache_write_tokens:0} },
       output: [{ type: "message", role: "assistant", status: "completed", content }] });
   };
   return { request, get calls() { return calls; } };
 }
-const openAiModel = (request: (url: string, init: RequestInit) => Promise<Response>) => ({ request, model: "gpt-6-astra", inputNanoUsdPerToken: 1000, outputNanoUsdPerToken: 8000, pricingValidUntil: "2027-01-01T00:00:00.000Z", now, maxInputTokens: 100000 });
+const openAiTestPrice={model:"gpt-6-astra",inputNanoUsdPerToken:1000,outputNanoUsdPerToken:8000,cachedInputNanoUsdPerToken:100,cacheWrite30mNanoUsdPerToken:1250,cacheWrite12hNanoUsdPerToken:2500,maxInputTokens:272000,validUntil:"2027-01-01T00:00:00.000Z",evidenceSha256:"a".repeat(64)};
+const openAiModel = (request: (url: string, init: RequestInit) => Promise<Response>) => ({ request, apiPrice:openAiTestPrice, model: "gpt-6-astra", inputNanoUsdPerToken: 1000, outputNanoUsdPerToken: 8000, pricingValidUntil: "2027-01-01T00:00:00.000Z", now, maxInputTokens: 100000 });
 const callOptions = (key = "factory:test-key") => ({ key, input: input(), unknownError: "FACTORY_MODEL_OUTCOME_UNKNOWN",
   requestSha256: (m: { model: string }) => "a".repeat(63) + (m.model.startsWith("claude") ? "c" : "0"), evidenceId: (sha: string) => `factory-model:${sha}` });
 

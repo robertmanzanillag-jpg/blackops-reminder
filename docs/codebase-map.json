@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-22T10:54:03.381Z",
+  "generatedAt": "2026-11-22T11:09:27.131Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/factory-cache-write-nov22",
   "packageName": "rest-express",
   "scripts": {
@@ -126,12 +126,26 @@
   },
   "totals": {
     "filesVisible": 1337,
-    "filesIndexed": 1218,
-    "imports": 5034,
+    "filesIndexed": 1220,
+    "imports": 5041,
     "routes": 633,
-    "symbols": 28901
+    "symbols": 28932
   },
   "directories": {
+    "script/office-api-budget-v7-integrity": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "script": 3
+      }
+    },
+    "tests/fixtures": {
+      "files": 9,
+      "indexed": 7,
+      "kinds": {
+        "test": 9
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -211,10 +225,10 @@
       }
     },
     "docs": {
-      "files": 88,
-      "indexed": 83,
+      "files": 84,
+      "indexed": 81,
       "kinds": {
-        "docs": 88
+        "docs": 84
       }
     },
     "examples/clippers-motivation": {
@@ -293,13 +307,6 @@
       "indexed": 352,
       "kinds": {
         "test": 357
-      }
-    },
-    "tests/fixtures": {
-      "files": 8,
-      "indexed": 6,
-      "kinds": {
-        "test": 8
       }
     },
     "tests/harness": {
@@ -6360,22 +6367,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -14611,6 +14602,58 @@
       "exports": [],
       "symbols": [
         "fixture"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v7-integrity/manifest.json",
+      "kind": "script",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v7-integrity/README.md",
+      "kind": "script",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v7-integrity/verify.mjs",
+      "kind": "script",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "HISTORICAL_FIXTURE_SHA256",
+        "REQUIRED_SOURCES",
+        "V6_MANIFEST_SHA256",
+        "V6_SOURCE_COMMIT",
+        "integritySha256",
+        "verifyActiveIntegrity"
+      ],
+      "symbols": [
+        "HISTORICAL_FIXTURE_SHA256",
+        "REQUIRED_SOURCES",
+        "V6_MANIFEST_SHA256",
+        "V6_SOURCE_COMMIT",
+        "file",
+        "filesUnder",
+        "found",
+        "historical",
+        "historicalBytes",
+        "hold",
+        "integritySha256",
+        "names",
+        "packageRoot",
+        "publicBytes",
+        "target",
+        "verifyActiveIntegrity"
       ],
       "routes": []
     },
@@ -45176,6 +45219,14 @@
       "routes": []
     },
     {
+      "path": "tests/fixtures/office-api-budget-v6-public/snapshot.json",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "tests/fixtures/whatsapp-backend-http.ts",
       "kind": "test",
       "imports": [
@@ -46692,14 +46743,32 @@
       "path": "tests/office-api-budget-v6-package.test.mjs",
       "kind": "test",
       "imports": [
+        "../script/office-api-budget-v7-integrity/verify.mjs",
         "node:assert/strict",
         "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
         "node:test",
         "node:url"
       ],
       "exports": [],
       "symbols": [
-        "run"
+        "bytes",
+        "canonical",
+        "historical",
+        "historicalBytes",
+        "manifest",
+        "operation",
+        "original",
+        "packageRoot",
+        "postimages",
+        "program",
+        "required",
+        "result",
+        "root",
+        "run",
+        "verifiedHistory"
       ],
       "routes": []
     },
@@ -49410,6 +49479,7 @@
         "openAiLedger",
         "openAiModel",
         "openAiRequest",
+        "openAiTestPrice",
         "out",
         "pacer",
         "refused",
