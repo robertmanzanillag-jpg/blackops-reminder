@@ -1,3 +1,4 @@
+import { fixtureGrants } from './helpers/clippers-source-authorization-fixture.mjs';
 // Facebook owner-action hold (Metricool "Confirm your identity" ERROR): hold Facebook, keep TikTok,
 // queue Facebook copies locally, resume on owner flag/endpoint or a later PUBLISHED Facebook post.
 // Fixtures only: no Metricool write API is ever called (the adapter under test only GETs).
@@ -10,9 +11,10 @@ import express from 'express';
 import { buildCreditCaption } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
 import { createPortfolioMetricool, facebookOwnerActionReason, providerHealthFromRows } from '../script/clippers-portfolio-metricool.mjs';
-import { runCloudPublisher, nextHold, HOLD_OWNER_NOTE } from '../script/clippers-streamer-cloud-worker.mjs';
+import { runCloudPublisher as runCloudPublisherImpl, nextHold, HOLD_OWNER_NOTE } from '../script/clippers-streamer-cloud-worker.mjs';
 import { applyStreamerOverlay, cloudPublishSummary, registerClippersStreamerRoutes, streamerSelfHealAudits } from '../server/clippers-streamers-status.ts';
 
+const runCloudPublisher = args => runCloudPublisherImpl({ ...args, clock: args.clock ?? (() => args.now ?? Date.now()) });
 const NOW = Date.parse('2026-11-20T14:00:00.000Z'); // 09:00 New York
 const FB = { brandId: 6591612, network: 'facebook', account: '1193011863901514' };
 const FB_KEY = '6591612:facebook:1193011863901514';
@@ -70,7 +72,7 @@ function candidate(id, ageMin = 120) {
     download: { mode: 'needs_local_download' }, approval: { status: 'approved', pendingActionId: `pa-${id}` },
     caption: buildCreditCaption({ handle: 'westcol', platform: 'twitch', sourceUrl, title: 'Locura' }) };
 }
-const baseState = (cands) => ({ version: 1, updatedAt: null, lastRun: null, takedowns: [], signals: [], candidates: cands,
+const baseState = (cands) => ({ version: 1, updatedAt: null, lastRun: null, takedowns: [], signals: [], candidates: cands, sourceAuthorizations: fixtureGrants(cands, NOW),
   creators: { 'twitch:100': { key: 'twitch:100', platform: 'twitch', handle: 'westcol', creatorGroupId: null, policy: { status: 'allowed_unless_prohibited', source: 'channel_description_checked' } } } });
 function memoryStore(state) {
   const data = new Map([[STREAMER_STATE_NAMESPACE('o'), JSON.stringify(state)]]);

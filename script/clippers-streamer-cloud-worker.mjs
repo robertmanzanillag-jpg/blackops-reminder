@@ -1,6 +1,7 @@
 // Cloud publisher for the streamer clip pages (GitHub Actions, $0 AI, no Mac).
 //
 // approved candidates (pending_actions approved/executed, written by clippers-streamer-discovery.mjs)
+//   -> positive owner-reviewed audio/video rights for the exact source, destination and publication window
 //   -> publish-time policy gate (no-clip prohibition, takedown, known list, credit, <= 60 s, live re-check
 //      of the creator's own description when the Twitch/YouTube keys are present)
 //   -> download only the needed section (yt-dlp, --impersonate chrome for YouTube)
@@ -22,6 +23,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createTwitchClient, createYoutubeClient, createPendingActionsQueue } from './clippers-streamer-discovery.mjs';
 import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption, clipLengthAllowed, detectClipProhibition, STREAMER_CLIP_MAX_SECONDS } from '../shared/clippers-streamer-policy.mjs';
+import { sourceRightsGate } from '../shared/clippers-source-authorization.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
@@ -174,28 +176,40 @@ function localDaysAround(now) { const today = localDay(new Date(now)); return [l
  * post either references a Metricool-hosted copy (confirmed media URL differs from the staging URL; the
  * adapter SHA-verifies static.metricool.com copies) or its slot is at least 2 h in the past.
  */
+function heldMediaBindingMatches(q, clip) {
+  return !!clip?.mediaAsset?.url && /^[a-f0-9]{64}$/.test(q.mediaSha256 ?? '') &&
+    typeof q.sourceUrl === 'string' && typeof q.creatorKey === 'string' && typeof q.caption === 'string' &&
+    ['title', 'teaser'].includes(q.hookVariant) && q.mediaSha256 === clip.renderSha256 &&
+    q.sourceUrl === clip.sourceUrl && q.creatorKey === clip.creatorKey &&
+    q.caption === clip.caption && q.hookVariant === clip.hookVariant;
+}
+
 export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
   const posts = ledger.posts.filter(p => p.candidateId === candidateId);
-  if ((ledger.heldQueue ?? []).some(q => q.candidateId === candidateId)) return false; // queued copy still needs the media
   if (posts.some(p => UNCERTAIN.has(p.status))) return false;
+  const queued = (ledger.heldQueue ?? []).filter(q => q.candidateId === candidateId);
+  if (queued.some(q => q.status !== 'held_rights')) return false; // permissioned queued copies still need media
+  // A rights hold stops pinning media, but known scheduled posts still require a verified copy or reconciliation.
   return posts.filter(p => p.status === 'scheduled').every(p =>
     (p.confirmedMediaUrl && p.confirmedMediaUrl !== assetUrl) || now >= Date.parse(p.scheduledAt) + 2 * HOUR);
 }
 
 /** Publish-time policy gate on the freshest state. Returns a reason code or null (allowed). */
-export function publishGate(state, candidate) {
+export function publishGate(state, candidate, options = {}) {
   if (!candidate) return 'candidate_missing';
-  const creator = state.creators?.[candidate.creatorKey];
-  if (candidate.clipPolicy?.status === 'prohibited') return 'clip_prohibited';
+  if (!candidate.sourceUrl) return 'rights_source_missing';
+  const creator = state?.creators?.[candidate.creatorKey];
+  const currentCandidate = state?.candidates?.find(c => c.id === candidate.id);
+  if (candidate.clipPolicy?.status === 'prohibited' || currentCandidate?.clipPolicy?.status === 'prohibited') return 'clip_prohibited';
   if (creator?.policy?.status === 'prohibited') return 'creator_prohibited';
   if (!creator?.policy || creator.policy.source === 'not_checked') return 'creator_policy_not_checked';
-  if (takedownBlocks(state.takedowns, { creatorKey: candidate.creatorKey, creatorGroupId: creator.creatorGroupId, candidateId: candidate.id })) return 'takedown';
-  const known = resolveClipPolicy({ creatorKey: candidate.creatorKey, creatorGroupId: creator.creatorGroupId ?? null, candidateId: candidate.id, takedowns: state.takedowns ?? [], knownProhibited: KNOWN_PROHIBITED_CREATORS });
+  if (takedownBlocks(state?.takedowns, { creatorKey: candidate.creatorKey, creatorGroupId: creator.creatorGroupId, candidateId: candidate.id })) return 'takedown';
+  const known = resolveClipPolicy({ creatorKey: candidate.creatorKey, creatorGroupId: creator.creatorGroupId ?? null, candidateId: candidate.id, takedowns: state?.takedowns ?? [], knownProhibited: KNOWN_PROHIBITED_CREATORS });
   if (known.status === 'prohibited') return 'known_prohibited';
   if (candidate.platform === 'twitch' && !clipLengthAllowed(candidate.durationSec)) return 'clip_too_long';
   if (candidate.kind === 'live') return 'live_stream_not_clipped';
   if (!captionHasCredit(candidate.caption, candidate.handle, candidate.sourceUrl)) return 'caption_missing_credit';
-  return null;
+  return sourceRightsGate(state, candidate, options);
 }
 
 /** Fresh read of the creator's own description (Twitch user / YouTube channel). */
@@ -510,8 +524,25 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const destination = findDestination(q.destination);
       if (!destination || isHeld(c0, destination) || !config.destinations.some(x => destinationKey(x) === destinationKey(destination))) continue;
       const fresh = cloudPublishOf(parseStreamerState(await store.read(ns)));
+      const otherDelivery = fresh.posts.some(p => p.candidateId === q.candidateId && canonicalDestinationKey(p.destinationKey) !== destinationKey(destination) && !['deferred', 'not_found', 'blocked'].includes(p.status));
+      if (otherDelivery) { report.heldReasons.push('held_release:other_destination_delivery_requires_reconciliation'); continue; }
+      if (fresh.clips[q.candidateId]?.status === 'held_media_review') { report.heldReasons.push('held_release_gate:rights_media_binding_unverified'); continue; }
       const mediaUrl = fresh.clips[q.candidateId]?.mediaAsset?.url;
+      if (mediaUrl && !heldMediaBindingMatches(q, fresh.clips[q.candidateId])) {
+        await update((s, c) => { const held = c.heldQueue.find(x => x.id === q.id); if (held) { held.status = 'held_rights'; held.rightsHoldReason = 'rights_media_binding_unverified'; }
+          if (c.clips[q.candidateId]) Object.assign(c.clips[q.candidateId], { status: 'held_media_review', reason: 'rights_media_binding_unverified' }); });
+        report.heldReasons.push('held_release_gate:rights_media_binding_unverified'); continue;
+      }
       const drop = () => update((s, c) => { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); });
+      if (!mediaUrl && q.status === 'held_rights') {
+        if (fresh.clips[q.candidateId]?.status === 'held_media_review') { report.heldReasons.push('held_release_gate:rights_media_binding_unverified'); continue; }
+        const sourceState = parseStreamerStateStrict(await store.read(ns));
+        const source = { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl };
+        const rights = sourceRightsGate(sourceState, source, { now: clock(), destinationKey: destinationKey(destination) });
+        if (!rights) { await drop(); report.heldReasons.push('held_release:authorized_rerender_required'); }
+        else report.heldReasons.push(`held_release_gate:${rights}`);
+        continue; // a fresh render is required; never send a removed public asset
+      }
       if (!mediaUrl || !await verifyPublicMedia(mediaUrl, fetchImpl)) { await drop(); report.heldReasons.push('held_release:media_unavailable'); continue; }
       // Lane copies keep the lane's per-account slots/cap; the 1k auto-publish gate is re-evaluated now.
       const plan = q.lane ? accountSchedule(fresh, destination, now) : null;
@@ -524,8 +555,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       if (!lane) item.draft = true; // queued without lane fields (lanes off): owner approves it as a draft, whatever the current lane mode
       const blocked = await update((s, c) => {
         const cand = s.candidates.find(x => x.id === q.candidateId);
-        const reason = cand ? publishGate(s, cand) : 'candidate_missing';
-        if (reason) { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return reason; }
+        const queuedSource = cand ? { ...cand, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl } : null;
+        const reason = cand ? publishGate(s, queuedSource, { now: clock(), destinationKey: destinationKey(destination), scheduledAt }) : 'candidate_missing';
+        if (reason) { if (!reason.startsWith('rights_')) c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return reason; }
         const prior = c.posts.find(x => x.id === item.id);
         if (prior && prior.status !== 'deferred') { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return 'already_attempted'; }
         if (lane) { // Same one-file-one-account check + claim as the main write path, inside this transaction.
@@ -551,7 +583,12 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         report.heldReasons.push(`held_release_deferred:${code(e)}`); break;
       }
       let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
-      try { const found = await metricool.schedule(destination, item); status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null; }
+      try {
+        const current = parseStreamerStateStrict(await store.read(ns));
+        const queuedCandidate = current?.candidates.find(x => x.id === q.candidateId);
+        const rights = publishGate(current, queuedCandidate ? { ...queuedCandidate, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl, caption: q.caption } : null, { now: clock(), destinationKey: destinationKey(destination), scheduledAt: item.scheduledAt });
+        if (rights) { await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); }); report.heldReasons.push(`held_release_gate:${rights}`); continue; }
+        const found = await metricool.schedule(destination, item); status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null; }
       catch (e) { reason = code(e); status = PRE_WRITE_ERRORS.has(reason) ? 'deferred' : 'verification_pending'; }
       await update((s, c) => {
         const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl });
@@ -565,6 +602,22 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   // 2) Remove staged media once no write for that clip is still uncertain; sweep leftovers after 48 h.
   if (stager && !config.dryRun) {
     try {
+      // Rights can expire while Facebook is still held. Recheck every queued source before deciding
+      // which temporary public assets to retain, even when the release loop skipped that destination.
+      await update((s, c) => {
+        for (const q of c.heldQueue) {
+          const reason = sourceRightsGate(s, { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl }, { now: clock(), destinationKey: canonicalDestinationKey(q.destinationKey) });
+          if (reason) {
+            q.status = 'held_rights'; q.rightsHoldReason = reason;
+            const activePost = c.posts.some(p => p.candidateId === q.candidateId && !['deferred', 'not_found', 'blocked'].includes(p.status));
+            const clip = c.clips[q.candidateId];
+            if (!activePost && clip && clip.status !== 'held_media_review') Object.assign(clip, { status: 'deferred', reason, attempts: clip.status === HOLD_OWNER_ACTION ? (clip.rightsRetryBudget ?? clip.attempts ?? 0) : (clip.attempts ?? 0) });
+          } else if (q.status === 'held_rights' && heldMediaBindingMatches(q, c.clips[q.candidateId])) {
+            q.status = HOLD_OWNER_ACTION; delete q.rightsHoldReason;
+            if (c.clips[q.candidateId]?.status !== 'held_media_review' && c.clips[q.candidateId]?.reason?.startsWith('rights_')) Object.assign(c.clips[q.candidateId], { status: HOLD_OWNER_ACTION, reason: null });
+          }
+        }
+      });
       const current = cloudPublishOf(parseStreamerState(await store.read(ns)));
       const keep = new Set();
       for (const [candidateId, clip] of Object.entries(current.clips)) {
@@ -627,8 +680,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       if (['rejected', 'failed'].includes(approval)) { await setClip({ status: 'blocked', reason: `approval_${approval}` }); report.counts.blocked++; }
       continue;
     }
-    const gate = publishGate(state, candidate);
-    if (gate) { await setClip({ status: 'blocked', reason: gate }); report.counts.blocked++; continue; }
+    const gate = publishGate(parseStreamerStateStrict(await store.read(ns)), candidate, { now: clock() });
+    if (gate) { const rightsHeld = gate.startsWith('rights_'); await setClip({ status: rightsHeld ? 'deferred' : 'blocked', reason: gate }); report.counts[rightsHeld ? 'deferred' : 'blocked']++; if (rightsHeld) report.heldReasons.push(gate); continue; }
     const fresh = await liveDescriptionCheck({ candidate, env, fetch: fetchImpl });
     if (fresh.checked && fresh.prohibited) { await setClip({ status: 'blocked', reason: 'live_description_prohibits_clipping', evidence: fresh.excerpt }); report.counts.blocked++; continue; }
     if (!fresh.checked && fresh.reason !== 'live_check_keys_missing') {
@@ -639,6 +692,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     // Destination slots from our own (fresh) ledger; Metricool preflight stays authoritative across lanes.
     const ledgerNow = cloudPublishOf(parseStreamerState(await store.read(ns)));
     const posts = ledgerNow.posts;
+    if (ledgerNow.clips[candidate.id]?.reason?.startsWith('rights_') && posts.some(p => p.candidateId === candidate.id && !['deferred', 'not_found', 'blocked'].includes(p.status))) {
+      report.heldReasons.push('rights_existing_delivery_requires_reconciliation'); report.counts.deferred++; continue;
+    }
     // Held destinations (owner action pending) are left out of the Metricool post; their copy is queued locally.
     // Never more than one account per clip: a copy is queued only when the single picked target is held.
     let heldTargets = [];
@@ -664,6 +720,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       let resolved = prior;
       if (whisperConfigured(env)) {
         try {
+          const languageDownloadRights = sourceRightsGate(parseStreamerStateStrict(await store.read(ns)), candidate, { now: clock() });
+          if (languageDownloadRights) { report.heldReasons.push(languageDownloadRights); report.counts.deferred++; await setClip({ status: 'deferred', reason: languageDownloadRights }); continue; }
           const dir = await makeDir();
           pre = { workDir: dir, source: null };
           pre.source = await download({ candidate, workDir: dir, targetSec: config.clipSeconds, env });
@@ -762,6 +820,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     let workDir = null, rendered = null, asset = null;
     try {
       workDir = pre?.workDir ?? await makeDir();
+      const beforeDownloadRights = sourceRightsGate(parseStreamerStateStrict(await store.read(ns)), candidate, { now: clock() });
+      if (beforeDownloadRights) { report.heldReasons.push(beforeDownloadRights); report.counts.deferred++; await setClip({ status: 'deferred', reason: beforeDownloadRights }); continue; }
       const source = pre?.source ?? await download({ candidate, workDir, targetSec: config.clipSeconds, env });
       pre = null; // owned by workDir now (removed in finally)
       if (clock() - runStartedAt > config.runDeadlineMs) { // Too late to render + publish safely in this run.
@@ -769,6 +829,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         await setClip({ status: 'deferred', reason: 'run_deadline_reached' });
         break;
       }
+      const beforeRenderState = parseStreamerStateStrict(await store.read(ns));
+      const beforeRenderRights = sourceRightsGate(beforeRenderState, candidate, { now: clock() });
+      if (beforeRenderRights) { report.heldReasons.push(beforeRenderRights); report.counts.deferred++; await setClip({ status: 'deferred', reason: beforeRenderRights }); continue; }
       rendered = await render({ sourceFile: source.file, workDir, duration: Math.min(source.cut.duration, config.clipSeconds, STREAMER_CLIP_MAX_SECONDS),
         hook: lanePick ? laneHook({ variant: hookVariant, title: candidate.title, name: creatorName, language: lanePick.language }) : hookText({ variant: hookVariant, title: candidate.title, handle: candidate.handle }),
         credit: creditText(candidate), peakFirst: !!lanePick, env, language: lanePick?.language ?? 'en' });
@@ -776,15 +839,22 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       report.captions = { ...(report.captions ?? {}), [rendered.captions ?? 'none']: ((report.captions ?? {})[rendered.captions ?? 'none'] ?? 0) + 1 };
       report.counts.rendered++;
       processed++;
-      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
+      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, rightsRetryBudget: priorAttempts, sourceUrl: candidate.sourceUrl, creatorKey: candidate.creatorKey, caption, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
         captions: rendered.captions ?? null, captionsError: rendered.captionsError ?? null, captionLanguage: rendered.captionLanguage ?? null, languageEvidence };
       if (config.dryRun) {
         if (outputDir) { await mkdir(outputDir, { recursive: true }); await copyFile(rendered.file, path.join(outputDir, `${candidate.id.replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`)); }
         await setClip({ ...base, status: 'dry_run_rendered' });
         continue;
       }
+      // Temporary release media is public too: it needs explicit staging rights and a permitted target.
+      const stageTarget = plan[0] ?? heldTargets[0];
+      const stageState = parseStreamerStateStrict(await store.read(ns));
+      const stageRights = sourceRightsGate(stageState, candidate, { now: clock(), destinationKey: destinationKey(stageTarget.destination), scheduledAt: stageTarget.scheduledAt ?? null });
+      if (stageRights) { report.heldReasons.push(stageRights); report.counts.deferred++; await setClip({ ...base, attempts: priorAttempts, status: 'deferred', reason: stageRights }); continue; }
       asset = await stager.upload(rendered.file, `stc-${rendered.sha256.slice(0, 24)}.mp4`);
       await setClip({ ...base, status: 'staged', mediaAsset: asset });
+      // A fresh render cannot revive an old queue binding on a different account or with another hash.
+      await update((s, c) => { c.heldQueue = c.heldQueue.filter(q => q.candidateId !== candidate.id || q.status !== 'held_rights'); });
       if (!await verifyPublicMedia(asset.url, fetchImpl)) throw new Error('PUBLIC_MEDIA_UNREACHABLE');
       let scheduled = 0, pending = 0, gateBlocked = null, dropReason = null;
       for (const p of plan) {
@@ -798,7 +868,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           if (!lanePick) item.draft = true; // lanes off: single account, owner approves every post
           // Fresh gate + durable "pending_write" BEFORE the write (a crash can never authorise a resend).
           const blocked = await update((s, c) => {
-            const reason = publishGate(s, s.candidates.find(x => x.id === candidate.id) ?? candidate);
+            const reason = publishGate(s, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt: at });
             if (reason) return reason;
             const prior = c.posts.find(x => x.id === item.id);
             if (prior && prior.status !== 'deferred') return 'already_attempted';
@@ -813,7 +883,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             c.posts.push({ ...item, attemptedAt: iso(clock()) });
             return null;
           });
-          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') report.counts.blocked++; gateBlocked = blocked; at = null; break; }
+          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') report.counts[blocked.startsWith('rights_') ? 'deferred' : 'blocked']++; gateBlocked = blocked; at = null; break; }
           let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
           try {
             await metricool.preflight(p.destination, item);
@@ -844,6 +914,13 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             report.counts.deferred++; dropReason = `destination_held:${p.destination.brandId}:${reason}`; report.heldReasons.push(dropReason); at = null; break;
           }
           try {
+            const current = parseStreamerStateStrict(await store.read(ns));
+            const rights = publishGate(current, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt: item.scheduledAt });
+            if (rights) {
+              await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
+              report.heldReasons.push(rights); report.counts[rights.startsWith('rights_') ? 'deferred' : 'blocked']++;
+              if (rights.startsWith('rights_')) dropReason = rights; else gateBlocked = rights; at = null; break;
+            }
             const found = await metricool.schedule(p.destination, item);
             status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null;
           } catch (e) {
@@ -862,10 +939,12 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           for (const h of heldTargets) {
             const key = destinationKey(h.destination);
             const id = `held-${sha(`${candidate.id}|${key}`).slice(0, 24)}`;
-            if (c.heldQueue.some(q => q.id === id) || c.posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === key && x.status !== 'deferred')) continue;
+            const priorHeld = c.heldQueue.find(q => q.id === id || (q.candidateId === candidate.id && canonicalDestinationKey(q.destinationKey) === key));
+            if ((priorHeld && priorHeld.status !== 'held_rights') || c.posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === key && x.status !== 'deferred')) continue;
+            c.heldQueue = c.heldQueue.filter(q => q.id !== id && q.id !== priorHeld?.id);
             const lane = h.lane ? { lane: h.lane.lane, language: h.lane.language, streamKey: h.lane.streamKey,
               segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }), dailyLimit: h.lane.dailyLimit, draft: h.lane.draft, countDrafts: true, allowDuetStitch: true } : null;
-            c.heldQueue.push({ id, candidateId: candidate.id, creatorKey: candidate.creatorKey, destination: { ...h.destination }, destinationKey: key, index: h.index,
+            c.heldQueue.push({ id, candidateId: candidate.id, creatorKey: candidate.creatorKey, sourceUrl: candidate.sourceUrl, destination: { ...h.destination }, destinationKey: key, index: h.index,
               caption, mediaSha256: rendered.sha256, hookVariant, queuedAt: iso(clock()), status: HOLD_OWNER_ACTION, lane, draft: lane ? lane.draft : true });
             report.counts.heldQueued++;
           }
@@ -883,7 +962,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         dropReason = plan.length ? 'rendered_not_scheduled:no_write_attempt' : 'rendered_not_scheduled:no_target';
         report.heldReasons.push(dropReason); report.counts.deferred++;
       }
-      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked ?? dropReason, mediaAsset });
+      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? (gateBlocked.startsWith('rights_') ? 'deferred' : 'blocked') : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked ?? dropReason, mediaAsset, ...(queuedOnly || (gateBlocked ?? dropReason)?.startsWith('rights_') ? { attempts: priorAttempts } : {}) });
       if (scheduled && candidate.approval?.pendingActionId && approvals?.markExecuted) {
         const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts.filter(x => x.candidateId === candidate.id).map(x => ({ destination: x.destinationKey, scheduledAt: x.scheduledAt, status: x.status, metricoolId: x.metricoolId }));
         await approvals.markExecuted(owner, candidate.approval.pendingActionId, { handoff: 'clippers_streamer_cloud', posts, externalCalls: posts.length }).catch(e => report.errors.push(`approval_update:${code(e)}`));
