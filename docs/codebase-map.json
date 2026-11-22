@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-22T15:32:18.402Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-legacy-uncertain-retention-nov22",
+  "generatedAt": "2026-11-22T20:24:00.454Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-runtime-install-nov22",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -127,9 +127,9 @@
   "totals": {
     "filesVisible": 1391,
     "filesIndexed": 1269,
-    "imports": 5300,
+    "imports": 5303,
     "routes": 647,
-    "symbols": 29704
+    "symbols": 29711
   },
   "directories": {
     ".": {
@@ -45043,17 +45043,27 @@
         "../script/clippers-reviewed-hour-window-cloud.mjs",
         "../script/clippers-streamer-discovery.mjs",
         "node:assert/strict",
+        "node:child_process",
         "node:fs/promises",
+        "node:os",
+        "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "args",
         "backend",
+        "command",
+        "config",
+        "directory",
         "due",
         "env",
         "hour",
         "negative",
+        "oldFlags",
         "options",
+        "pkg",
+        "production",
         "result",
         "state",
         "store",

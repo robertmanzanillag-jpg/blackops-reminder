@@ -83,7 +83,8 @@ jobs:
       - name: Install deterministic runtime dependencies
         env:
           ONNXRUNTIME_NODE_INSTALL_CUDA: skip
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        # The production runner imports TypeScript via tsx (a locked devDependency).
+        run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
       - name: Read-only approved-hour due check
         id: due
         run: |
