@@ -66,7 +66,7 @@ for (const { retired, equal, delayed } of [{ retired: false, equal: false, delay
     const diff = "+const safe = true;";
     const execution = createOfficeExecution(make(), { OFFICE_REVIEW_PROVIDER: "openai", OFFICE_OPENAI_MODEL: "test-model", OPENAI_API_KEY: "test-only", OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT: "100000" }, () => clock, {
       loadPr: async prUrl => ({ prUrl, diff, headSha: "a".repeat(40), diffSha256: createHash("sha256").update(diff).digest("hex") }),
-      fetch: (async () => new Response(JSON.stringify({ id: "resp_actual_pr", model: "test-model", status: "completed", usage: { input_tokens_details:{cached_tokens:0}, input_tokens: 20, output_tokens: 10, total_tokens: 30 }, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: '{"verdict":"pass","summary":"Reviewed","findings":[]}' }] }] }))) as typeof fetch,
+      fetch: (async () => new Response(JSON.stringify({ id: "resp_actual_pr", model: "test-model", status: "completed", usage: { input_tokens_details:{cached_tokens:0,cache_write_tokens:0}, input_tokens: 20, output_tokens: 10, total_tokens: 30 }, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: '{"verdict":"pass","summary":"Reviewed","findings":[]}' }] }] }))) as typeof fetch,
     });
     const task = { id: randomUUID(), key: randomUUID(), kind: "claude_review" as const, status: "running" as const, prUrl: "https://github.com/a/b/pull/1", createdAt: new Date(clock).toISOString(), fence: randomUUID(), leaseExpiresAt: new Date(clock + 180000).toISOString() };
     assert.equal(await execution.admission.begin(task), true);

@@ -1,3 +1,4 @@
+import type {FactoryApiPrice} from './factory-api-invocation';
 import {ROLE_WORK_DEADLINE_ID} from "./software-factory-role-deadline";
 import { assertFactoryCreditReady } from "./software-factory-diagnostics";
 import { createHash } from "node:crypto";
@@ -131,6 +132,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     readOrders: (owner: string) => Promise<CompanyOrder[]>;
     githubRequest: (url: string, init: RequestInit) => Promise<Response>;
     modelRequest: (url: string, init: RequestInit) => Promise<Response>;
+    apiPrice?: FactoryApiPrice;
     download: typeof fetch;
     readUi: OperatorUiReader;
     recoveryPrevious?: import('./software-factory-pipeline').FactoryPipelineDependencies['recoveryPrevious'];
@@ -249,7 +251,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         }
     };
     const readAcceptance = createRoleAcceptanceArtifactReader({ apiRequest: deps.githubRequest, download: deps.download, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, now: () => now().getTime() });
-    const model = { request: deps.modelRequest, model: credits.pricing.model, inputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: credits.pricing.outputNanoUsdPerToken, pricingValidUntil: credits.pricing.validUntil, maxInputTokens: config.maxInputTokens, now };
+    const model = { request: deps.modelRequest, apiPrice: deps.apiPrice, model: credits.pricing.model, inputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: credits.pricing.outputNanoUsdPerToken, pricingValidUntil: credits.pricing.validUntil, maxInputTokens: config.maxInputTokens, now };
     const buildModel = model.model === "gpt-6-astra" ? { ...model, reasoningEffort: "low" as const } : model;
     // Provider routes: OpenAI first, then Claude; or Claude alone when the
     // OpenAI shared credit could not be admitted at startup. Undefined keeps
@@ -334,29 +336,29 @@ const errorCode = (error: unknown) => { try { const m = error instanceof Error ?
 export async function resolveFactoryModelCredits(input: { env: NodeJS.ProcessEnv; now: () => Date; requiredMicroUsd: number;
     /** createRequest is separate so a missing OpenAI key still leaves the
      * loaded OpenAI ledger available as admission history. */
-    loadOpenAi: () => Promise<{ credits: Credits; createRequest: () => (url: string, init: RequestInit) => Promise<Response> }>;
+    loadOpenAi: () => Promise<{ credits: Credits; apiPrice?: FactoryApiPrice; createRequest: () => (url: string, init: RequestInit) => Promise<Response> }>;
     loadAnthropic: () => Promise<{ credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> }>;
     log?: (message: string) => void; }) {
     const { factoryAnthropicFallbackEnabled } = await import("./software-factory-anthropic-ledger");
     const enabled = factoryAnthropicFallbackEnabled(input.env);
-    let openAi: { credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> } | undefined, openAiLedger: Credits["ledger"] | undefined, openAiError: unknown;
+    let openAi: { credits: Credits; apiPrice?: FactoryApiPrice; modelRequest: (url: string, init: RequestInit) => Promise<Response> } | undefined, openAiLedger: Credits["ledger"] | undefined, openAiError: unknown;
     try {
         const loaded = await input.loadOpenAi();
         openAiLedger = loaded.credits.ledger;
         assertFactoryCreditReady(await loaded.credits.ledger.status(), input.requiredMicroUsd, loaded.credits.pricing.validUntil, input.now().getTime());
-        openAi = { credits: loaded.credits, modelRequest: loaded.createRequest() };
+        openAi = { credits: loaded.credits, modelRequest: loaded.createRequest(), ...(loaded.apiPrice?{apiPrice:loaded.apiPrice}:{}) };
     } catch (error) {
         if (!enabled || !OPENAI_STARTUP_FALLBACK_CODES.has(errorCode(error) ?? "")) throw error;
         openAiError = error;
     }
-    if (!enabled) return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest };
+    if (!enabled) return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, ...(openAi!.apiPrice?{apiPrice:openAi!.apiPrice}:{}) };
     if (openAiError === undefined) {
         // OpenAI admitted: Claude is the per-call fallback. A Claude setup
         // failure never blocks the OpenAI path.
         try {
             const claude = await input.loadAnthropic();
-            return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, fallback: { ledger: claude.credits.ledger, pricing: claude.credits.pricing, request: claude.modelRequest }, priorLedgers: [claude.credits.ledger] };
-        } catch (error) { input.log?.(`Factory Claude fallback unavailable (${errorCode(error) ?? "FACTORY_ANTHROPIC_FALLBACK_UNAVAILABLE"}); continuing with OpenAI only.`); return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest }; }
+            return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, ...(openAi!.apiPrice?{apiPrice:openAi!.apiPrice}:{}), fallback: { ledger: claude.credits.ledger, pricing: claude.credits.pricing, request: claude.modelRequest }, priorLedgers: [claude.credits.ledger] };
+        } catch (error) { input.log?.(`Factory Claude fallback unavailable (${errorCode(error) ?? "FACTORY_ANTHROPIC_FALLBACK_UNAVAILABLE"}); continuing with OpenAI only.`); return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, ...(openAi!.apiPrice?{apiPrice:openAi!.apiPrice}:{}) }; }
     }
     // Surface the real code-owned cause (never exception text or data).
     const claude = await input.loadAnthropic().catch(error => { const code = errorCode(error); throw Error(code && /^(?:FACTORY_ANTHROPIC_|CREDIT_)/.test(code) ? (code.startsWith("CREDIT_") ? `FACTORY_ANTHROPIC_${code}` : code) : "FACTORY_ANTHROPIC_FALLBACK_UNAVAILABLE"); });
@@ -393,7 +395,7 @@ async function installed(store: Store) {
             const base = { ...credits.pricing, cachedInputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken };
             const price = env.FACTORY_API_PRICING_CONFIG ? configuredFactoryApiPrice("openai", credits.pricing.model, env.FACTORY_API_PRICING_CONFIG) : { ...base, evidenceSha256: apiEvidenceHash(base) };
             const { createFactoryOpenAiCountTransport, routeFactoryOpenAiRequests } = await import("./software-factory-openai-count");
-            return { credits, createRequest: () => routeFactoryOpenAiRequests(createFactoryOpenAiTransport(env.OPENAI_API_KEY || "", fetch, { price }), createFactoryOpenAiCountTransport(env.OPENAI_API_KEY || "")) };
+            return { credits, apiPrice:price, createRequest: () => routeFactoryOpenAiRequests(createFactoryOpenAiTransport(env.OPENAI_API_KEY || "", fetch, { price }), createFactoryOpenAiCountTransport(env.OPENAI_API_KEY || "")) };
         },
         loadAnthropic: async () => {
             const [{ loadAnthropicFactoryRuntime }, { createFactoryAnthropicTransport }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./software-factory-anthropic")]);
@@ -446,6 +448,7 @@ async function installed(store: Store) {
         } });
     }
     return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, provider: selected.provider,
+        ...("apiPrice" in selected && selected.apiPrice ? {apiPrice:selected.apiPrice}:{}),
         ...("fallback" in selected && selected.fallback ? { fallback: selected.fallback } : {}), ...("priorLedgers" in selected ? { priorLedgers: selected.priorLedgers } : {}),
         // Claude admission rows (any month) count as history even when the
         // fallback is off or failed to load; read-only, never creates the row.

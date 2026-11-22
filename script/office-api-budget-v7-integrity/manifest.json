@@ -1,0 +1,165 @@
+{
+  "version": 7,
+  "kind": "canonical_api_budget_source_integrity_only",
+  "installable": false,
+  "predecessor": {
+    "manifestSha256": "786da807c7bf5d480292d941b017aee0450077b531f2264c5afb85b5baad0a1e",
+    "sourceCommit": "96aae6c6718b437321031c4d3a418c94236020d5",
+    "historicalFixtureSha256": "2e66f0abc9aff73ddca5884a1e777ac3253262cd2e1539beec913804c5139bf3",
+    "frozenPackageFiles": {
+      "README.md": "830699eb0db05b34905af83f533bef7b9cdc1ce78b94e15b01ed1d7077c10df9",
+      "files/server/factory-api-context.ts": "2124700171cbd12576f6094f6c95cef634db7fd3ecc60a3c34f657cfab6958d0",
+      "files/server/factory-api-invocation.ts": "5c0a0252be88c763ec941b5e45646b3cbd7eae1aafbc04a6fe92150db7c430a2",
+      "files/server/factory-api-sdk.ts": "905408f4d6f5ad2ebc5c54bd9c433a4e4c0992a46284844f52e700b5b352a29a",
+      "files/server/software-factory-api-budget.ts": "b4f2c3610dee1b7104fdf37d380fc626a62584b3428a157d9900a052aa135e77",
+      "manifest.json": "786da807c7bf5d480292d941b017aee0450077b531f2264c5afb85b5baad0a1e",
+      "provision-table.mjs": "2f43b8c06f069628b752f4ea0c6ee2c489f066e865ce18b35cf42c2c9a1d734e",
+      "stage.py": "27b073bbbdfccfd9ac5247bd235dc529c422042cd2cfba4c4ddbf570798e1f37",
+      "test_provision.mjs": "5bfb788390d3d8f4c86ed43197b8f78da76844880ccf0cd0b0691ed56cb809c5",
+      "test_stage.py": "10a5b582ae566661c937cacbea6759f6e2fd8f17f6e49fde4ff8ad3a6e6bd3c7"
+    }
+  },
+  "scope": "Explicit monetary boundary, shared ledgers, guarded callers and cache dependencies; not the complete application or a Replit deployment package.",
+  "sources": [
+    {
+      "path": "script/software-factory-pilot-exports.ts",
+      "sha256": "91a1b9360774dc3790341df5aed5f5291d42376efa9a2ee23c6038930d14842f"
+    },
+    {
+      "path": "server/ai-model-router.ts",
+      "sha256": "62af9799a81e7fb3655134da428977391e44d5ca330cc7edcbb6801ec5b010c0"
+    },
+    {
+      "path": "server/clippers-local-news-translation.ts",
+      "sha256": "56e86cad0c8b03672a2df9f1cbbc623c3531d25aa8fe48255705c67716cda03c"
+    },
+    {
+      "path": "server/factory-api-cache-usage.ts",
+      "sha256": "8cabb328311f60588b0942b556cebda4dfecdc7f40ef359a9d4f4edb406ae562"
+    },
+    {
+      "path": "server/factory-api-context.ts",
+      "sha256": "2124700171cbd12576f6094f6c95cef634db7fd3ecc60a3c34f657cfab6958d0"
+    },
+    {
+      "path": "server/factory-api-invocation.ts",
+      "sha256": "c09c3af8c252138d10120353d36783bd6889ef4f3ef38316a0b2826a4925eba4"
+    },
+    {
+      "path": "server/factory-api-sdk.ts",
+      "sha256": "d6f511bf99f26f03d9a90f5688bfb4e7b7d69b91a4f8eb0767ea8cf44a0716c1"
+    },
+    {
+      "path": "server/factory-api-token-cost.ts",
+      "sha256": "dbd1fbb9afd4f1e0bda4224c9ae16cd4d2203a97cc68d443a71f9c571e0f8771"
+    },
+    {
+      "path": "server/gemini-client.ts",
+      "sha256": "c1cf4c0a763d99813a68e588dfad22e5c7a3c75e8df431f4bb0683abaf59dbf8"
+    },
+    {
+      "path": "server/office-execution.ts",
+      "sha256": "9d5590522a50b148c42ca69ac717726b78ec69acb8a3151d942e31228a3161da"
+    },
+    {
+      "path": "server/office-openai.ts",
+      "sha256": "70ca61119221eb1a7e68de9c96b9bc6340972155dca52c44fd6e651b43f596ca"
+    },
+    {
+      "path": "server/office-protocol.ts",
+      "sha256": "55c41802c03356e36ff96861e0ee8c7c34aa34edbe0e529ee1019ff6e1706cd1"
+    },
+    {
+      "path": "server/office-shared-credits.ts",
+      "sha256": "63c8906c4e48fffd60a8d6987fb2c2e82da683997371387e6b0b00cd93a4887f"
+    },
+    {
+      "path": "server/office-token-budget.ts",
+      "sha256": "38284d938102822e2567f429524c4e70b4649e3d00d71f0b2b3a6ec1d3aa229b"
+    },
+    {
+      "path": "server/openai-client.ts",
+      "sha256": "505a302f55d752a4f9bf06e30aa1170a417c326f645b7e6c06a594fe3e5c24c8"
+    },
+    {
+      "path": "server/shared-openai-credit-ledger.ts",
+      "sha256": "7358a04214feb25b01b6fe8753864493b9fd0e95004d62e23b6d8e0094196f43"
+    },
+    {
+      "path": "server/shared-openai-credit-runtime.ts",
+      "sha256": "a41c76d9fd7751500a5bde35aac9bdc8d79908d431cc037ded34feb7932a64ca"
+    },
+    {
+      "path": "server/software-factory-anthropic.ts",
+      "sha256": "3b3940f65d8c38ab16f0cbdc87b1fd97acfa414ee377813c65aba49234fbbdc2"
+    },
+    {
+      "path": "server/software-factory-api-budget.ts",
+      "sha256": "b4f2c3610dee1b7104fdf37d380fc626a62584b3428a157d9900a052aa135e77"
+    },
+    {
+      "path": "server/software-factory-asistente-build.ts",
+      "sha256": "4651cad7a3e81abe7d038d7782195f4deb9c2254e1e5a0d92e4db4a9ab660839"
+    },
+    {
+      "path": "server/software-factory-asistente-operator.ts",
+      "sha256": "08180581914442614a3e34cc6127d7e2d29a3b825f60343ad1af019513005a3a"
+    },
+    {
+      "path": "server/software-factory-asistente-review.ts",
+      "sha256": "e23ed0c98a665d8b728c12613a75a6e0fba8381d7da7886a550b734981d40db1"
+    },
+    {
+      "path": "server/software-factory-company-auto.ts",
+      "sha256": "627f86f2c6649ab539acf0c7a8b2edd59d1203dd094de6d8c99e7ccadc36bcaa"
+    },
+    {
+      "path": "server/software-factory-model-routes.ts",
+      "sha256": "a3bac866195f6772dac36a1148727cd848b8d27c7fa6639de1403443a31b21f3"
+    },
+    {
+      "path": "server/software-factory-object-store.ts",
+      "sha256": "71c1575a6751097299ed79b992227837c7a121ff5d255a505df6c2a2f2a29b8c"
+    },
+    {
+      "path": "server/software-factory-openai-builder.ts",
+      "sha256": "15ac14bf06f279b3cbcd4b89bb97b00a7a8ef90536ddb042de25c14d6088bfad"
+    },
+    {
+      "path": "server/software-factory-openai-count.ts",
+      "sha256": "9f126d826b9837b42ea9abab258a1641c664575f49236a3ba1f653327e9c4abc"
+    },
+    {
+      "path": "server/software-factory-openai-transport.ts",
+      "sha256": "5ef03863b035961e007931bdef68bf4e03d2b8e4f388caf72ffa8ec559616abb"
+    },
+    {
+      "path": "server/software-factory-openai.ts",
+      "sha256": "dd91bf77ae213bc91949e3c6c37841f9152a4081396ef4c8c306cb2f21d88bb4"
+    },
+    {
+      "path": "server/software-factory-pilot-review.ts",
+      "sha256": "cc05400534d9ed7e7131f196fe2230ba8962ee7452a0c73db8e470c5624ed88b"
+    },
+    {
+      "path": "server/software-factory-responses-runtime.ts",
+      "sha256": "03f333e9c7fd9169f446e5aa81090e6c7f6c7ce3c5d9993517e106ac5ad62b6c"
+    },
+    {
+      "path": "server/software-factory-routes.ts",
+      "sha256": "42dd97c70a55f9a54fb57363246d6aa7ce4d968e6f1bbf95283e59b4efa42b19"
+    },
+    {
+      "path": "server/software-factory-store-provider.ts",
+      "sha256": "c8ca24898c566250225e88cb5540b15a41b86dbf43912b8ae292127c36083719"
+    },
+    {
+      "path": "server/software-factory-store.ts",
+      "sha256": "924932caafce23044225691d16c0021aae248b7ed3dce955be61cadba3335546"
+    },
+    {
+      "path": "server/software-factory-worker.ts",
+      "sha256": "4f09b1fe1c155f60c4201754dbecd3570b7c17146c369a1937ae22fb828c7d27"
+    }
+  ]
+}

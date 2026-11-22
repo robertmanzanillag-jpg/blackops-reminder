@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createOpenAiFactoryTextProvider} from "../server/software-factory-openai";
 const model="fixture-model-2026-11-01";
-const config={model,inputNanoUsdPerToken:1000,outputNanoUsdPerToken:4000,pricingValidUntil:"2026-12-01T00:00:00Z",now:()=>new Date("2026-11-06T00:00:00Z"),maxInputTokens:10000};
+const apiPrice={model,inputNanoUsdPerToken:1000,outputNanoUsdPerToken:4000,cachedInputNanoUsdPerToken:100,cacheWrite30mNanoUsdPerToken:1250,cacheWrite12hNanoUsdPerToken:2000, maxInputTokens:1_049_600,validUntil:"2026-12-01T00:00:00Z",evidenceSha256:"a".repeat(64)};
+const config={model,apiPrice,inputNanoUsdPerToken:1000,outputNanoUsdPerToken:4000,pricingValidUntil:"2026-12-01T00:00:00Z",now:()=>new Date("2026-11-06T00:00:00Z"),maxInputTokens:10000};
 const input=()=>({instructions:"Review synthetic code",text:"fixture",maxOutputTokens:100,maxCostCents:1,signal:new AbortController().signal});
 const json=(value:unknown)=>new Response(JSON.stringify(value));
 const count=()=>json({object:"response.input_tokens",input_tokens:100});
-const result=()=>({object:"response",model,status:"completed",error:null,incomplete_details:null,usage:{input_tokens:100,output_tokens:20,total_tokens:120},output:[{type:"message",role:"assistant",status:"completed",content:[{type:"output_text",text:"verified text"}]}]});
+const result=()=>({object:"response",model,status:"completed",error:null,incomplete_details:null,usage:{input_tokens:100,output_tokens:20,total_tokens:120,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}},output:[{type:"message",role:"assistant",status:"completed",content:[{type:"output_text",text:"verified text"}]}]});
 test("counts identical prompt before bounded stateless generation and rounds cost upward",async()=>{
  const calls:{url:string;body:any}[]=[];
  const generate=createOpenAiFactoryTextProvider({...config,request:async(url,init)=>{assert.equal(init.redirect,"error");calls.push({url,body:JSON.parse(String(init.body))});return calls.length===1?count():json(result());}});
@@ -16,36 +17,36 @@ test("counts identical prompt before bounded stateless generation and rounds cos
  assert.deepEqual(calls[1].body,{...calls[0].body,max_output_tokens:100,store:false,tools:[],stream:false,service_tier:"default"});
 });
 test("worst-case output reservation blocks generation even when likely output is cheap",async()=>{
- let calls=0;const generate=createOpenAiFactoryTextProvider({...config,outputNanoUsdPerToken:1000000,request:async()=>{calls++;return count();}});
+ let calls=0;const generate=createOpenAiFactoryTextProvider({...config,outputNanoUsdPerToken:1000000,apiPrice:{...apiPrice,outputNanoUsdPerToken:1000000},request:async()=>{calls++;return count();}});
  assert.equal((await generate(input())).status,"blocked");assert.equal(calls,1);
 });
 test("expired pricing, aliases and cancelled work cannot generate",async()=>{
  let calls=0;const request=async()=>{calls++;return count();};
- assert.throws(()=>createOpenAiFactoryTextProvider({...config,request,model:"rolling-alias"}),/CONFIGURATION/);
- assert.throws(()=>createOpenAiFactoryTextProvider({...config,request,inputNanoUsdPerToken:0}),/CONFIGURATION/);
- assert.equal((await createOpenAiFactoryTextProvider({...config,request,pricingValidUntil:"2020-01-01"})(input())).status,"blocked");
+ assert.throws(()=>createOpenAiFactoryTextProvider({...config,request,model:"rolling-alias",apiPrice:{...apiPrice,model:"rolling-alias"}}),/CONFIGURATION/);
+ assert.throws(()=>createOpenAiFactoryTextProvider({...config,request,inputNanoUsdPerToken:0,apiPrice:{...apiPrice,inputNanoUsdPerToken:0}}),/CONFIGURATION/);
+ assert.equal((await createOpenAiFactoryTextProvider({...config,request,pricingValidUntil:"2020-01-01T00:00:00Z",apiPrice:{...apiPrice,validUntil:"2020-01-01T00:00:00Z"}})(input())).status,"blocked");
  const c=new AbortController();c.abort();assert.equal((await createOpenAiFactoryTextProvider({...config,request})({...input(),signal:c.signal})).status,"blocked");assert.equal(calls,0);
 });
 
 test("documented undated snapshots retain exact identity and all budget gates",async()=>{
  for(const snapshot of ["gpt-6-astra","gpt-6.1-sol"]) {
  for(const responseModel of [snapshot,snapshot+"-latest"]){
-  let calls=0;const generate=createOpenAiFactoryTextProvider({...config,model:snapshot,request:async(_url,init)=>{
+  let calls=0;const generate=createOpenAiFactoryTextProvider({...config,model:snapshot,apiPrice:{...apiPrice,model:snapshot},request:async(_url,init)=>{
    assert.equal(JSON.parse(String(init.body)).model,snapshot);return ++calls===1?count():json({...result(),model:responseModel});
   }});
   assert.equal((await generate(input())).status,responseModel===snapshot?"completed":"unknown");assert.equal(calls,2);
  }
  }
  for(const alias of ["gpt-6-astra-latest","gpt-6.1-sol-latest","gpt-6-sol","gpt-4.1"]){
-  assert.throws(()=>createOpenAiFactoryTextProvider({...config,model:alias,request:async()=>count()}),/CONFIGURATION/);
+  assert.throws(()=>createOpenAiFactoryTextProvider({...config,model:alias,apiPrice:{...apiPrice,model:alias},request:async()=>count()}),/CONFIGURATION/);
  }
  for(const snapshot of ["gpt-6-astra","gpt-6.1-sol"]) {
-  let calls=0;const capped=createOpenAiFactoryTextProvider({...config,model:snapshot,outputNanoUsdPerToken:1000000,request:async()=>{calls++;return count();}});
+  let calls=0;const capped=createOpenAiFactoryTextProvider({...config,model:snapshot,outputNanoUsdPerToken:1000000,apiPrice:{...apiPrice,model:snapshot,outputNanoUsdPerToken:1000000},request:async()=>{calls++;return count();}});
   assert.equal((await capped(input())).status,"blocked");assert.equal(calls,1);
  }
 });
 test("missing usage, changed model, exceeded cap and ambiguous HTTP never become success or retry",async()=>{
- for(const response of [()=>json({...result(),status:"in_progress"}),()=>json({...result(),usage:null}),()=>json({...result(),model:"other"}),()=>json({...result(),usage:{input_tokens:101,output_tokens:20,total_tokens:121}}),()=>json({...result(),usage:{input_tokens:100,output_tokens:101,total_tokens:201}}),()=>new Response("private provider error",{status:503}),()=>{throw Error("lost acknowledgment");}]){
+ for(const response of [()=>json({...result(),status:"in_progress"}),()=>json({...result(),usage:null}),()=>json({...result(),model:"other"}),()=>json({...result(),usage:{input_tokens:101,output_tokens:20,total_tokens:121,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}}),()=>json({...result(),usage:{input_tokens:100,output_tokens:101,total_tokens:201,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}}),()=>new Response("private provider error",{status:503}),()=>{throw Error("lost acknowledgment");}]){
   let calls=0;const generate=createOpenAiFactoryTextProvider({...config,request:async()=>++calls===1?count():response()});
   const outcome=await generate(input());assert.deepEqual(outcome,{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0});assert.equal(calls,2);
  }
@@ -85,13 +86,13 @@ test("terminal diagnostics are static and never include provider error details",
 });
 
 
-test("explicit Astra low reasoning preserves exact count and the 81-cent maximum output admission",async()=>{
+test("explicit Astra low reasoning preserves exact count and 121-cent worst-cache input admission with 81-cent uncached actual usage",async()=>{
  const calls:any[]=[];
- const settings={...config,model:"gpt-6-astra",reasoningEffort:"low" as const,maxInputTokens:32000,inputNanoUsdPerToken:12500,outputNanoUsdPerToken:50000};
- const generate=createOpenAiFactoryTextProvider({...settings,request:async(url,init)=>{const body=JSON.parse(String(init.body));calls.push(body);if(url.endsWith("/input_tokens")){assert.deepEqual(body.reasoning,{effort:"low"});return json({object:"response.input_tokens",input_tokens:32000});}assert.deepEqual(body.reasoning,{effort:"low"});assert.equal(body.max_output_tokens,8192);return json({...result(),model:settings.model,usage:{input_tokens:32000,output_tokens:8192,total_tokens:40192}});}});
- const bounded={...input(),maxOutputTokens:8192,maxCostCents:81};
+ const settings={...config,model:"gpt-6-astra",reasoningEffort:"low" as const,maxInputTokens:32000,inputNanoUsdPerToken:12500,outputNanoUsdPerToken:50000,apiPrice:{...apiPrice,model:"gpt-6-astra",inputNanoUsdPerToken:12500,outputNanoUsdPerToken:50000,cacheWrite30mNanoUsdPerToken:15625,cacheWrite12hNanoUsdPerToken:25000, maxInputTokens:1_049_600}};
+ const generate=createOpenAiFactoryTextProvider({...settings,request:async(url,init)=>{const body=JSON.parse(String(init.body));calls.push(body);if(url.endsWith("/input_tokens")){assert.deepEqual(body.reasoning,{effort:"low"});return json({object:"response.input_tokens",input_tokens:32000});}assert.deepEqual(body.reasoning,{effort:"low"});assert.equal(body.max_output_tokens,8192);return json({...result(),model:settings.model,usage:{input_tokens:32000,output_tokens:8192,total_tokens:40192,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}});}});
+ const bounded={...input(),maxOutputTokens:8192,maxCostCents:121};
  const completed=await generate(bounded);assert.equal(completed.status,"completed");assert.equal(completed.costCents,81);assert.equal(calls.length,2);
- calls.length=0;assert.equal((await generate({...bounded,maxCostCents:80})).status,"blocked");assert.equal(calls.length,1);
- assert.throws(()=>createOpenAiFactoryTextProvider({...settings,model,request:async()=>count()}),/CONFIGURATION/);
+ calls.length=0;assert.equal((await generate({...bounded,maxCostCents:120})).status,"blocked");assert.equal(calls.length,1);
+ assert.throws(()=>createOpenAiFactoryTextProvider({...settings,model,apiPrice:{...settings.apiPrice,model},request:async()=>count()}),/CONFIGURATION/);
  assert.throws(()=>createOpenAiFactoryTextProvider({...settings,reasoningEffort:"high" as any,request:async()=>count()}),/CONFIGURATION/);
 });

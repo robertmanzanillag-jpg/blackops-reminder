@@ -170,7 +170,7 @@ test("real factory review outcome is scored once through the existing reviewer l
   let calls = 0;
   const execution = createOfficeExecution(council(), env, () => NOW, {
     loadPr: async prUrl => ({ prUrl, headSha: HEAD, diff, diffSha256: createHash("sha256").update(diff).digest("hex") }),
-    fetch: (async () => { calls++; return new Response(JSON.stringify({ id: "resp_test", model: "test-model", status: "completed", usage: { input_tokens_details:{cached_tokens:0}, input_tokens: 20, output_tokens: 10, total_tokens: 30 }, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: JSON.stringify({ verdict: "block", summary: "Found issues", findings: ["Missing test"] }) }] }] })); }) as typeof fetch,
+    fetch: (async () => { calls++; return new Response(JSON.stringify({ id: "resp_test", model: "test-model", status: "completed", usage: { input_tokens_details:{cached_tokens:0,cache_write_tokens:0}, input_tokens: 20, output_tokens: 10, total_tokens: 30 }, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: JSON.stringify({ verdict: "block", summary: "Found issues", findings: ["Missing test"] }) }] }] })); }) as typeof fetch,
   });
   const before = (await council().load()).company.careers[role].cyclesTotal;
   const task: OfficeCloudRun = { id: randomUUID(), key: factoryOfficeReviewKey(OWNER, "review", HEAD), kind: "claude_review", prUrl: PR_URL, source: "factory", status: "running", createdAt: new Date(NOW).toISOString(), fence: randomUUID(), leaseExpiresAt: new Date(NOW + 180000).toISOString() };

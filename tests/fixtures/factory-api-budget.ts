@@ -12,4 +12,4 @@ export function fixtureFactoryInvocation(clock:()=>Date=()=>new Date('2026-11-06
   async executionWindowApi(_owner,key){return factoryApiExecutionWindow(state,exposure,key,now());},
  }});
 }
-export function fixtureFactoryPricing(model:string){return JSON.stringify({version:1,prices:[{provider:'openai',model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)}]});}
+export function fixtureFactoryPricing(model:string){return JSON.stringify({version:1,prices:[{provider:'openai',model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,cachedInputNanoUsdPerToken:100,cacheWrite30mNanoUsdPerToken:500,cacheWrite12hNanoUsdPerToken:800, maxInputTokens:1_049_600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)}]});}

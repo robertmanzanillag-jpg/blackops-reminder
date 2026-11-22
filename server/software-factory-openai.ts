@@ -1,4 +1,6 @@
-import {FactoryApiBudgetError} from "./factory-api-invocation";
+import {FactoryApiBudgetError,factoryApiPriceSchema,type FactoryApiPrice} from "./factory-api-invocation";
+import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,requireFactoryCacheWritePrice} from "./factory-api-token-cost";
+import {readOpenAiCacheUsage,validateTextOutputTokenDetails} from "./factory-api-cache-usage";
 /** Stateless text only. Trusted request must authenticate, honor AbortSignal,
  * and perform zero retries. Caller must durably reserve maxCostCents first and
  * retain that reservation on unknown; credits never discount ledger charges. */
@@ -11,6 +13,8 @@ export function createOpenAiFactoryTextProvider(config:{
  /** Operator verified upper-bound rates, including any long-context tier.
   * Integer nanodollars per token: $1/million tokens = 1000. */
  inputNanoUsdPerToken:number;outputNanoUsdPerToken:number;
+ /** Complete operator-approved profile shared with the monetary transport. */
+ apiPrice?:FactoryApiPrice;
  pricingValidUntil:string;now:()=>Date;maxInputTokens:number;
  timeoutMs?:number;maxResponseBytes?:number;
  reasoningEffort?:"low";
@@ -26,7 +30,7 @@ export function createOpenAiFactoryTextProvider(config:{
  // match exactly, and operator pricing expires independently of model naming.
  const pinnedModel=c.model==="gpt-6-astra"||c.model==="gpt-6.1-sol"||/^[-a-zA-Z0-9.]+-\d{4}-\d{2}-\d{2}$/.test(c.model);
  if((c.reasoningEffort!==undefined&&(c.reasoningEffort!=="low"||c.model!=="gpt-6-astra"))||typeof c.request!=="function"||typeof c.now!=="function"||!pinnedModel||!positive(c.inputNanoUsdPerToken)||!positive(c.outputNanoUsdPerToken)||!positive(c.maxInputTokens)||!Number.isFinite(expiry)||!positive(timeout)||timeout>300000||!positive(byteLimit)||byteLimit>4194304)throw Error("FACTORY_OPENAI_CONFIGURATION_INVALID");
- const cost=(input:number,output:number)=>Number((BigInt(input)*BigInt(c.inputNanoUsdPerToken)+BigInt(output)*BigInt(c.outputNanoUsdPerToken)+9999999n)/10000000n);
+ const cents=(micro:number)=>Number((BigInt(micro)+9999n)/10000n);
  /** responseSchema (optional): strict JSON-schema output format. It only shapes
   * output; callers must still validate the parsed value in code. */
  return async function generateText(raw:{instructions:string;text:string;maxOutputTokens:number;maxCostCents:number;signal:AbortSignal;responseSchema?:{name:string;schema:Record<string,unknown>}}):Promise<FactoryTextResult>{
@@ -40,9 +44,13 @@ export function createOpenAiFactoryTextProvider(config:{
   }
   const blocked=(reason:string):FactoryTextResult=>({status:"blocked",reason,costCents:0});
   if(typeof input.instructions!=="string"||typeof input.text!=="string"||!input.text.trim()||Buffer.byteLength(input.instructions)+Buffer.byteLength(input.text)>262144||!positive(input.maxOutputTokens)||input.maxOutputTokens<16||input.maxOutputTokens>128000||!positive(input.maxCostCents)||input.maxCostCents>10000||!input.signal)return blocked("FACTORY_OPENAI_INPUT_INVALID");
-  const fresh=()=>{const now=c.now().getTime();return Number.isFinite(now)&&now<expiry;};
+  let apiPrice:FactoryApiPrice|undefined;
+  const fresh=()=>{const now=c.now().getTime();return Number.isFinite(now)&&now<expiry&&(!apiPrice||now<Date.parse(apiPrice.validUntil));};
   if(!fresh())return blocked("FACTORY_OPENAI_PRICING_EXPIRED");
   if(input.signal.aborted)return blocked("FACTORY_OPENAI_CANCELLED");
+  try{apiPrice=factoryApiPriceSchema.parse(c.apiPrice);requireFactoryCacheWritePrice(apiPrice);if(apiPrice.model!==c.model||apiPrice.inputNanoUsdPerToken!==c.inputNanoUsdPerToken||apiPrice.outputNanoUsdPerToken!==c.outputNanoUsdPerToken||!fresh())throw Error();}
+  catch{return blocked("FACTORY_OPENAI_CACHE_PRICING_REQUIRED");}
+
   const controller=new AbortController(),abort=()=>controller.abort();
   input.signal.addEventListener("abort",abort,{once:true});
   const timer=setTimeout(abort,timeout);
@@ -63,15 +71,19 @@ export function createOpenAiFactoryTextProvider(config:{
    const prompt={model:c.model,instructions:input.instructions,input:input.text,...(c.reasoningEffort?{reasoning:{effort:c.reasoningEffort}}:{}),...(format?{text:format}:{})};
    const counted=await post("/input_tokens",prompt,4096);
    if(counted?.object!=="response.input_tokens"||!nonnegative(counted.input_tokens)||counted.input_tokens>c.maxInputTokens)return blocked("FACTORY_OPENAI_COUNT_INVALID");
-   if(cost(counted.input_tokens,input.maxOutputTokens)>input.maxCostCents)return blocked("FACTORY_OPENAI_BUDGET_UNAVAILABLE");
+   if(counted.input_tokens>apiPrice!.maxInputTokens!)return blocked("FACTORY_OPENAI_INPUT_TIER_UNVERIFIED");
+   if(cents(factoryTextMaximumMicroUsd(apiPrice!,counted.input_tokens,input.maxOutputTokens,true))>input.maxCostCents)return blocked("FACTORY_OPENAI_BUDGET_UNAVAILABLE");
    if(!fresh()||controller.signal.aborted)return blocked("FACTORY_OPENAI_ADMISSION_EXPIRED");
    submitted=true;
    // background/truncation are omitted: the API defaults are false/"disabled",
    // and the Factory monetary gate prices only its reviewed field allow-list.
    const response=await post("",{...prompt,max_output_tokens:input.maxOutputTokens,store:false,tools:[],stream:false,service_tier:"default"},byteLimit);
    const usage=response?.usage;
+   if(response?.service_tier!==undefined&&response.service_tier!=="default")throw Error("unpriced returned service tier");
    if(response?.object!=="response"||response.model!==c.model||!usage||!nonnegative(usage.input_tokens)||!nonnegative(usage.output_tokens)||!nonnegative(usage.total_tokens)||usage.total_tokens!==usage.input_tokens+usage.output_tokens)throw Error("usage");
-   const costCents=cost(usage.input_tokens,usage.output_tokens);
+   validateTextOutputTokenDetails(usage.output_tokens_details,usage.output_tokens);
+   const cache=readOpenAiCacheUsage(usage.input_tokens_details);
+   const costCents=cents(factoryTextActualMicroUsd(apiPrice!,{inputTokens:usage.input_tokens,outputTokens:usage.output_tokens,cachedTokens:cache.cachedInputTokens,...cache},true));
    if(!Number.isSafeInteger(costCents)||usage.input_tokens!==counted.input_tokens||usage.output_tokens>input.maxOutputTokens||costCents>input.maxCostCents)throw Error("usage bounds");
    if(!["completed","failed","incomplete","cancelled"].includes(response.status))throw Error("execution still active");
    if(response.status!=="completed"||response.error||response.incomplete_details){

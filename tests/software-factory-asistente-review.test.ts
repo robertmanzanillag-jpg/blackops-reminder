@@ -25,13 +25,13 @@ async function fixture() {
   await ledger.initialize();
   const review = createAsistenteIndependentReview({ ledger, now, maxOutputTokens: 512, load: async (candidate, signal, paths) => {
     loads++; assert.deepEqual(paths, state.finding.sourcePaths); assert.equal(signal.aborted, false); assert.equal(candidate.headSha, head); return loaded;
-  }, model: { model, inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600, now, maxInputTokens: 12000, pricingValidUntil: "2026-12-20T00:00:00.000Z",
+  }, model: { apiPrice: { model, inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600, cachedInputNanoUsdPerToken: 100, cacheWrite30mNanoUsdPerToken: 500, cacheWrite12hNanoUsdPerToken: 800, maxInputTokens:1_049_600, validUntil: "2026-12-20T00:00:00.000Z", evidenceSha256: "a".repeat(64) }, model, inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600, now, maxInputTokens: 12000, pricingValidUntil: "2026-12-20T00:00:00.000Z",
     request: async (url, init) => {
       calls++; assert.equal(credit.reservations.at(-1)?.status, "reserved"); assert.ok(credit.reservations.at(-1)?.key.startsWith("factory-review:"));
       const body = JSON.parse(String(init.body)); assert.match(body.instructions, /Independently review/); assert.match(body.input, /new source/);
       if (url.endsWith("/input_tokens")) { if (expire) clock = new Date("2026-11-20T00:00:00.000Z"); return Response.json({ object: "response.input_tokens", input_tokens: 100 }); }
       return Response.json({ object: "response", model: mismatch ? "other-model" : model, status,
-        usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200 },
+        usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } },
         output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: answer }] }] });
     } } });
   return { ledger, review, credit: () => credit, calls: () => calls, loads: () => loads,

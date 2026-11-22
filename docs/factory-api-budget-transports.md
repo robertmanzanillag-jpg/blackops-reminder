@@ -63,7 +63,7 @@ billing evidence before paid work.
 The nonsecret `FACTORY_API_PRICING_CONFIG` is a strict version-1 object with an
 array `prices`. Each row binds an exact `provider` (`openai`, `deepseek`, `gemini`
 or `integration`), model, positive integer input/output nanodollars per token,
-optional verified nonnegative cached-input rate, `validUntil` and an evidence
+optional verified nonnegative cached-input rate, explicit covered OpenAI 30-minute/12-hour write rates, `validUntil` and an evidence
 manifest SHA-256. Duplicate provider/model rows, missing/expired prices or cached
 usage without an approved cache rate are held. No default price is supplied and
 there is no fallback to the old router's estimated price catalog. A cached rate
@@ -84,6 +84,9 @@ OpenAI cache usage comes from direct prompt/input token details, DeepSeek cache
 usage from its [direct cache-hit count](https://api-docs.deepseek.com/guides/kv_cache/). The returned exact model, response ID and
 measured token counters are hashed with the request/pricing evidence in settlement.
 Costs use integer arithmetic and microUSD rounding, not a reconstructed invoice.
+The reviewed cache-write coverage and mandatory explicit-profile migration are
+described in [factory-cache-write-billing.md](factory-cache-write-billing.md);
+ordinary input, cached reads and TTL writes are separate nonoverlapping buckets.
 The original parent cents ledger remains at its published historical precision.
 
 ## Dispatch and uncertainty

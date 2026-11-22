@@ -6,6 +6,8 @@ import { createSharedOpenAiCreditLedger, type SharedCreditState, type CreditTran
 import { companyOrderJob } from "../server/software-factory-company";
 import { validateFactoryWorkerOptions } from "../server/software-factory-runtime";
 import type { CompanyOrder } from "../shared/agent-company";
+// Synthetic approved profiles only; no live billing evidence.
+const fakeApiPrice = (model: string) => ({ model, inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, cachedInputNanoUsdPerToken: 0, cacheWrite30mNanoUsdPerToken: 1, cacheWrite12hNanoUsdPerToken: 1, maxInputTokens:1_049_600, validUntil: "2026-11-20T00:00:00Z", evidenceSha256: "a".repeat(64) });
 const owner = "owner", ownerKey = createHash("sha256").update(owner).digest("hex"), at = new Date("2026-11-07T00:00:00Z");
 const project: any = { id: "asistente", repo: "robertmanzanillag-jpg/blackops-reminder", testCommand: "npm test", buildCommand: "npm run build", automaticRelease: false, providerSupportsRelease: false, providerSupportsRollback: false, journeys: ["office-session-login", "office-company-navigation"] };
 const order: CompanyOrder = { id: "approved", text: "Improve role work checks", createdAt: at.toISOString(), assignees: [{ agentId: "code", status: "en_curso", note: "" }] };
@@ -20,7 +22,7 @@ async function fixture() {
     const jobs: any[] = [];
     const store: any = { status: async () => ({ configured: true, paused, limitCents: 10000, fixedCents: 0, spentCents: 0, reservedCents: 0 }), projectByOwnerKey: async (key: string) => { assert.equal(key, ownerKey); return project; }, list: async () => jobs, enqueue: async (o: string, i: any) => { assert.equal(o, owner); calls++; assert.equal((await ledger.status()).reservedMicroUsd, 40000); const job = { ...i, id: "job", ownerKey, status: "pending" }; jobs.push(job); if (lost)
             throw Error("LOST_ACK"); return job; } };
-    const deps = { store, credits: { ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2026-11-20T00:00:00Z" } }, readOrders: async () => [order], githubRequest: async () => { throw Error("NO_GITHUB_CALL_EXPECTED"); }, modelRequest: async () => { throw Error("NO_PAID_CALL_EXPECTED"); }, download: fetch, readUi: async () => { throw Error("NO_FAKE_SIMULATION"); }, now: () => at };
+    const deps = { store, apiPrice: fakeApiPrice("gpt-6-astra"), credits: { ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2026-11-20T00:00:00Z" } }, readOrders: async () => [order], githubRequest: async () => { throw Error("NO_GITHUB_CALL_EXPECTED"); }, modelRequest: async () => { throw Error("NO_PAID_CALL_EXPECTED"); }, download: fetch, readUi: async () => { throw Error("NO_FAKE_SIMULATION"); }, now: () => at };
     return { config, deps, ledger, input, jobs, store, calls: () => calls, pause: () => { paused = true; }, lose: () => { lost = true; } };
 }
 test("operator composes real four-stage proposal runtime and zero-provider guarded idempotent admission", async () => {
@@ -211,7 +213,7 @@ async function autoFixture(options: { orders?: CompanyOrder[]; grant?: number; a
         claimFinding: async () => true,
         enqueue: async (_o: string, i: any) => { enqueued++; const job = { ...i, id: `job-${enqueued}`, ownerKey, status: "pending", createdAt: at.toISOString() }; jobs.push(job); return job; } };
     const reply = options.reply ?? (() => JSON.stringify({ kind: "improvement", paths: ["server/office-search.ts", "tests/office-search.test.ts"] }));
-    const deps = { ...base.deps, store, credits: { ledger, pricing: { model: fixtureModel, inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2026-11-20T00:00:00Z" } }, readOrders: async () => orders,
+    const deps = { ...base.deps, store, apiPrice: fakeApiPrice(fixtureModel), credits: { ledger, pricing: { model: fixtureModel, inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2026-11-20T00:00:00Z" } }, readOrders: async () => orders,
         githubRequest: async (url: string) => { githubCalls++;
             if (url.endsWith("/git/ref/heads/main")) return Response.json({ ref: "refs/heads/main", object: { type: "commit", sha: autoBase } });
             if (url.endsWith(`/git/commits/${autoBase}`)) return Response.json({ sha: autoBase, tree: { sha: autoTree } });
@@ -222,7 +224,7 @@ async function autoFixture(options: { orders?: CompanyOrder[]; grant?: number; a
             if (url.endsWith("/input_tokens")) return Response.json({ object: "response.input_tokens", input_tokens: 100 });
             generations++; if (options.generation) return options.generation();
             assert.ok(body.max_output_tokens <= 1024);
-            return Response.json({ object: "response", model: fixtureModel, status: "completed", usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 }, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: reply() }] }] }); } };
+            return Response.json({ object: "response", model: fixtureModel, status: "completed", usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } }, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: reply() }] }] }); } };
     const config: AsistenteOperatorConfig = { ...base.config, orders: [], ...(options.autoAdmit === null ? {} : { autoAdmit: options.autoAdmit ?? { enabled: true, since: "2026-11-06T00:00:00Z" } }) };
     const discoverJob = (order: CompanyOrder) => { const input = companyOrderJob(order, project, 1); return { id: "44444444-4444-4444-8444-444444444444", ownerKey, projectId: "asistente", kind: "discover", key: input.key, payload: input.payload, reservedCents: 1, recoveryCents: 0, month: "2026-11", status: "running", createdAt: at.toISOString() } as any; };
     return { config, deps, ledger, jobs, store, orders, discoverJob, counts: () => ({ enqueued, modelCalls, generations, githubCalls }) };
