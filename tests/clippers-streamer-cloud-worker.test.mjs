@@ -583,8 +583,8 @@ test('rights: held release revalidates the exact source, destination and publica
     if (mutation === 'missing') delete state.sourceAuthorizations;
     if (mutation === 'destination') grant.destinations = ['6431685:tiktok:streamersus'];
     if (mutation === 'window') grant.validUntil = new Date(NOW + 3600000).toISOString();
-    state.cloudPublish = { version: 1, posts: [], holds: {}, clips: { [c.id]: { status: 'held_owner_action', mediaAsset: { id: 1, url: 'https://github.com/o/r/releases/download/t/held.mp4' } } },
-      heldQueue: [{ id: 'held-example', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: key, caption: c.caption, mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
+    state.cloudPublish = { version: 1, posts: [], holds: {}, clips: { [c.id]: { status: 'held_owner_action', sourceUrl: c.sourceUrl, creatorKey: c.creatorKey, renderSha256: 'a'.repeat(64), caption: c.caption, hookVariant: 'title', mediaAsset: { id: 1, url: 'https://github.com/o/r/releases/download/t/held.mp4' } } },
+      heldQueue: [{ id: 'held-example', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: key, caption: c.caption, hookVariant: 'title', mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
     if (mutation === 'legacy_source_missing') delete state.cloudPublish.heldQueue[0].sourceUrl;
     const store = memoryStore(state); let clockNow = NOW;
     const m = fakeMetricool({ preflight: async () => {
@@ -655,7 +655,7 @@ test('rights: revoked/expired legacy held staging is removed while Facebook rema
     state.cloudPublish = { version: 1, clips: { [c.id]: { status: 'held_owner_action', attempts: 1, mediaAsset: { id: 1, url } } },
       posts: ['uncertain', 'scheduled_reference', 'scheduled_copied'].includes(scenario) ? [{ id: 'prior', candidateId: c.id, destination: d, destinationKey: key, status: scenario === 'uncertain' ? 'verification_pending' : 'scheduled', confirmedMediaUrl: scenario === 'scheduled_copied' ? 'https://static.metricool.com/copied.mp4' : url, scheduledAt: new Date(NOW + 2 * 3600000).toISOString() }] : [],
       holds: { [key]: { status: 'held_owner_action' } }, heldQueue: [{ id: 'held-public', candidateId: c.id, creatorKey: c.creatorKey,
-        ...(scenario === 'legacy_source' ? {} : { sourceUrl: c.sourceUrl }), destination: d, destinationKey: key, caption: c.caption, mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
+        ...(scenario === 'legacy_source' ? {} : { sourceUrl: c.sourceUrl }), destination: d, destinationKey: key, caption: c.caption, hookVariant: 'title', mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString() }] };
     const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia(); m.confirmSchedule = async () => null;
     await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager, fetch: okFetch, ...media });
     assert.deepEqual(stager.removed, ['uncertain', 'scheduled_reference'].includes(scenario) ? [] : [1], scenario);
@@ -718,12 +718,35 @@ test('held source: an existing delivery to another destination requires reconcil
     state.cloudPublish = { version: 1,
       posts: scenario === 'other_delivery' ? [{ id: 'already', candidateId: c.id, destination: tt, destinationKey: destinationKey(tt), status: 'scheduled', confirmedMediaUrl: url, scheduledAt: new Date(NOW + 2 * 3600000).toISOString() }] : [],
       holds: scenario === 'legacy_key' ? { [key]: { status: 'held_owner_action' } } : {},
-      clips: { [c.id]: { status: 'held_owner_action', sourceUrl: c.sourceUrl, creatorKey: c.creatorKey, renderSha256: 'a'.repeat(64), mediaAsset: { id: 1, url } } },
-      heldQueue: [{ id: 'queued', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: scenario === 'legacy_key' ? '6431685:tiktok:streamersclips' : key, caption: c.caption, mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString(), status: 'held_owner_action' }] };
+      clips: { [c.id]: { status: 'held_owner_action', sourceUrl: c.sourceUrl, creatorKey: c.creatorKey, renderSha256: 'a'.repeat(64), caption: c.caption, hookVariant: 'title', mediaAsset: { id: 1, url } } },
+      heldQueue: [{ id: 'queued', candidateId: c.id, creatorKey: c.creatorKey, sourceUrl: c.sourceUrl, destination: d, destinationKey: scenario === 'legacy_key' ? '6431685:tiktok:streamersclips' : key, caption: c.caption, hookVariant: 'title', mediaSha256: 'a'.repeat(64), queuedAt: new Date(NOW).toISOString(), status: 'held_owner_action' }] };
     const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager();
     const { report } = await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager, fetch: okFetch, ...fakeMedia() });
     assert.equal(m.calls.schedule.length, 0); assert.deepEqual(stager.removed, []);
     assert.equal(store.state.cloudPublish.heldQueue[0].status, 'held_owner_action');
     if (scenario === 'other_delivery') assert.ok(report.heldReasons.includes('held_release:other_destination_delivery_requires_reconciliation'));
   }
+});
+
+
+test('rights: failed public-asset removal followed by restoration reuses the verified binding without re-rendering', async () => {
+  const c = candidate('remove-error', 'twitch:100', 'thegrefg'), state = baseState([c]);
+  const d = DESTINATIONS.find(d => d.network === 'facebook'), key = destinationKey(d);
+  state.cloudPublish = { version: 1, posts: [], clips: {}, holds: { [key]: { status: 'held_owner_action' } }, heldQueue: [] };
+  const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia();
+  let removalFails = false; const remove = stager.remove; stager.remove = async id => { if (removalFails) throw Error('staging_remove_failed'); return remove(id); };
+  const args = { env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-remove-error': 'approved' }), metricool: m, stager, fetch: okFetch, ...media };
+  await runCloudPublisher(args); assert.equal(media.calls.render.length, 1);
+  const revoked = store.state; revoked.sourceAuthorizations[c.id].status = 'revoked'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(revoked)); removalFails = true;
+  const failed = await runCloudPublisher(args); assert.ok(failed.report.heldReasons.some(e => e.startsWith('media_sweep:')));
+  assert.ok(store.state.cloudPublish.clips[c.id].mediaAsset);
+  const restored = store.state; restored.sourceAuthorizations[c.id].status = 'approved'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(restored)); removalFails = false;
+  await runCloudPublisher(args);
+  assert.equal(media.calls.render.length, 1); assert.equal(stager.uploaded.length, 1);
+  assert.equal(store.state.cloudPublish.clips[c.id].status, 'held_owner_action');
+  assert.equal(store.state.cloudPublish.clips[c.id].reason, null);
+  assert.equal(store.state.cloudPublish.heldQueue[0].mediaSha256, store.state.cloudPublish.clips[c.id].renderSha256);
+  const clear = store.state; clear.cloudPublish.holds[key].status = 'cleared'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(clear));
+  await runCloudPublisher(args); assert.equal(m.calls.schedule.length, 1); assert.equal(media.calls.render.length, 1);
+  assert.equal(m.calls.schedule[0].mediaSha256, 'a'.repeat(64));
 });

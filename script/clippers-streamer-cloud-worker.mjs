@@ -176,6 +176,14 @@ function localDaysAround(now) { const today = localDay(new Date(now)); return [l
  * post either references a Metricool-hosted copy (confirmed media URL differs from the staging URL; the
  * adapter SHA-verifies static.metricool.com copies) or its slot is at least 2 h in the past.
  */
+function heldMediaBindingMatches(q, clip) {
+  return !!clip?.mediaAsset?.url && /^[a-f0-9]{64}$/.test(q.mediaSha256 ?? '') &&
+    typeof q.sourceUrl === 'string' && typeof q.creatorKey === 'string' && typeof q.caption === 'string' &&
+    ['title', 'teaser'].includes(q.hookVariant) && q.mediaSha256 === clip.renderSha256 &&
+    q.sourceUrl === clip.sourceUrl && q.creatorKey === clip.creatorKey &&
+    q.caption === clip.caption && q.hookVariant === clip.hookVariant;
+}
+
 export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
   const posts = ledger.posts.filter(p => p.candidateId === candidateId);
   if (posts.some(p => UNCERTAIN.has(p.status))) return false;
@@ -519,6 +527,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const otherDelivery = fresh.posts.some(p => p.candidateId === q.candidateId && canonicalDestinationKey(p.destinationKey) !== destinationKey(destination) && !['deferred', 'not_found', 'blocked'].includes(p.status));
       if (otherDelivery) { report.heldReasons.push('held_release:other_destination_delivery_requires_reconciliation'); continue; }
       const mediaUrl = fresh.clips[q.candidateId]?.mediaAsset?.url;
+      if (mediaUrl && !heldMediaBindingMatches(q, fresh.clips[q.candidateId])) {
+        await update((s, c) => { const held = c.heldQueue.find(x => x.id === q.id); if (held) { held.status = 'held_rights'; held.rightsHoldReason = 'rights_media_binding_unverified'; }
+          if (c.clips[q.candidateId]) Object.assign(c.clips[q.candidateId], { status: 'held_media_review', reason: 'rights_media_binding_unverified' }); });
+        report.heldReasons.push('held_release_gate:rights_media_binding_unverified'); continue;
+      }
       const drop = () => update((s, c) => { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); });
       if (!mediaUrl && q.status === 'held_rights') {
         const sourceState = parseStreamerStateStrict(await store.read(ns));
@@ -596,9 +609,10 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             q.status = 'held_rights'; q.rightsHoldReason = reason;
             const activePost = c.posts.some(p => p.candidateId === q.candidateId && !['deferred', 'not_found', 'blocked'].includes(p.status));
             const clip = c.clips[q.candidateId];
-            if (!activePost && clip) Object.assign(clip, { status: 'deferred', reason, attempts: clip.status === HOLD_OWNER_ACTION ? (clip.rightsRetryBudget ?? clip.attempts ?? 0) : (clip.attempts ?? 0) });
-          } else if (q.status === 'held_rights' && c.clips[q.candidateId]?.mediaAsset?.url && q.mediaSha256 === c.clips[q.candidateId]?.renderSha256 && q.sourceUrl === c.clips[q.candidateId]?.sourceUrl && q.creatorKey === c.clips[q.candidateId]?.creatorKey) {
+            if (!activePost && clip && clip.status !== 'held_media_review') Object.assign(clip, { status: 'deferred', reason, attempts: clip.status === HOLD_OWNER_ACTION ? (clip.rightsRetryBudget ?? clip.attempts ?? 0) : (clip.attempts ?? 0) });
+          } else if (q.status === 'held_rights' && heldMediaBindingMatches(q, c.clips[q.candidateId])) {
             q.status = HOLD_OWNER_ACTION; delete q.rightsHoldReason;
+            if (c.clips[q.candidateId]?.reason?.startsWith('rights_')) Object.assign(c.clips[q.candidateId], { status: HOLD_OWNER_ACTION, reason: null });
           }
         }
       });
@@ -823,7 +837,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       report.captions = { ...(report.captions ?? {}), [rendered.captions ?? 'none']: ((report.captions ?? {})[rendered.captions ?? 'none'] ?? 0) + 1 };
       report.counts.rendered++;
       processed++;
-      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, rightsRetryBudget: priorAttempts, sourceUrl: candidate.sourceUrl, creatorKey: candidate.creatorKey, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
+      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, rightsRetryBudget: priorAttempts, sourceUrl: candidate.sourceUrl, creatorKey: candidate.creatorKey, caption, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
         captions: rendered.captions ?? null, captionsError: rendered.captionsError ?? null, captionLanguage: rendered.captionLanguage ?? null, languageEvidence };
       if (config.dryRun) {
         if (outputDir) { await mkdir(outputDir, { recursive: true }); await copyFile(rendered.file, path.join(outputDir, `${candidate.id.replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`)); }

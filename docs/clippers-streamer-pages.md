@@ -203,3 +203,8 @@ remove any remaining public staging assets once uncertain sends are resolved. A 
 not perform cleanup. Do not interpret this PR or a ledger revocation as completed takedown. This
 manual cancellation/reconciliation step is required before activation; no automatic unschedule
 operation is introduced by this change.
+
+Held releases also require the queue's exact source, creator, rendered SHA, caption and hook to match
+its staged clip. Missing or conflicting media bindings stay in `held_media_review` for owner
+reconciliation rather than being inferred from a new grant. If an asset-removal attempt failed,
+restoring a still-matching grant restores the held clip state without generating a second render.
