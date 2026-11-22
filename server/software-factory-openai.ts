@@ -19,11 +19,12 @@ export function createOpenAiFactoryTextProvider(config:{
  const positive=(n:unknown):n is number=>typeof n==="number"&&Number.isSafeInteger(n)&&n>0;
  const nonnegative=(n:unknown):n is number=>typeof n==="number"&&Number.isSafeInteger(n)&&n>=0;
  const expiry=Date.parse(c.pricingValidUntil);
- // OpenAI lists gpt-6-astra itself under Snapshots (verified 2026-11-06):
+ // OpenAI lists these exact undated IDs under Snapshots (Sol verified 2026-11-22):
  // https://developers.openai.com/api/docs/models/gpt-6-astra
+ // https://developers.openai.com/api/docs/models/gpt-6.1-sol
  // Do not infer that every undated alias is pinned. Response identity must still
  // match exactly, and operator pricing expires independently of model naming.
- const pinnedModel=c.model==="gpt-6-astra"||/^[-a-zA-Z0-9.]+-\d{4}-\d{2}-\d{2}$/.test(c.model);
+ const pinnedModel=c.model==="gpt-6-astra"||c.model==="gpt-6.1-sol"||/^[-a-zA-Z0-9.]+-\d{4}-\d{2}-\d{2}$/.test(c.model);
  if((c.reasoningEffort!==undefined&&(c.reasoningEffort!=="low"||c.model!=="gpt-6-astra"))||typeof c.request!=="function"||typeof c.now!=="function"||!pinnedModel||!positive(c.inputNanoUsdPerToken)||!positive(c.outputNanoUsdPerToken)||!positive(c.maxInputTokens)||!Number.isFinite(expiry)||!positive(timeout)||timeout>300000||!positive(byteLimit)||byteLimit>4194304)throw Error("FACTORY_OPENAI_CONFIGURATION_INVALID");
  const cost=(input:number,output:number)=>Number((BigInt(input)*BigInt(c.inputNanoUsdPerToken)+BigInt(output)*BigInt(c.outputNanoUsdPerToken)+9999999n)/10000000n);
  /** responseSchema (optional): strict JSON-schema output format. It only shapes
