@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-22T12:16:27.193Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-reviewed-derivative-nov22`
+Generated: 2026-11-22T13:15:06.933Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/db-pool-idle-recovery-nov22`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1362 | 1242 | 5146 | 640 | 29254 |
+| 1366 | 1246 | 5169 | 640 | 29288 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 365 | 360 | test:365 |
-| `server` | 301 | 294 | server:301 |
+| `tests` | 366 | 361 | test:366 |
+| `server` | 302 | 295 | server:302 |
 | `client/src` | 163 | 161 | ui-component:55, client-component:52, client-page:28, client-lib:21 |
 | `script` | 155 | 139 | script:155 |
-| `docs` | 88 | 85 | docs:88 |
+| `docs` | 89 | 86 | docs:89 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 53 | 47 | shared:53 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -43,8 +43,8 @@ Package: `rest-express`
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `script/office-api-budget-v7-integrity` | 3 | 3 | script:3 |
+| `tests/helpers` | 3 | 3 | test:3 |
 | `client/public` | 16 | 2 | other:16 |
-| `tests/helpers` | 2 | 2 | test:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
@@ -292,6 +292,7 @@ Package: `rest-express`
 - `tests/office-worker-once.test.ts`
 - `tests/office-worker-watchdog.test.ts`
 - `tests/owner-office-storage.test.ts`
+- `tests/postgres-pool-safety.test.ts`
 - `tests/public-local-news.test.ts`
 - `tests/radio-slot-policies.test.ts`
 - `tests/radio-slots.test.ts`

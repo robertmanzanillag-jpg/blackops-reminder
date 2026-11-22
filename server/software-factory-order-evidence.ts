@@ -1,3 +1,4 @@
+import {observePostgresPool} from "./postgres-pool-safety";
 import {recoverableFailedBuild,buildRecoveryDigest} from "./software-factory-build-recovery";
 import {createHash} from "node:crypto";
 import type {FactoryJob} from "./software-factory-store";
@@ -72,6 +73,6 @@ export async function readFactoryOrderProposals(options:{owner:string;jobs:Facto
 let recoveryPool:import("./agent-council-store").CouncilPool|undefined;
 export async function readFactoryRecoveredBuild(ownerKey:string,failedId:string,successorId:string){
  if((process.env.SOFTWARE_FACTORY_STORAGE_BACKEND||"postgres")!=="postgres"||process.env.SOFTWARE_FACTORY_STORE_MODULE)return undefined;
- if(!recoveryPool){const {Pool}=await import("pg"),{resolveDatabaseConnectionString}=await import("./database-url");recoveryPool=new Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:5000,statement_timeout:5000,application_name:blackopsApplicationName("factory-evidence")}) as unknown as import("./agent-council-store").CouncilPool;}
+ if(!recoveryPool){const {Pool}=await import("pg"),{resolveDatabaseConnectionString}=await import("./database-url");recoveryPool=observePostgresPool(new Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:5000,statement_timeout:5000,application_name:blackopsApplicationName("factory-evidence")}),{role:"factory-evidence"}) as unknown as import("./agent-council-store").CouncilPool;}
  const {loadFailedBuildRecovery}=await import("./software-factory-build-recovery");return loadFailedBuildRecovery(recoveryPool,ownerKey,failedId,successorId);
 }

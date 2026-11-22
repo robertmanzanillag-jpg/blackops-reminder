@@ -201,3 +201,27 @@ test("a 55P03 after a council update started, or any other error, still ends the
     assert.equal((await runOfficeWorkerOnce(f.host, f.options)).reason, "unconfirmed");
   }
 });
+
+
+test("ownership loss during acquisition stops before assembly or provider probing",async()=>{
+ const f=fixture();let otherChecks=0;
+ f.host.acquire=async()=>{const owned=await f.lock.acquire();f.controller.abort();return owned;};
+ f.host.otherExecutorActive=async()=>{otherChecks++;return false;};
+ const result=await runOfficeWorkerOnce(f.host,f.options);
+ assert.equal(result.reason,"aborted");assert.equal(otherChecks,0);
+ assert.equal(f.calls.protocol,0);assert.equal(f.calls.capabilities,0);assert.equal(f.calls.ticks,0);
+ assert.equal(f.lock.held,false);assert.ok(f.calls.stops>=1);
+ assert.deepEqual(f.pending(),{deadlines:0,intervals:0});
+});
+
+
+test("ownership loss during startup awaits never launches a subsequent provider probe",async()=>{
+ for(const step of ["otherExecutorActive","checkProtocol"] as const){
+  const f=fixture();let probes=0;
+  f.host.otherExecutorActive=async()=>{if(step==="otherExecutorActive")f.controller.abort();return false;};
+  f.host.checkProtocol=async()=>{if(step==="checkProtocol")f.controller.abort();};
+  f.host.refreshCapabilities=async()=>{probes++;};
+  assert.equal((await runOfficeWorkerOnce(f.host,f.options)).reason,"aborted");
+  assert.equal(probes,0);assert.equal(f.calls.ticks,0);assert.equal(f.lock.held,false);
+ }
+});
