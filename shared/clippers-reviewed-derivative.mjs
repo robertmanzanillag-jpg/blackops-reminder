@@ -31,6 +31,7 @@ function stable(value) {
   return value;
 }
 export const reviewedDerivativeDigest = manifest => reviewedMediaHash(JSON.stringify(stable(manifest)));
+export function validPrivateFinalReference(value){return typeof value==='string'&&/^final-[a-f0-9]{64}$/.test(value);}
 export function approvedNativeMediaUrl(value) {
   try {
     const url = new URL(value);
@@ -66,8 +67,10 @@ export function validateReviewedDerivativeManifest(manifest, now = Date.now()) {
     object(crop, ['sourceWidth', 'sourceHeight', 'x', 'y', 'width', 'height']);
     if (['sourceWidth', 'sourceHeight', 'x', 'y', 'width', 'height'].some(key => !Object.hasOwn(crop, key) || !Number.isSafeInteger(crop[key])) || crop.sourceWidth <= 0 || crop.sourceHeight <= 0 || crop.x < 0 || crop.y < 0 || crop.width <= 0 || crop.height <= 0 || crop.x + crop.width > crop.sourceWidth || crop.y + crop.height > crop.sourceHeight) fail('derivative_crop_invalid');
   }
-  object(media, ['url', 'sha256', 'byteLength', 'durationSeconds', 'width', 'height', 'audio']);
-  if (!approvedNativeMediaUrl(media.url) || !SHA.test(media.sha256 ?? '') || !Number.isSafeInteger(media.byteLength) || media.byteLength < 1024 || media.byteLength > 32 * 1024 * 1024 || !number(media.durationSeconds) || media.durationSeconds < 10 || media.durationSeconds > 60 || media.width !== 1080 || media.height !== 1920) fail('derivative_media_invalid');
+  object(media, ['url', 'storageKind', 'privateFinalRef', 'sha256', 'byteLength', 'durationSeconds', 'width', 'height', 'audio']);
+  const native=media.storageKind===undefined&&media.privateFinalRef===undefined&&approvedNativeMediaUrl(media.url);
+  const privateFinal=media.storageKind==='private_council_v1'&&media.url===undefined&&validPrivateFinalReference(media.privateFinalRef)&&media.privateFinalRef===`final-${media.sha256}`;
+  if (!(native||privateFinal) || !SHA.test(media.sha256 ?? '') || !Number.isSafeInteger(media.byteLength) || media.byteLength < 1024 || media.byteLength > 32 * 1024 * 1024 || !number(media.durationSeconds) || media.durationSeconds < 10 || media.durationSeconds > 60 || media.width !== 1080 || media.height !== 1920) fail('derivative_media_invalid');
   if (Math.abs(media.durationSeconds - (source.endSeconds - source.startSeconds)) > 0.15) fail('derivative_segment_duration_mismatch');
   if (!((transform.audio === 'all_source_audio_removed' && media.audio === 'absent' && manifest.audioReplacement === undefined) || (transform.audio === 'licensed_instrumental_replacement' && media.audio === 'licensed_instrumental_only'))) fail('derivative_audio_profile_unsupported');
   if (!text(manifest.caption, 2200) || reviewedMediaHash(manifest.caption) !== manifest.captionSha256 || !manifest.caption.includes(source.url) || !new RegExp(`(?:^|[^a-z0-9_])@?${source.handle}(?:$|[^a-z0-9_])`, 'i').test(manifest.caption.replace(source.url, ''))) fail('derivative_caption_invalid');
