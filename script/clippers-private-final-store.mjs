@@ -154,7 +154,7 @@ export async function cleanupPrivateFinals({store,owner,now=Date.now(),refs,maxF
   const k=keys(owner,ref),snapshot=index.files[ref];if(!Number.isSafeInteger(snapshot.epoch)||snapshot.epoch<1){report.held.push('private_final_state_unverified');continue;}
   // An index reservation precedes metadata by design. Recover its missing row only through the same all-reference proof/fences.
   const observed=parse(await store.read(k.meta));
-  const stalePurged=observed?.status==='purged'&&observed.ownerHash===k.h&&observed.sha256===snapshot.sha256&&observed.byteLength===snapshot.byteLength&&Number.isSafeInteger(observed.epoch)&&observed.epoch<snapshot.epoch;
+  const stalePurged=observed?.status==='purged'&&observed.ownerHash===k.h&&observed.ref===ref&&observed.sha256===snapshot.sha256&&observed.byteLength===snapshot.byteLength&&Number.isSafeInteger(observed.epoch)&&observed.epoch<snapshot.epoch;
   const priorHistory=stalePurged?[...(observed.history??[]),{epoch:observed.epoch,purgedAt:observed.purgedAt,references:observed.references,sha256:observed.sha256,byteLength:observed.byteLength}]:[];
   const meta=(!stalePurged&&observed)||{version:1,ownerHash:k.h,ref,sha256:snapshot.sha256,byteLength:snapshot.byteLength,epoch:snapshot.epoch,references:snapshot.references,status:'reserved',everReadyInEpoch:false,chunks:{},nextIndex:0,history:priorHistory};
   if(meta.ownerHash!==k.h||meta.ref!==ref||meta.sha256!==snapshot.sha256||meta.byteLength!==snapshot.byteLength||meta.epoch!==snapshot.epoch){report.held.push('private_final_state_unverified');continue;}
@@ -162,8 +162,10 @@ export async function cleanupPrivateFinals({store,owner,now=Date.now(),refs,maxF
   if(!Object.keys(references).length||!Object.entries(references).every(([digest,r])=>r.epoch===meta.epoch&&reclaimable(records[r.proposalId],{...r,digest},meta,owner,now)))continue;
   let token;
   try{
+   // Reject an overfull historical envelope before taking the cross-key purge fence.
+   encode({...meta,status:'purging',cleanupToken:`${meta.epoch}:${now}:${snapshot.generation}`});
    token=await mutate(store,k.index,current=>{const e=current?.files?.[ref];if(!e||JSON.stringify(e)!==JSON.stringify(snapshot))fail('private_final_cleanup_changed');e.status='purging';e.cleanupToken=`${meta.epoch}:${now}:${e.generation}`;return{state:current,out:e.cleanupToken};});
-   await mutate(store,k.meta,current=>{if(current?.status==='purged'&&current.ownerHash===k.h&&current.sha256===meta.sha256&&current.byteLength===meta.byteLength&&current.epoch<meta.epoch)current=structuredClone(meta);current??=structuredClone(meta);if(current.epoch!==meta.epoch||current.ownerHash!==k.h||current.sha256!==meta.sha256||JSON.stringify(current.references)!==JSON.stringify(meta.references))fail('private_final_cleanup_changed');current.status='purging';current.cleanupToken=token;return{state:current,out:null};});
+   await mutate(store,k.meta,current=>{if(stalePurged&&JSON.stringify(current)===JSON.stringify(observed))current=structuredClone(meta);current??=structuredClone(meta);if(current.epoch!==meta.epoch||current.ownerHash!==k.h||current.sha256!==meta.sha256||JSON.stringify(current.references)!==JSON.stringify(meta.references))fail('private_final_cleanup_changed');current.status='purging';current.cleanupToken=token;return{state:current,out:null};});
    // Tombstone every possible chunk, including unacknowledged/pending writes. A late immutable writer cannot recreate it.
    for(let i=0;i<Math.ceil(meta.byteLength/CHUNK_BYTES);i++)await store.transact(k.chunk(i,meta.epoch),async()=>JSON.stringify({version:1,ownerHash:k.h,ref,index:i,epoch:meta.epoch,status:'purged',purgedAt:iso(now)}));
    await mutate(store,k.meta,current=>{if(current?.epoch!==meta.epoch||current.status!=='purging'||current.cleanupToken!==token)fail('private_final_cleanup_changed');current.status='purged';current.purgedAt=iso(now);current.pending=null;current.chunks={};current.nextIndex=0;return{state:current,out:null};});
