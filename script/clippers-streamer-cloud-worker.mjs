@@ -189,7 +189,8 @@ export function publishGate(state, candidate, options = {}) {
   if (!candidate) return 'candidate_missing';
   if (!candidate.sourceUrl) return 'rights_source_missing';
   const creator = state?.creators?.[candidate.creatorKey];
-  if (candidate.clipPolicy?.status === 'prohibited') return 'clip_prohibited';
+  const currentCandidate = state?.candidates?.find(c => c.id === candidate.id);
+  if (candidate.clipPolicy?.status === 'prohibited' || currentCandidate?.clipPolicy?.status === 'prohibited') return 'clip_prohibited';
   if (creator?.policy?.status === 'prohibited') return 'creator_prohibited';
   if (!creator?.policy || creator.policy.source === 'not_checked') return 'creator_policy_not_checked';
   if (takedownBlocks(state?.takedowns, { creatorKey: candidate.creatorKey, creatorGroupId: creator.creatorGroupId, candidateId: candidate.id })) return 'takedown';

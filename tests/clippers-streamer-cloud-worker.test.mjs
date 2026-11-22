@@ -575,7 +575,7 @@ test('rights: a grant revoked during download stops render; revocation during pr
 
 
 test('rights: held release revalidates the exact source, destination and publication window, retaining a retryable queue', async () => {
-  for (const mutation of ['missing', 'destination', 'window', 'revoke_in_preflight', 'expire_in_preflight', 'replace_source_in_preflight', 'legacy_source_missing']) {
+  for (const mutation of ['missing', 'destination', 'window', 'revoke_in_preflight', 'expire_in_preflight', 'replace_source_in_preflight', 'legacy_source_missing', 'prohibit_in_preflight']) {
     const c = candidate(`held-${mutation}`, 'twitch:100', 'thegrefg');
     const state = baseState([c]);
     const d = DESTINATIONS.find(d => d.network === 'facebook'); const key = destinationKey(d);
@@ -590,6 +590,7 @@ test('rights: held release revalidates the exact source, destination and publica
     const m = fakeMetricool({ preflight: async () => {
       if (mutation === 'revoke_in_preflight') { const s = store.state; s.sourceAuthorizations[c.id].status = 'revoked'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); }
       if (mutation === 'replace_source_in_preflight') { const s = store.state; s.candidates[0].sourceUrl += '-replacement'; s.sourceAuthorizations[c.id].sourceUrl = s.candidates[0].sourceUrl; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); }
+      if (mutation === 'prohibit_in_preflight') { const s = store.state; s.candidates[0].clipPolicy = { status: 'prohibited' }; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); }
       if (mutation === 'expire_in_preflight') clockNow = Date.parse(grant.validUntil);
     } });
     const result = await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: key }, now: NOW, clock: () => clockNow, owner: 'o', store,
@@ -597,7 +598,7 @@ test('rights: held release revalidates the exact source, destination and publica
     assert.equal(m.calls.schedule.length, 0, mutation);
     assert.equal(store.state.cloudPublish.heldQueue.length, 1, mutation);
     assert.equal(store.state.cloudPublish.posts.length, 0, mutation);
-    assert.ok(result.report.heldReasons.some(s => s.startsWith('held_release_gate:rights_')), mutation);
+    assert.ok(result.report.heldReasons.some(s => s.startsWith(mutation === 'prohibit_in_preflight' ? 'held_release_gate:clip_prohibited' : 'held_release_gate:rights_')), mutation);
   }
 });
 
@@ -622,4 +623,12 @@ test('rights: repeated post-render permission holds do not consume the failure b
   }
   revoke = false; const s = store.state; s.sourceAuthorizations[c.id].status = 'approved'; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s));
   await runCloudPublisher(args); assert.equal(m.calls.schedule.length, 1);
+});
+
+
+test('publish policy: a fresh candidate prohibition after preflight blocks the original rendered source', async () => {
+  const c = candidate('new-prohibition', 'twitch:100', 'thegrefg'), store = memoryStore(baseState([c]));
+  const m = fakeMetricool({ preflight: async () => { const s = store.state; s.candidates[0].clipPolicy = { status: 'prohibited' }; store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s)); } });
+  const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-new-prohibition': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() });
+  assert.equal(m.calls.schedule.length, 0); assert.ok(report.heldReasons.includes('clip_prohibited')); assert.equal(store.state.cloudPublish.posts.length, 0);
 });
