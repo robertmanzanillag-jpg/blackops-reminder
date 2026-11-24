@@ -268,6 +268,9 @@ jobs:
         env:
           OPENAI_SHARED_CREDIT_CONFIG_JSON: ${{ secrets.OPENAI_SHARED_CREDIT_CONFIG_JSON }}
           SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON: ${{ secrets.SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON }}
+          # Lets the operator JSON say "owner":"__FROM_OFFICE_OWNER_ID__" so the owner never has to be
+          # copied by hand (GitHub cannot reveal secrets). Any other owner value is left untouched.
+          FACTORY_OPERATOR_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
           # Read-only: derives the credit configuration from the ledger of this scope in the same
           # database the factory run uses (script/shared-credit-config-from-db.ts). The derived config
           # wins; the secret above is only the fallback while that ledger does not exist yet.
@@ -295,6 +298,10 @@ jobs:
           fi
           test -s "$dir/shared-credit.json"
           printf '%s' "$SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON" > "$dir/operator.json"
+          node -e 'const fs=require("fs"),f=process.argv[1];let c;try{c=JSON.parse(fs.readFileSync(f,"utf8"))}catch{process.exit(0)}
+            if(c&&c.owner==="__FROM_OFFICE_OWNER_ID__"){const o=process.env.FACTORY_OPERATOR_OWNER_ID||"";
+            if(!o){console.error("FACTORY_OPERATOR_OWNER_PLACEHOLDER_UNRESOLVED");process.exit(1)}
+            c.owner=o;fs.writeFileSync(f,JSON.stringify(c),{mode:0o600});console.log("operator owner: resolved from secret")}' "$dir/operator.json"
           node script/validate-factory-private-config.mjs "$dir/shared-credit.json" "$dir/operator.json"
           echo "FACTORY_CONFIG_DIR=$dir" >> "$GITHUB_ENV"
 
