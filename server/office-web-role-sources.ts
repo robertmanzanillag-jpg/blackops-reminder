@@ -117,7 +117,7 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
   catch{learning=empty("marketing_learning","invalid");}
  }else learning=await file("marketing_learning",locate("MARKETING_COMMAND_CENTER_LEARNING_PATH","marketing_command_center_data/learning-runs.json"),projectLearning);
  const social=await source("social_metrics","social_metrics",x=>({sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>rowAt("campaign_metric",q.id,"recorded",q.createdAt,{impressions:q.impressions,views:q.views,orders:q.orders,revenueUsd:q.revenueUsd,spendUsd:q.spendUsd}))}));
- const clipMetrics=await source("clip_metrics","clip_metrics",x=>({sourceAt:x.generatedAt,rows:x.records.map(q=>rowAt("clip_metric",q.id,"recorded",x.generatedAt,{views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}))}));
+ const clipMetrics=await source("clip_metrics","clip_metrics",x=>({sourceAt:x.generatedAt,rows:x.records.map(q=>rowAt("clip_metric",q.id,"recorded",x.generatedAt,Object.fromEntries(Object.entries({views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}).filter((e):e is [string,number]=>typeof e[1]==="number"))))}));
  const reports:Part[]=[];
  if(documentsFailed)reports.push(empty("clip_reports","invalid"));
  else if(documents && documents.reports.length){
