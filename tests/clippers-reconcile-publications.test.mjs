@@ -217,3 +217,52 @@ test("an analytics failure never invents metrics and does not block reconciliati
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("an alternate analytics provider can be injected and stored records are provider-neutral", async () => {
+  const url = "https://www.tiktok.com/@streamersclipusa/video/7530000000000000007";
+  const root = await workspace([scheduled({ status: "published", publicUrl: url, publishedAt: "2026-08-05T14:00:00.000Z", metricoolBlogId: 6431687 })]);
+  try {
+    const inHouse = {
+      name: "inhouse",
+      async getPostAnalytics() {
+        return [{ provider: "inhouse", postId: "p1", videoId: "7530000000000000007", url, publishedAt: "2026-08-05T14:00:00.000Z", views: 321, likes: 7, comments: 1, shares: 2, completionRate: 0.4 }];
+      },
+    };
+    await reconcileClipperPublications({
+      workspaceRoot: root,
+      now: new Date("2026-08-08T15:00:00.000Z"),
+      env: { CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa", SOCIAL_ANALYTICS_PROVIDER: "inhouse" },
+      dependencies: { analyticsProviders: { inhouse: inHouse } },
+    });
+    const metrics = JSON.parse(await readFile(path.join(root, "research", "paid-streamer-campaign-metrics.json"), "utf8"));
+    assert.equal(metrics[0].views, 321);
+    const report = JSON.parse(await readFile(path.join(root, "reports", "metricool-publication-reconciliation.json"), "utf8"));
+    assert.equal(report.provider, "inhouse");
+    assert.equal(report.analyticsRefresh.refreshed, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an unknown analytics provider fails closed and records no metrics", async () => {
+  const url = "https://www.tiktok.com/@streamersclipusa/video/7530000000000000007";
+  const root = await workspace([scheduled({ status: "published", publicUrl: url, publishedAt: "2026-08-05T14:00:00.000Z", metricoolBlogId: 6431687 })]);
+  let fetched = 0;
+  try {
+    await reconcileClipperPublications({
+      workspaceRoot: root,
+      now: new Date("2026-08-08T15:00:00.000Z"),
+      env: { CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa", SOCIAL_ANALYTICS_PROVIDER: "nope", METRICOOL_USER_TOKEN: "t", METRICOOL_USER_ID: "1" },
+      fetcher: async () => { fetched += 1; return new Response("[]"); },
+      dependencies: { async getPublication() { return null; } },
+    });
+    const metrics = JSON.parse(await readFile(path.join(root, "research", "paid-streamer-campaign-metrics.json"), "utf8"));
+    assert.equal(metrics[0].views, undefined);
+    const report = JSON.parse(await readFile(path.join(root, "reports", "metricool-publication-reconciliation.json"), "utf8"));
+    assert.equal(report.analyticsRefresh.refreshed, 0);
+    assert.deepEqual(report.analyticsRefresh.errors, ["unknown_social_analytics_provider:nope"]);
+    assert.equal(fetched, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

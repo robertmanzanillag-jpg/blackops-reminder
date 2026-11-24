@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveSocialAnalyticsProvider } from "./social-analytics/provider.mjs";
 
 const TIMEZONE = "America/New_York";
 const DEFAULT_ACCOUNT = "streamersclipusa";
@@ -159,30 +160,23 @@ function tiktokVideoId(url) {
   return (/\/video\/(\d+)/.exec(clean(url)) || [])[1] || "";
 }
 
-/**
- * Reads post-level TikTok analytics (views/likes/shares/comments/completion) for
- * already-published clips. The scheduler payload used at publication time carries
- * no performance metrics, so without this refresh every published row keeps
- * `views` undefined and the growth CEO never receives verified learning data.
- * Read-only toward Metricool.
- */
-async function defaultGetPostAnalytics({ blogId, fromDate, toDate, fetcher, env }) {
-  const token = clean(env.METRICOOL_USER_TOKEN);
-  const userId = clean(env.METRICOOL_USER_ID);
-  if (!token || !userId || !blogId) throw new Error("metricool_analytics_credentials_missing");
-  const url = `https://app.metricool.com/api/v2/analytics/posts/tiktok?blogId=${encodeURIComponent(blogId)}`
-    + `&userId=${encodeURIComponent(userId)}`
-    + `&from=${encodeURIComponent(`${fromDate}T00:00:00`)}&to=${encodeURIComponent(`${toDate}T23:59:59`)}`
-    + `&timezone=${encodeURIComponent(TIMEZONE)}`;
-  const response = await fetcher(url, {
-    headers: { "X-Mc-Auth": token, accept: "application/json" },
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!response.ok) throw new Error(`metricool_analytics_http_${response.status}`);
-  return objects(JSON.parse(await response.text()));
-}
-
-async function refreshPublishedAnalytics({ ledger, account, now, env, fetcher, getPostAnalytics }) {
+// Post analytics come from the provider seam (script/social-analytics/). Unknown
+// provider => fail closed: nothing is refreshed and the reason is reported.
+async function refreshPublishedAnalytics({ ledger, account, now, env, fetcher, dependencies = {} }) {
+  let providerName;
+  let getPostAnalytics;
+  if (dependencies.analyticsProvider) {
+    providerName = clean(dependencies.analyticsProvider.name) || "custom";
+    getPostAnalytics = (args) => dependencies.analyticsProvider.getPostAnalytics(args);
+  } else {
+    const resolved = resolveSocialAnalyticsProvider(env, dependencies.analyticsProviders);
+    if (!resolved.provider) {
+      console.warn(`[clippers-reconcile] analytics refresh skipped: ${resolved.reason}`);
+      return { provider: resolved.name, refreshed: 0, errors: [resolved.reason] };
+    }
+    providerName = resolved.provider.name;
+    getPostAnalytics = dependencies.getPostAnalytics || ((args) => resolved.provider.getPostAnalytics(args));
+  }
   const cutoff = now.getTime() - METRICS_REFRESH_WINDOW_DAYS * 86_400_000;
   const byBlog = new Map();
   for (const row of ledger) {
@@ -216,7 +210,9 @@ async function refreshPublishedAnalytics({ ledger, account, now, env, fetcher, g
     }
     for (const { row, publicUrl } of group.rows) {
       const videoId = tiktokVideoId(publicUrl);
-      const post = posts.find((candidate) => strings(candidate).some((value) => tiktokVideoId(value) === videoId || clean(value) === videoId));
+      const post = (Array.isArray(posts) ? posts : []).find((candidate) => clean(candidate?.videoId) === videoId
+        || tiktokVideoId(candidate?.url) === videoId
+        || strings(candidate).some((value) => tiktokVideoId(value) === videoId || clean(value) === videoId));
       if (!post) continue;
       const observed = explicitMetrics(post);
       if (observed.views === undefined) continue;
@@ -224,11 +220,12 @@ async function refreshPublishedAnalytics({ ledger, account, now, env, fetcher, g
         ...(row.publicationReconciliation || {}),
         metrics: { ...(row.publicationReconciliation?.metrics || {}), ...observed },
         metricsRefreshedAt: now.toISOString(),
+        metricsProvider: clean(post.provider) || providerName,
       };
       refreshed += 1;
     }
   }
-  return { refreshed, errors };
+  return { provider: providerName, refreshed, errors };
 }
 
 function markdownReport(report) {
@@ -314,7 +311,7 @@ export async function reconcileClipperPublications(options = {}) {
       now,
       env,
       fetcher,
-      getPostAnalytics: options.dependencies?.getPostAnalytics || defaultGetPostAnalytics,
+      dependencies: options.dependencies || {},
     });
 
     for (const row of ledger) {
@@ -386,7 +383,7 @@ export async function reconcileClipperPublications(options = {}) {
       pending: results.filter((row) => row.status === "pending").length,
       blocked: results.filter((row) => row.status === "blocked").length,
     };
-    const report = { generatedAt: now.toISOString(), source: "Metricool", account, totals, analyticsRefresh, results };
+    const report = { generatedAt: now.toISOString(), source: "Metricool", provider: analyticsRefresh.provider, account, totals, analyticsRefresh, results };
     await writeJsonAtomic(ledgerPath, ledger);
     await writeJsonAtomic(metricsPath, metrics);
     await writeJsonAtomic(reportPath, report);
