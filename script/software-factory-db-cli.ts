@@ -64,6 +64,20 @@ export function shapeJobCounts(rows: Array<{ status: unknown; count: unknown }>)
   return { byStatus, running, unknown, attentionRequired: running > 0 || unknown > 0 };
 }
 
+/** Stopped (blocked/failed) jobs for the operator: kind, status, an uppercase
+ * reason code only (free text is dropped), timestamps and whether the job came
+ * from an office self-heal order. Never exposes inputs, keys, paths or evidence. */
+export function shapeStoppedJobs(rows: Array<{ status: unknown; kind: unknown; reason: unknown; order_id: unknown; created_at: unknown; completed_at: unknown }>) {
+  const iso = (v: unknown) => { const t = v instanceof Date ? v.getTime() : Date.parse(String(v ?? "")); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
+  return rows.slice(0, 20).filter(r => r.status === "blocked" || r.status === "failed").map(r => ({
+    status: r.status as "blocked" | "failed",
+    kind: typeof r.kind === "string" && /^[a-z-]{1,40}$/.test(r.kind) ? r.kind : "unknown",
+    reason: typeof r.reason === "string" && /^[A-Z0-9_:]{1,120}$/.test(r.reason) ? r.reason : "UNSPECIFIED",
+    selfHealOrder: typeof r.order_id === "string" && r.order_id.startsWith("ord-sh-"),
+    createdAt: iso(r.created_at), completedAt: iso(r.completed_at),
+  }));
+}
+
 /** Reduces a raw ledger row to the operator summary; never exposes evidence ids or reservation keys. */
 export function shapeCreditSummary(raw: string | null, scope: string) {
   if (raw === null) return { provisioned: false as const };

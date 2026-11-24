@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createAsistenteOperatorComposition, validateAsistenteOperatorConfig, type AsistenteOperatorConfig } from "../server/software-factory-asistente-operator";
+import { applyFactoryOperatorEnvOverride, createAsistenteOperatorComposition, validateAsistenteOperatorConfig, type AsistenteOperatorConfig } from "../server/software-factory-asistente-operator";
 import { createSharedOpenAiCreditLedger, type SharedCreditState, type CreditTransaction } from "../server/shared-openai-credit-ledger";
 import { companyOrderJob } from "../server/software-factory-company";
 import { validateFactoryWorkerOptions } from "../server/software-factory-runtime";
@@ -463,4 +463,16 @@ test("operator config accepts the production integration base branch and rejects
         assert.throws(() => validateAsistenteOperatorConfig({ ...f.config, baseBranch }), undefined, baseBranch);
     const operator = createAsistenteOperatorComposition({ ...f.config, baseBranch: "claude/integration-20261111" }, f.deps);
     validateFactoryWorkerOptions(await operator.createFactoryWorkerOptions());
+});
+
+test("workflow env override only toggles systemOrders and the daily caps; never enables autoAdmit", () => {
+    const base = { maxDraftPullRequestsPerDay: 5, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 3 } };
+    assert.deepEqual(applyFactoryOperatorEnvOverride(base, { FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: "true" }).autoAdmit, { ...base.autoAdmit, systemOrders: true });
+    assert.equal(applyFactoryOperatorEnvOverride({ ...base, autoAdmit: { ...base.autoAdmit, systemOrders: true } }, { FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: "false" }).autoAdmit?.systemOrders, false);
+    for (const value of [undefined, "", "yes", "TRUE", "1"]) assert.equal(applyFactoryOperatorEnvOverride(base, { FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: value }), base);
+    // Fail closed: without autoAdmit in the private config nothing is admitted automatically.
+    const disabled = { maxDraftPullRequestsPerDay: 5 };
+    assert.equal(applyFactoryOperatorEnvOverride(disabled, { FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: "true" }), disabled);
+    assert.deepEqual(applyFactoryOperatorEnvOverride(base, { FACTORY_DRAFT_PRS_PER_DAY: "2" }), { maxDraftPullRequestsPerDay: 2, autoAdmit: { ...base.autoAdmit, maxPerDay: 2 } });
+    for (const value of ["0", "11", "abc", "-1", "100"]) assert.equal(applyFactoryOperatorEnvOverride(base, { FACTORY_DRAFT_PRS_PER_DAY: value }), base);
 });

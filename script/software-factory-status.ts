@@ -3,7 +3,7 @@ import pg from "pg";
 import { createCouncilStore, type CouncilClient } from "../server/agent-council-store";
 import {
   creditLedgerOwner, currentMonth, factoryTableNames, ownerKeyFor, parseStatusArgs, safeErrorCode,
-  shapeCreditSummary, shapeJobCounts, shapeProjects,
+  shapeCreditSummary, shapeJobCounts, shapeProjects, shapeStoppedJobs,
 } from "./software-factory-db-cli";
 
 // READ-ONLY preflight. Everything runs inside one READ ONLY transaction that is always rolled back,
@@ -53,6 +53,11 @@ async function main() {
         // Global on purpose: the factory holds ONE execution slot across all owners while a job is running/unknown.
         const jobs = await client.query("SELECT status, count(*)::int AS count FROM software_factory_jobs GROUP BY status ORDER BY status");
         report.jobs = shapeJobCounts(jobs.rows as Array<{ status: unknown; count: unknown }>);
+      }
+      if (key && has("software_factory_jobs")) {
+        // Why the factory stopped: newest blocked/failed jobs of this owner, reason codes only.
+        const stopped = await client.query("SELECT status, input->>'kind' AS kind, result->>'reason' AS reason, input->'payload'->'companyOrder'->>'orderId' AS order_id, created_at, completed_at FROM software_factory_jobs WHERE owner_key=$1 AND status IN ('blocked','failed') ORDER BY created_at DESC LIMIT 20", [key]);
+        report.stoppedJobs = shapeStoppedJobs(stopped.rows as Parameters<typeof shapeStoppedJobs>[0]);
       }
       if (creditScope) {
         if (!has("agent_council_state")) report.credit = { provisioned: false, storageTableMissing: true };
