@@ -1,19 +1,41 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createMarketingSocialScheduler, getMarketingSocialSyncConfig, parseTikTokPostRows, syncMarketingSocialMetrics, type SocialSnapshot } from "../server/marketing-social-metrics-sync";
+import { createMarketingSocialScheduler, getMarketingSocialSyncConfig, snapshotsFromPosts, syncMarketingSocialMetrics, type SocialSnapshot } from "../server/marketing-social-metrics-sync";
+import { parseMetricoolTikTokPosts } from "../server/social-analytics/metricool";
+import type { SocialAnalyticsProvider } from "../server/social-analytics/provider";
 import { executionDiagnostics } from "../server/office-web-role-sources";
 
 const env = { METRICOOL_USER_TOKEN: "tok-real", METRICOOL_USER_ID: "123" } as NodeJS.ProcessEnv;
 const now = () => new Date("2026-11-24T15:00:00Z");
-const mcp = (rows: unknown[]) => ({ result: { content: [{ type: "text", text: JSON.stringify({ rows }) }] } });
 
-test("parses TikTok rows into opaque bounded snapshots without URLs", () => {
-  const rows = parseTikTokPostRows({ content: [{ text: JSON.stringify({ rows: [{ TKPO03: { value: "https://tiktok.com/v/1" }, TKPO07: { value: 95 }, TKPO08: 3, TKPO11: 80 }, { TKPO07: 10 }] }) }] }, "6431685", "2026-11-24");
+test("parses Metricool REST rows into opaque, provider-tagged snapshots without URLs", () => {
+  const posts = parseMetricoolTikTokPosts({ data: [{ shareUrl: "https://tiktok.com/@a/video/1", views: 95, likes: 3, reach: 80 }, { views: 10 }] });
+  assert.equal(posts.length, 1); assert.equal(posts[0].provider, "metricool"); assert.equal(posts[0].videoId, "1");
+  const rows = snapshotsFromPosts(posts, "6431685", "2026-11-24", "metricool");
   assert.equal(rows.length, 1);
   assert.match(rows[0].id, /^metricool-tiktok-[a-f0-9]{32}-2026-11-24$/);
+  assert.equal(rows[0].provider, "metricool");
   assert.equal(rows[0].views, 95); assert.equal(rows[0].impressions, 80); assert.equal(rows[0].likes, 3);
   assert.ok(!JSON.stringify(rows).includes("tiktok.com"));
-  assert.deepEqual(parseTikTokPostRows("garbage", "1", "d"), []);
+  assert.deepEqual(parseMetricoolTikTokPosts("garbage"), []);
+});
+
+test("an alternate provider can be injected via SOCIAL_ANALYTICS_PROVIDER", async () => {
+  let recorded: SocialSnapshot[] = [];
+  const inHouse: SocialAnalyticsProvider = {
+    name: "inhouse", isConfigured: () => true,
+    getPostAnalytics: async ({ accountId }) => [{ provider: "inhouse", postId: accountId, videoId: accountId, url: `https://x/video/${accountId}`, publishedAt: "", views: 5, likes: 1, comments: 0, shares: 0 }],
+  };
+  const result = await syncMarketingSocialMetrics({ env: { SOCIAL_ANALYTICS_PROVIDER: "inhouse" }, providers: { inhouse: inHouse }, now, record: (items) => { recorded = items; return items.length; }, learn: async () => undefined, fetch: (async () => { throw new Error("no network"); }) as typeof fetch });
+  assert.equal(result.status, "completed"); assert.equal(recorded.length, 2);
+  assert.ok(recorded.every((r) => r.provider === "inhouse" && r.id.startsWith("social-analytics-inhouse-tiktok-")));
+});
+
+test("an unknown provider fails closed: records nothing, logs the reason", async () => {
+  let wrote = 0, fetched = 0; const logs: string[] = [];
+  const result = await syncMarketingSocialMetrics({ env: { ...env, SOCIAL_ANALYTICS_PROVIDER: "nope" }, now, log: (m) => logs.push(m), record: () => { wrote++; return 0; }, fetch: (async () => { fetched++; return new Response("[]"); }) as typeof fetch });
+  assert.equal(result.status, "blocked"); assert.equal(result.error, "unknown_social_analytics_provider:nope");
+  assert.equal(wrote, 0); assert.equal(fetched, 0); assert.match(logs.join("\n"), /unknown_social_analytics_provider/);
 });
 
 test("missing credentials or disabled config records nothing (fail-closed)", async () => {
@@ -24,15 +46,18 @@ test("missing credentials or disabled config records nothing (fail-closed)", asy
   assert.equal(calls, 0);
 });
 
-test("only calls the read-only analytics tool, records snapshots, then learning once", async () => {
-  const tools: string[] = []; let recorded: SocialSnapshot[] = []; const learned: string[] = [];
-  const fetch = (async (_url: unknown, init?: RequestInit) => {
-    tools.push(JSON.parse(String(init?.body)).params.name);
-    return new Response(JSON.stringify(mcp([{ TKPO03: "https://x/v/" + tools.length, TKPO07: 11 }])), { status: 200, headers: { "content-type": "application/json" } });
+test("Metricool uses the REST analytics endpoint (not an MCP tool), records snapshots, then learning once", async () => {
+  const urls: URL[] = []; let recorded: SocialSnapshot[] = []; const learned: string[] = [];
+  const fetch = (async (url: unknown, init?: RequestInit) => {
+    const u = new URL(String(url)); urls.push(u);
+    assert.equal(init?.method ?? "GET", "GET");
+    assert.equal((init?.headers as Record<string, string>)["X-Mc-Auth"], "tok-real");
+    return new Response(JSON.stringify({ data: [{ shareUrl: "https://x/video/" + urls.length, views: 11 }] }), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   const result = await syncMarketingSocialMetrics({ env, fetch, now, record: (items) => { recorded = items; return items.length; }, learn: async (k) => { learned.push(k); } });
-  assert.deepEqual([...new Set(tools)], ["getAnalyticsDataByMetrics"]);
-  assert.equal(tools.length, getMarketingSocialSyncConfig(env).blogIds.length);
+  assert.ok(urls.every((u) => u.origin === "https://app.metricool.com" && u.pathname === "/api/v2/analytics/posts/tiktok"));
+  for (const k of ["blogId", "userId", "from", "to", "timezone"]) assert.ok(urls[0].searchParams.get(k), k);
+  assert.equal(urls.length, getMarketingSocialSyncConfig(env).blogIds.length);
   assert.equal(result.status, "completed"); assert.equal(result.recorded, 2); assert.equal(recorded.length, 2);
   assert.deepEqual(learned, ["2026-11-24"]); assert.equal(result.learningRecorded, true);
 });

@@ -1,20 +1,21 @@
 import { createHash } from "node:crypto";
-import { callMetricoolMcpTool } from "./blackroom-metricool-bridge";
+import { resolveSocialAnalyticsProvider, type PostAnalytics, type SocialAnalyticsProvider } from "./social-analytics/provider";
 
 /**
- * Daily, read-only refresh of organic TikTok post metrics from Metricool into
- * the marketing-cmo `social_metrics` source. It never schedules posts, never
- * touches ads and never spends money. Only `getAnalyticsDataByMetrics` is called.
+ * Daily, read-only refresh of organic TikTok post metrics into the
+ * marketing-cmo `social_metrics` source, through the provider seam in
+ * server/social-analytics/ (SOCIAL_ANALYTICS_PROVIDER, default "metricool";
+ * Metricool uses the REST GET /api/v2/analytics/posts/tiktok). It never
+ * schedules posts, never touches ads and never spends money.
  * Missing credentials or a failed fetch record nothing (the source stays stale
  * or missing, i.e. fail-closed); it never invents rows.
  */
 const TIME_ZONE = "America/New_York";
 const DEFAULT_BLOG_IDS = ["6431685", "6431687"];
-const TIKTOK_FIELDS = ["TKPO02", "TKPO03", "TKPO07", "TKPO08", "TKPO09", "TKPO10", "TKPO11"] as const;
 const MAX_BRANDS = 5;
 const MAX_POSTS_PER_BRAND = 200;
 
-export type SocialSnapshot = { id: string; platform: "tiktok"; views: number; impressions: number; likes: number; comments: number; shares: number };
+export type SocialSnapshot = { id: string; provider: string; platform: "tiktok"; views: number; impressions: number; likes: number; comments: number; shares: number };
 export type MarketingSocialSyncResult = { status: "completed" | "partial" | "blocked"; brands: number; recorded: number; learningRecorded: boolean; error: string | null; at: string };
 type Fetcher = typeof globalThis.fetch;
 type Timer = { unref?: () => void };
@@ -25,13 +26,18 @@ export type MarketingSocialSyncDeps = {
   now?: () => Date;
   record?: (items: SocialSnapshot[], now: Date) => number | Promise<number>;
   learn?: (dateKey: string) => Promise<unknown>;
+  /** Inject a provider directly (tests / in-house hub) or a registry. */
+  provider?: SocialAnalyticsProvider;
+  providers?: Readonly<Record<string, SocialAnalyticsProvider>>;
+  log?: (message: string) => void;
 };
 
 const real = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0 && !/^(replace|paste|your-|<)/i.test(v.trim());
 const int = (v: string | undefined, d: number, min: number, max: number) => { const n = Number.parseInt(v || "", 10); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
 
 export function getMarketingSocialSyncConfig(env: NodeJS.ProcessEnv = process.env) {
-  const ids = (real(env.METRICOOL_SOCIAL_METRICS_BLOG_IDS) ? env.METRICOOL_SOCIAL_METRICS_BLOG_IDS!.split(",") : DEFAULT_BLOG_IDS)
+  const configured = real(env.SOCIAL_ANALYTICS_ACCOUNT_IDS) ? env.SOCIAL_ANALYTICS_ACCOUNT_IDS : env.METRICOOL_SOCIAL_METRICS_BLOG_IDS;
+  const ids = (real(configured) ? configured.split(",") : DEFAULT_BLOG_IDS)
     .map((id) => id.trim()).filter((id) => /^\d{1,20}$/.test(id));
   return {
     enabled: env.MARKETING_SOCIAL_METRICS_SYNC_ENABLED !== "false",
@@ -44,44 +50,25 @@ export function getMarketingSocialSyncConfig(env: NodeJS.ProcessEnv = process.en
   };
 }
 
-function cell(row: Record<string, unknown>, ...keys: string[]): unknown {
-  for (const key of keys) {
-    const v = row[key];
-    if (v && typeof v === "object" && !Array.isArray(v) && "value" in v) return (v as { value: unknown }).value;
-    if (v !== undefined && v !== null) return v;
-  }
-  return undefined;
-}
 const count = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.min(100_000_000, Math.round(n)) : 0; };
 
-function rowsOf(value: unknown): Record<string, unknown>[] {
-  let parsed = value;
-  const content = value && typeof value === "object" ? (value as { content?: unknown }).content : undefined;
-  if (Array.isArray(content)) for (const item of content) {
-    const text = item && typeof item === "object" ? (item as { text?: unknown }).text : undefined;
-    if (typeof text !== "string") continue;
-    try { parsed = JSON.parse(text); break; } catch { continue; }
-  }
-  const list = Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? (parsed as { rows?: unknown }).rows : null;
-  return Array.isArray(list) ? list.filter((r): r is Record<string, unknown> => Boolean(r && typeof r === "object" && !Array.isArray(r))) : [];
-}
-
-/** Maps Metricool TikTok post rows to opaque daily snapshots. Rows without a
- * video URL are dropped (no id can be proven). URLs never leave this function. */
-export function parseTikTokPostRows(value: unknown, blogId: string, dateKey: string): SocialSnapshot[] {
+/** Maps provider-neutral posts to opaque daily snapshots. Posts without a URL
+ * or video id are dropped. URLs never leave this function. Metricool ids keep
+ * the historical `metricool-` prefix so existing persisted rows stay readable;
+ * other providers use `social-analytics-<provider>-`. */
+export function snapshotsFromPosts(posts: readonly PostAnalytics[], accountId: string, dateKey: string, providerName: string): SocialSnapshot[] {
   const out = new Map<string, SocialSnapshot>();
-  for (const row of rowsOf(value).slice(0, MAX_POSTS_PER_BRAND)) {
-    const url = cell(row, "TKPO03", "shareurl", "shareUrl", "url");
-    if (typeof url !== "string" || !url.trim()) continue;
-    const post = createHash("sha256").update(`${blogId}|${url.trim()}`).digest("hex").slice(0, 32);
-    const id = `metricool-tiktok-${post}-${dateKey}`;
+  const provider = providerName.replace(/[^a-z0-9_-]/gi, "").toLowerCase().slice(0, 40) || "unknown";
+  const prefix = provider === "metricool" ? "metricool-tiktok" : `social-analytics-${provider}-tiktok`;
+  for (const post of posts.slice(0, MAX_POSTS_PER_BRAND)) {
+    const key = (post.url || "").trim() || (post.videoId || post.postId || "").trim();
+    if (!key) continue;
+    const hash = createHash("sha256").update(`${accountId}|${key}`).digest("hex").slice(0, 32);
+    const id = `${prefix}-${hash}-${dateKey}`;
     out.set(id, {
-      id, platform: "tiktok",
-      views: count(cell(row, "TKPO07", "views")),
-      impressions: count(cell(row, "TKPO11", "reach")),
-      likes: count(cell(row, "TKPO08", "likes")),
-      comments: count(cell(row, "TKPO09", "comments")),
-      shares: count(cell(row, "TKPO10", "shares")),
+      id, provider, platform: "tiktok",
+      views: count(post.views), impressions: count(post.impressions), likes: count(post.likes),
+      comments: count(post.comments), shares: count(post.shares),
     });
   }
   return [...out.values()];
@@ -99,9 +86,13 @@ export async function syncMarketingSocialMetrics(deps: MarketingSocialSyncDeps =
   const env = deps.env || process.env, config = getMarketingSocialSyncConfig(env), now = (deps.now || (() => new Date()))();
   const base = { brands: 0, recorded: 0, learningRecorded: false, at: now.toISOString() };
   if (!config.enabled) return { ...base, status: "blocked", error: "disabled_by_configuration" };
-  if (!real(env.METRICOOL_USER_TOKEN) || !real(env.METRICOOL_USER_ID)) return { ...base, status: "blocked", error: "missing_metricool_credentials" };
-  if (!config.blogIds.length) return { ...base, status: "blocked", error: "no_metricool_brands" };
-  const token = env.METRICOOL_USER_TOKEN!, fetcher = deps.fetch || globalThis.fetch, controller = new AbortController();
+  const log = deps.log || ((m: string) => console.warn(m));
+  const resolved = deps.provider ? { provider: deps.provider, reason: null } : resolveSocialAnalyticsProvider(env, deps.providers);
+  if (!resolved.provider) { log(`[Marketing social] skipped: ${resolved.reason}`); return { ...base, status: "blocked", error: resolved.reason }; }
+  const provider = resolved.provider;
+  if (!provider.isConfigured(env)) return { ...base, status: "blocked", error: `missing_${provider.name}_credentials` };
+  if (!config.blogIds.length) return { ...base, status: "blocked", error: "no_social_analytics_accounts" };
+  const fetcher = deps.fetch || globalThis.fetch, controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs); timer.unref?.();
   const bounded: Fetcher = (input, init) => fetcher(input, { ...init, signal: controller.signal });
   const { dateKey } = zonedDateKey(now);
@@ -112,12 +103,12 @@ export async function syncMarketingSocialMetrics(deps: MarketingSocialSyncDeps =
   try {
     for (const blogId of config.blogIds) {
       try {
-        const result = await callMetricoolMcpTool(bounded, token, "getAnalyticsDataByMetrics", { brandId: blogId, metrics: [...TIKTOK_FIELDS], from, to });
-        items.push(...parseTikTokPostRows(result, blogId, dateKey)); brands += 1;
+        const posts = await provider.getPostAnalytics({ accountId: blogId, platform: "tiktok", from, to, env, fetch: bounded });
+        items.push(...snapshotsFromPosts(Array.isArray(posts) ? posts : [], blogId, dateKey, provider.name)); brands += 1;
       } catch (error) { errors.push(safe(error)); }
     }
   } finally { clearTimeout(timer); }
-  const record = deps.record || (async (rows: SocialSnapshot[], at: Date) => (await import("./dropshipping-ceo")).recordMetricoolSocialSnapshots(rows, at));
+  const record = deps.record || (async (rows: SocialSnapshot[], at: Date) => (await import("./dropshipping-ceo")).recordSocialAnalyticsSnapshots(rows, at));
   const recorded = items.length ? await record(items, now) : 0;
   let learningRecorded = false;
   // Learning only follows new evidence: no fresh metrics means no new run.
