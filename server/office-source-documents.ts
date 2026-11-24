@@ -60,7 +60,7 @@ export const rawSocial=z.array(z.object({id,createdAt:stamp,campaignId:z.string(
 export const rawClipReport=z.object({id,userId:id,createdAt:stamp,publishMode,plannedClips:z.array(z.unknown()).max(10000)});
 export const cycleTotals=z.object({posts:num.int(),dailyTargetPosts:num.int(),weeklyTargetClips:num.int(),backlogPosts:num.int(),gapToDailyTarget:num.int(),scheduled:num.int(),readyForManual:num.int(),blocked:num.int(),draftReady:num.int(),rightsReview:num.int(),needsSource:num.int()});
 export const rawClipCycle=z.object({id,userId:id,createdAt:stamp,automation:z.object({id,createdAt:stamp,status:cycleState,totals:cycleTotals,posts:z.array(z.unknown()).max(10000)})});
-export const rawClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id,accountId:id,clipId:id,publishedAt:stamp.nullable(),views:num,likes:num,comments:num,shares:num,saves:num})).max(10000)});
+export const rawClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id,accountId:id,clipId:id,publishedAt:stamp.nullable(),views:num,likes:num.optional(),comments:num.optional(),shares:num.optional(),saves:num.optional()})).max(10000)});
 
 /** Stored projections: strict, so nothing beyond the audited fields survives.
  * Producer ids (which may embed URLs, names or emails) are replaced by the
@@ -71,7 +71,7 @@ const storedNews=z.object({version:z.literal(1),updatedAt:stamp,lastRunAt:stamp.
 const storedProducts=z.array(z.object({id:rowId,updatedAt:stamp,status:productState}).strict()).max(10000);
 const storedSuppliers=z.array(z.object({id:rowId,updatedAt:stamp,status:supplierState,score:num}).strict()).max(10000);
 const storedSocial=z.array(z.object({id:rowId,createdAt:stamp,impressions:num,views:num,orders:num,revenueUsd:num,spendUsd:num}).strict()).max(10000);
-const storedClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id:rowId,views:num,likes:num,comments:num,shares:num,saves:num}).strict()).max(10000)}).strict();
+const storedClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id:rowId,views:num,likes:num.optional(),comments:num.optional(),shares:num.optional(),saves:num.optional()}).strict()).max(10000)}).strict();
 const storedDaily=z.object({type:z.literal("daily"),id,createdAt:stamp,publishMode,plannedClips:num.int().max(10000)}).strict();
 const storedCycle=z.object({type:z.literal("cycle"),id,createdAt:stamp,status:cycleState,totals:cycleTotals.strict()}).strict();
 const storedReport=z.discriminatedUnion("type",[storedDaily,storedCycle]);

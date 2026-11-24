@@ -9,7 +9,7 @@ export const CLIPPERS_OFFICE_INGEST_PATH="/api/clippers/office-ingest";
 const stamp=z.string().datetime({offset:true}),num=z.number().finite().nonnegative();
 const bridgePayload=z.object({
  version:z.literal(1),
- metrics:z.object({generatedAt:stamp.nullable(),records:z.array(z.object({provider:z.string().regex(/^[a-z0-9_-]{1,40}$/),postId:z.string().min(1).max(400),accountId:z.string().min(1).max(500),clipId:z.string().min(1).max(500),publishedAt:stamp.nullable(),views:num,likes:num,comments:num,shares:num,saves:num}).strict()).max(2000)}).strict(),
+ metrics:z.object({generatedAt:stamp.nullable(),records:z.array(z.object({provider:z.string().regex(/^[a-z0-9_-]{1,40}$/),postId:z.string().min(1).max(400),accountId:z.string().min(1).max(500),clipId:z.string().min(1).max(500),publishedAt:stamp.nullable(),views:num,likes:num.optional(),comments:num.optional(),shares:num.optional(),saves:num.optional()}).strict()).max(2000)}).strict(),
  cycle:z.object({createdAt:stamp,status:z.enum(["blocked","partial","ready"]),totals:cycleTotals.strict()}).strict(),
 }).strict();
 

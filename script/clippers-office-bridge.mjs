@@ -54,7 +54,7 @@ export function bridgeConfig(env = process.env) {
  *   posts:  { provider, postId, accountId, clipId, publishedAt, views, likes, comments, shares, saves }
  *   ledger: { status: "published"|"scheduled"|"blocked"|"pending", publishedAt }
  *   queueLength
- * To switch providers, add an adapter and select it with CLIPPERS_PUBLISHING_PROVIDER.
+ * To switch providers, add an adapter and select it with SOCIAL_ANALYTICS_PROVIDER.
  */
 export const OFFICE_BRIDGE_ADAPTERS = {
   async metricool(workspaceRoot) {
@@ -76,11 +76,21 @@ export const OFFICE_BRIDGE_ADAPTERS = {
   },
 };
 
+function secondaryCounters(post) {
+  const out = {};
+  for (const key of ["likes", "comments", "shares", "saves"]) {
+    const value = count(post[key]);
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
 /** Builds the provider-neutral payload from the selected adapter's rows. */
 export async function buildClipperOfficeBridgePayload({ workspaceRoot, workerReport, env = process.env, now = new Date(), adapters = OFFICE_BRIDGE_ADAPTERS }) {
-  const providerName = clean(env.CLIPPERS_PUBLISHING_PROVIDER) || "metricool";
-  const adapter = adapters[providerName];
-  if (!adapter) throw new Error("office_bridge_unknown_provider");
+  // Same selector as script|server/social-analytics/provider: SOCIAL_ANALYTICS_PROVIDER.
+  const providerName = (clean(env.SOCIAL_ANALYTICS_PROVIDER) || "metricool").toLowerCase();
+  const adapter = Object.prototype.hasOwnProperty.call(adapters, providerName) ? adapters[providerName] : null;
+  if (typeof adapter !== "function") throw new Error("office_bridge_unknown_provider");
   const source = await adapter(workspaceRoot);
   const records = [];
   const seen = new Set();
@@ -96,12 +106,9 @@ export async function buildClipperOfficeBridgePayload({ workspaceRoot, workerRep
       clipId: (clean(post.clipId) || postId).slice(0, 500),
       publishedAt: isoOrNull(post.publishedAt),
       views,
-      // Secondary counters the provider did not return are sent as 0 because the
-      // office schema requires numbers; views (the audited signal) is never filled in.
-      likes: count(post.likes) ?? 0,
-      comments: count(post.comments) ?? 0,
-      shares: count(post.shares) ?? 0,
-      saves: count(post.saves) ?? 0,
+      // Secondary counters the provider did not return are omitted (never filled
+      // with 0); the office schema treats them as optional.
+      ...secondaryCounters(post),
     });
   }
   const statuses = source.ledger.map((row) => row.status);
