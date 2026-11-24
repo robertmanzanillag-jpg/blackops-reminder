@@ -9,7 +9,7 @@ export const CLIPPERS_OFFICE_INGEST_PATH="/api/clippers/office-ingest";
 const stamp=z.string().datetime({offset:true}),num=z.number().finite().nonnegative();
 const bridgePayload=z.object({
  version:z.literal(1),
- metrics:z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id:z.string().min(1).max(500),accountId:z.string().min(1).max(500),clipId:z.string().min(1).max(500),publishedAt:stamp.nullable(),views:num,likes:num,comments:num,shares:num,saves:num}).strict()).max(2000)}).strict(),
+ metrics:z.object({generatedAt:stamp.nullable(),records:z.array(z.object({provider:z.string().regex(/^[a-z0-9_-]{1,40}$/),postId:z.string().min(1).max(400),accountId:z.string().min(1).max(500),clipId:z.string().min(1).max(500),publishedAt:stamp.nullable(),views:num,likes:num,comments:num,shares:num,saves:num}).strict()).max(2000)}).strict(),
  cycle:z.object({createdAt:stamp,status:z.enum(["blocked","partial","ready"]),totals:cycleTotals.strict()}).strict(),
 }).strict();
 
@@ -33,7 +33,9 @@ export type ClippersOfficeIngestResult={status:number;body:{ok:boolean;error?:st
 export function ingestClippersOfficeBridge(body:unknown,options:{owner:string;queue:Queue}):ClippersOfficeIngestResult {
  const parsed=bridgePayload.safeParse(body);
  if(!parsed.success)return {status:422,body:{ok:false,error:"INVALID_PAYLOAD"}};
- const {metrics,cycle}=parsed.data;
+ const {cycle}=parsed.data;
+ // Provider-neutral records -> the existing clip_metrics producer shape.
+ const metrics={generatedAt:parsed.data.metrics.generatedAt,records:parsed.data.metrics.records.map(({provider,postId,...rest})=>({id:`${provider}:${postId}`,...rest}))};
  if(cycle.totals.posts>10000)return {status:422,body:{ok:false,error:"INVALID_PAYLOAD"}};
  const createdAt=new Date(cycle.createdAt).toISOString(),key=cycleReportKey(createdAt);
  const id=`mac-free-local-worker-${createdAt}`;

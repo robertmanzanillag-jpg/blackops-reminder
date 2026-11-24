@@ -39,6 +39,9 @@ test("only proof-backed rows with explicit views are sent; no URLs leave the Mac
   const payload = await buildClipperOfficeBridgePayload({ workspaceRoot: root, workerReport: { status: "completed", finishedAt: NOW.toISOString() }, env: {}, now: NOW });
   assert.equal(payload.metrics.records.length, 1);
   assert.equal(payload.metrics.records[0].views, 95);
+  assert.equal(payload.metrics.records[0].provider, "metricool");
+  assert.equal(payload.metrics.records[0].postId, "m1");
+  assert.equal("metricoolId" in payload.metrics.records[0], false);
   assert.doesNotMatch(JSON.stringify(payload), /tiktok\.com/);
   assert.equal(payload.cycle.status, "ready");
   assert.equal(payload.cycle.totals.posts, 1);
@@ -61,4 +64,12 @@ test("posts with bearer token and reports http failures without throwing", async
   assert.equal(bad.reason, "http_401");
   const down = await sendClipperOfficeBridge({ workspaceRoot: root, workerReport: {}, env, now: NOW, log: () => {}, fetchImpl: async () => { throw new Error("x"); } });
   assert.equal(down.reason, "network_error");
+});
+
+test("payload is provider-neutral: a non-Metricool adapter plugs in without code changes", async () => {
+  const adapters = { inhouse: async () => ({ posts: [{ provider: "inhouse", postId: "p9", accountId: "@b", views: 7 }], ledger: [{ status: "published", publishedAt: "" }], queueLength: 0 }) };
+  const payload = await buildClipperOfficeBridgePayload({ workspaceRoot: "/none", workerReport: { status: "partial" }, env: { CLIPPERS_PUBLISHING_PROVIDER: "inhouse" }, now: NOW, adapters });
+  assert.deepEqual(payload.metrics.records.map((r) => [r.provider, r.postId, r.views]), [["inhouse", "p9", 7]]);
+  assert.equal(payload.cycle.status, "partial");
+  await assert.rejects(buildClipperOfficeBridgePayload({ workspaceRoot: "/none", env: { CLIPPERS_PUBLISHING_PROVIDER: "nope" }, now: NOW, adapters }));
 });

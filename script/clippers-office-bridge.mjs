@@ -48,58 +48,79 @@ export function bridgeConfig(env = process.env) {
   return { ok: true, url: parsed.toString(), token };
 }
 
-/** Builds the payload from files the Mac pipeline already wrote. */
-export async function buildClipperOfficeBridgePayload({ workspaceRoot, workerReport, env = process.env, now = new Date() }) {
-  const metricsRows = await readJsonArray(path.join(workspaceRoot, "research", "paid-streamer-campaign-metrics.json"));
-  const ledger = await readJsonArray(path.join(workspaceRoot, "reports", "metricool-autopilot-ledger.json"));
-  const queue = await readJsonArray(path.join(workspaceRoot, "reports", "metricool-autopilot-queue.json"));
+/**
+ * Provider adapters. Each one is the ONLY place that knows a publishing
+ * provider's local files and field names; it returns provider-neutral rows:
+ *   posts:  { provider, postId, accountId, clipId, publishedAt, views, likes, comments, shares, saves }
+ *   ledger: { status: "published"|"scheduled"|"blocked"|"pending", publishedAt }
+ *   queueLength
+ * To switch providers, add an adapter and select it with CLIPPERS_PUBLISHING_PROVIDER.
+ */
+export const OFFICE_BRIDGE_ADAPTERS = {
+  async metricool(workspaceRoot) {
+    const metricsRows = await readJsonArray(path.join(workspaceRoot, "research", "paid-streamer-campaign-metrics.json"));
+    const ledgerRows = await readJsonArray(path.join(workspaceRoot, "reports", "metricool-autopilot-ledger.json"));
+    const queue = await readJsonArray(path.join(workspaceRoot, "reports", "metricool-autopilot-queue.json"));
+    const posts = [];
+    for (const row of metricsRows) {
+      if (!row || clean(row.finalStatus) !== "published" || !clean(row.publishedPostUrl) || row.metricEvidenceVerified !== true) continue;
+      const views = count(row.views);
+      const postId = clean(row.metricoolId) || clean(row.itemId);
+      if (views === undefined || !postId) continue;
+      posts.push({ provider: "metricool", postId, accountId: clean(row.account), clipId: clean(row.itemId) || clean(row.draftFile),
+        publishedAt: row.publishedAt, views, likes: count(row.likes), comments: count(row.comments), shares: count(row.shares), saves: count(row.saves) });
+    }
+    const map = { published: "published", scheduled: "scheduled", verification_pending: "scheduled", blocked: "blocked", failed: "blocked" };
+    const ledger = ledgerRows.map((row) => ({ status: map[clean(row?.status).toLowerCase()] || "pending", publishedAt: clean(row?.publishedAt) }));
+    return { posts, ledger, queueLength: queue.length };
+  },
+};
 
+/** Builds the provider-neutral payload from the selected adapter's rows. */
+export async function buildClipperOfficeBridgePayload({ workspaceRoot, workerReport, env = process.env, now = new Date(), adapters = OFFICE_BRIDGE_ADAPTERS }) {
+  const providerName = clean(env.CLIPPERS_PUBLISHING_PROVIDER) || "metricool";
+  const adapter = adapters[providerName];
+  if (!adapter) throw new Error("office_bridge_unknown_provider");
+  const source = await adapter(workspaceRoot);
   const records = [];
   const seen = new Set();
-  for (const row of metricsRows) {
+  for (const post of source.posts) {
     if (records.length >= OFFICE_BRIDGE_MAX_RECORDS) break;
-    if (!row || clean(row.finalStatus) !== "published" || !clean(row.publishedPostUrl)) continue;
-    if (row.metricEvidenceVerified !== true) continue;
-    const views = count(row.views);
-    if (views === undefined) continue;
-    const id = clean(row.metricoolId) || clean(row.itemId) || clean(row.publishedPostUrl);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
+    const provider = clean(post.provider), postId = clean(post.postId), views = count(post.views);
+    if (!provider || !postId || views === undefined || seen.has(`${provider}:${postId}`)) continue;
+    seen.add(`${provider}:${postId}`);
     records.push({
-      id: id.slice(0, 500),
-      accountId: (clean(row.account) || "unknown").slice(0, 500),
-      clipId: (clean(row.itemId) || clean(row.draftFile) || id).slice(0, 500),
-      publishedAt: isoOrNull(row.publishedAt),
+      provider: provider.slice(0, 40),
+      postId: postId.slice(0, 400),
+      accountId: (clean(post.accountId) || "unknown").slice(0, 500),
+      clipId: (clean(post.clipId) || postId).slice(0, 500),
+      publishedAt: isoOrNull(post.publishedAt),
       views,
-      // Secondary counters not returned by the source are sent as 0 because the
+      // Secondary counters the provider did not return are sent as 0 because the
       // office schema requires numbers; views (the audited signal) is never filled in.
-      likes: count(row.likes) ?? 0,
-      comments: count(row.comments) ?? 0,
-      shares: count(row.shares) ?? 0,
-      saves: count(row.saves) ?? 0,
+      likes: count(post.likes) ?? 0,
+      comments: count(post.comments) ?? 0,
+      shares: count(post.shares) ?? 0,
+      saves: count(post.saves) ?? 0,
     });
   }
-
-  const statuses = ledger.map((row) => clean(row?.status).toLowerCase());
+  const statuses = source.ledger.map((row) => row.status);
   const dailyTarget = Math.max(0, Math.floor(Number(env.CLIPPERS_TARGET_DAILY_CLIPS) || 5));
   const today = now.toISOString().slice(0, 10);
-  const publishedToday = ledger.filter((row) => clean(row?.status).toLowerCase() === "published"
-    && clean(row?.publishedAt).slice(0, 10) === today).length;
-  const posts = statuses.filter((s) => s === "published").length;
+  const publishedToday = source.ledger.filter((row) => row.status === "published" && clean(row.publishedAt).slice(0, 10) === today).length;
   const workerStatus = clean(workerReport?.status);
-  const createdAt = isoOrNull(workerReport?.finishedAt) || now.toISOString();
   const cycle = {
-    createdAt,
+    createdAt: isoOrNull(workerReport?.finishedAt) || now.toISOString(),
     status: workerStatus === "completed" ? "ready" : workerStatus === "partial" ? "partial" : "blocked",
     totals: {
-      posts,
+      posts: statuses.filter((s) => s === "published").length,
       dailyTargetPosts: dailyTarget,
       weeklyTargetClips: dailyTarget * 7,
-      backlogPosts: queue.length,
+      backlogPosts: source.queueLength,
       gapToDailyTarget: Math.max(0, dailyTarget - publishedToday),
-      scheduled: statuses.filter((s) => s === "scheduled" || s === "verification_pending").length,
+      scheduled: statuses.filter((s) => s === "scheduled").length,
       readyForManual: 0,
-      blocked: statuses.filter((s) => s === "blocked" || s === "failed").length,
+      blocked: statuses.filter((s) => s === "blocked").length,
       draftReady: Math.max(0, Math.floor(Number(workerReport?.renderingReport?.summary?.rendered) || 0)),
       rightsReview: 0,
       needsSource: 0,
@@ -136,7 +157,7 @@ export async function sendClipperOfficeBridge({ workspaceRoot, workerReport, env
     }
     return { status: "sent", records: payload.metrics.records.length, cycleStatus: payload.cycle.status };
   } catch (error) {
-    const reason = error?.name === "AbortError" ? "timeout" : "network_error";
+    const reason = error?.name === "AbortError" ? "timeout" : String(error?.message || "").startsWith("office_bridge_") ? error.message : "network_error";
     log(`[clippers-office-bridge] failed: ${reason}`);
     return { status: "failed", reason };
   }
