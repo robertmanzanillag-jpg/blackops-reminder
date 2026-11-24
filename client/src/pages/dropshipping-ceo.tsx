@@ -421,7 +421,7 @@ type DropshippingProductScoutCandidate = {
     confidence: "low" | "medium" | "high";
     evidenceScore: number;
     evidence: Array<{
-      source: "tiktok_creative_center" | "tiktok_search" | "aliexpress_search" | "google_trends" | "shopify_trends" | "manual";
+      source: "tiktok_shop" | "tiktok_creative_center" | "tiktok_search" | "aliexpress_search" | "google_trends" | "shopify_trends" | "manual";
       label: string;
       url: string;
       status: "seed_reference" | "needs_review" | "verified";
