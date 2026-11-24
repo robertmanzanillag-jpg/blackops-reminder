@@ -4837,6 +4837,44 @@ export async function publishDropshippingSocialPost(
   }
 }
 
+export type MetricoolSocialSnapshot = {
+  /** Stable, opaque id for one post observation (no URLs or captions). */
+  id: string;
+  platform: "tiktok";
+  views: number;
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+};
+
+const METRICOOL_SNAPSHOT_PREFIX = "metricool-";
+const METRICOOL_SNAPSHOT_CAP = 2000;
+
+/** Read-only Metricool organic snapshots. Orders, revenue and spend are not
+ * attributed by Metricool organic analytics, so they are recorded as 0 and the
+ * note says so; office audits never sum campaign metrics into revenue. Rows with
+ * an existing id are replaced (idempotent re-sync). Returns rows written. */
+export function recordMetricoolSocialSnapshots(items: MetricoolSocialSnapshot[], now: Date = new Date()): number {
+  loadAll();
+  const valid = items.filter((item) => item.id.startsWith(METRICOOL_SNAPSHOT_PREFIX) && item.id.length <= 200).slice(0, 1000);
+  if (!valid.length) return 0;
+  const createdAt = now.toISOString();
+  const ids = new Set(valid.map((item) => item.id));
+  const kept = socialMetrics.filter((metric) => !ids.has(metric.id));
+  const fresh: DropshippingSocialMetric[] = valid.map((item) => {
+    const parsed = dropshippingSocialMetricsSchema.parse({ ...item, postId: item.id, notes: "metricool_organic_read_only; orders/revenue/spend not attributed" });
+    const visible = parsed.views || parsed.impressions;
+    const engagementRatePercent = visible > 0 ? Number((((parsed.likes + parsed.comments + parsed.shares) / visible) * 100).toFixed(2)) : 0;
+    return { ...parsed, id: item.id, createdAt, platform: "tiktok", campaignId: "", productId: "", post: null, calculated: { engagementRatePercent, clickRatePercent: 0, conversionRatePercent: 0, profitUsd: 0, roas: 0 } };
+  });
+  let metricoolSeen = 0;
+  const bounded = [...fresh, ...kept].filter((metric) => !metric.id.startsWith(METRICOOL_SNAPSHOT_PREFIX) || ++metricoolSeen <= METRICOOL_SNAPSHOT_CAP);
+  socialMetrics.splice(0, socialMetrics.length, ...bounded);
+  persistSocialMetrics();
+  return fresh.length;
+}
+
 export function recordDropshippingSocialMetrics(input: DropshippingSocialMetricsInput) {
   loadAll();
   const parsed = dropshippingSocialMetricsSchema.parse(input);
