@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   creditLedgerOwner, currentMonth, factoryTableNames, ownerKeyFor, parseMigrateArgs, parseStatusArgs, safeErrorCode,
-  shapeCreditSummary, shapeJobCounts, shapeProjects,
+  shapeCreditSummary, shapeJobCounts, shapeProjects, shapeStoppedJobs,
 } from "../script/software-factory-db-cli";
 
 test("derives every factory table from the prepared schema", () => {
@@ -68,4 +68,18 @@ test("credit summary is shaped without evidence ids or reservation keys", () => 
   assert.deepEqual(shapeCreditSummary(JSON.stringify(state), "other"), { provisioned: true, scopeMismatch: true });
   const empty = shapeCreditSummary(JSON.stringify({ version: 1, grant: null, reservations: [], lastObservedAt: null }), "s1");
   assert.equal(empty.provisioned && "initialized" in empty && empty.initialized, false);
+});
+
+test("stopped jobs expose only kind, status, reason code and self-heal origin", () => {
+  const rows = shapeStoppedJobs([
+    { status: "failed", kind: "build", reason: "FACTORY_AUTO_SELECTION_TEST_PATH_REQUIRED", order_id: "ord-sh-abc", created_at: "2026-11-20T10:00:00Z", completed_at: null },
+    { status: "blocked", kind: "discover", reason: "secret token sk-123 leaked", order_id: "ord-1", created_at: new Date("2026-11-21T10:00:00Z"), completed_at: "2026-11-21T10:05:00Z" },
+    { status: "completed", kind: "build", reason: "X", order_id: null, created_at: "2026-11-21T10:00:00Z", completed_at: null },
+    { status: "failed", kind: "DROP TABLE", reason: null, order_id: null, created_at: "bad", completed_at: undefined },
+  ]);
+  assert.deepEqual(rows, [
+    { status: "failed", kind: "build", reason: "FACTORY_AUTO_SELECTION_TEST_PATH_REQUIRED", selfHealOrder: true, createdAt: "2026-11-20T10:00:00.000Z", completedAt: null },
+    { status: "blocked", kind: "discover", reason: "UNSPECIFIED", selfHealOrder: false, createdAt: "2026-11-21T10:00:00.000Z", completedAt: "2026-11-21T10:05:00.000Z" },
+    { status: "failed", kind: "unknown", reason: "UNSPECIFIED", selfHealOrder: false, createdAt: null, completedAt: null },
+  ]);
 });

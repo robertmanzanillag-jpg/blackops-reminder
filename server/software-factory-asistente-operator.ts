@@ -87,6 +87,28 @@ export function countAutoAdmissionsToday(jobs: readonly FactoryJob[], now: Date,
 }
 /** Admission-side variant: an unprovable count defers admission (no hold). */
 function countDraftPullRequestsTodaySafe(jobs: readonly FactoryJob[], now: Date, ownerKey: string) { try { return countDraftPullRequestsToday(jobs, now, ownerKey); } catch { return Number.POSITIVE_INFINITY; } }
+/**
+ * The ONLY operator-config fields the workflow environment may change:
+ * - FACTORY_AUTO_ADMIT_SYSTEM_ORDERS=true|false sets autoAdmit.systemOrders, only when
+ *   autoAdmit already exists in the private config.
+ * - FACTORY_DRAFT_PRS_PER_DAY=<1..FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY> (owner request,
+ *   so the daily draft-PR cap can change without rewriting the private JSON) sets
+ *   maxDraftPullRequestsPerDay and, when present, autoAdmit.maxPerDay. The code-level
+ *   maximum still applies and the full schema validation runs after this override.
+ * Neither ever enables automatic admission or changes paths, owner, budgets or any other
+ * field. Any other value (or unset) leaves the private config unchanged.
+ */
+export function applyFactoryOperatorEnvOverride<T extends { maxDraftPullRequestsPerDay?: number; autoAdmit?: { systemOrders?: boolean; maxPerDay?: number } }>(config: T, env: Record<string, string | undefined>): T {
+    let next = config;
+    const raw = env.FACTORY_AUTO_ADMIT_SYSTEM_ORDERS?.trim();
+    if ((raw === "true" || raw === "false") && next.autoAdmit) next = { ...next, autoAdmit: { ...next.autoAdmit, systemOrders: raw === "true" } };
+    const perDayRaw = env.FACTORY_DRAFT_PRS_PER_DAY?.trim();
+    const perDay = perDayRaw && /^\d{1,2}$/.test(perDayRaw) ? Number(perDayRaw) : NaN;
+    if (Number.isSafeInteger(perDay) && perDay >= 1 && perDay <= FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY) {
+        next = { ...next, maxDraftPullRequestsPerDay: perDay, ...(next.autoAdmit ? { autoAdmit: { ...next.autoAdmit, ...(next.autoAdmit.maxPerDay !== undefined ? { maxPerDay: perDay } : {}) } } : {}) };
+    }
+    return next;
+}
 export type OperatorUiReader = (input: {
     projectId: string;
     baseSha: string;
@@ -267,7 +289,7 @@ async function privateFile(value: string | undefined, max: number) {
 }
 async function installed(store: Store) {
     const env = { ...process.env }, now = () => new Date();
-    const config = validateAsistenteOperatorConfig(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
+    const config = validateAsistenteOperatorConfig(applyFactoryOperatorEnvOverride(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)), env));
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
     const credits = await loadSharedCreditRuntime(env, now);
