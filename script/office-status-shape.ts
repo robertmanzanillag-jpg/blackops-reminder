@@ -6,6 +6,7 @@ import { parseRoleWork } from "../server/office-role-work";
 import { parseCapabilityTraining } from "../server/office-capability-training";
 import { WEB_SOURCE_ROLES } from "../server/office-web-role-sources";
 import { OFFICE_SOURCE_DOCUMENT_KINDS } from "../server/office-source-documents";
+import { observeRoleAudits, SELF_HEAL_ALLOWLIST, SELF_HEAL_REPOSITORY, SELF_HEAL_DATA_ABSENCE_CODES } from "../server/office-self-heal";
 import { creditPacerView, parseCreditPacerState, taskEfficiency } from "../server/credit-pacer";
 
 /** Daily credit pacer: static numbers, the mode enum and per-task-type average cost only. */
@@ -148,6 +149,7 @@ export function shapeCouncil(raw: string | null, owner: string, now: number) {
     tokens: shapeTokens(execution?.tokens, now),
     creditPacer: shapeCreditPacer(execution?.creditPacer, now),
     selfHeal: shapeSelfHeal(execution?.selfHeal),
+    selfHealCandidates: shapeSelfHealCandidates(execution?.roleWork),
     companyOrders: shapeCompanyOrders(state.company, now),
   };
 }
@@ -192,4 +194,35 @@ export function parseOwner(env: Record<string, string | undefined>): string {
   if (!owner) throw new Error("DEFAULT_USER_ID_REQUIRED");
   if (owner.length > 500) throw new Error("OWNER_INVALID");
   return owner;
+}
+
+
+/** Why allow-listed findings do or do not become self-heal orders (counts per filter step only). */
+export function shapeSelfHealCandidates(roleWork: unknown) {
+  try {
+    const audits = observeRoleAudits(roleWork);
+    const latest = new Map<string, (typeof audits)[number]>();
+    for (const a of audits) latest.set(a.role, a);
+    const rows: Array<Record<string, unknown>> = [];
+    for (const [role, audit] of latest) {
+      const byCode = new Map<string, { total: number; noRecordId: number; notAllowed: number; noRecord: number; wrongRepo: number; notDraft: number; eligible: number }>();
+      for (const f of audit.findings) {
+        const c = byCode.get(f.code) ?? { total: 0, noRecordId: 0, notAllowed: 0, noRecord: 0, wrongRepo: 0, notDraft: 0, eligible: 0 };
+        c.total++;
+        const allowed = !!(SELF_HEAL_ALLOWLIST as Record<string, unknown>)[`${role}:${f.code}`] && !SELF_HEAL_DATA_ABSENCE_CODES.has(f.code);
+        const record = f.recordId ? audit.records[f.recordId] : undefined;
+        if (!allowed) c.notAllowed++;
+        else if (!f.recordId) c.noRecordId++;
+        else if (!record) c.noRecord++;
+        else if (record.repo !== SELF_HEAL_REPOSITORY) c.wrongRepo++;
+        else if (f.code === "PR_FAILING_CHECKS" && (record.draft !== true || !record.number)) c.notDraft++;
+        else c.eligible++;
+        byCode.set(f.code, c);
+      }
+      if ([...byCode.keys()].some(k => (SELF_HEAL_ALLOWLIST as Record<string, unknown>)[`${role}:${k}`]))
+        rows.push({ role: ROLE_RE.test(role) ? role : "UNSPECIFIED", status: enumCode(audit.status.toUpperCase()), completedAt: isoOrNull(audit.completedAt), records: Object.keys(audit.records).length,
+          codes: Object.fromEntries([...byCode].filter(([k]) => CODE_RE.test(k)).map(([k, v]) => [k, v])) });
+    }
+    return { audits: audits.length, roles: rows };
+  } catch { return { error: "UNREADABLE" }; }
 }
