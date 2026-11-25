@@ -59,7 +59,8 @@ export function unclassifiedShape(error: unknown): { errorClass?: string; frame?
     if (!(error instanceof Error)) return error === undefined ? {} : { errorClass: `CLASS_${error === null ? "null" : typeof error}` };
     const name = error.constructor?.name;
     out.errorClass = typeof name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(name) ? `CLASS_${name}` : "CLASS_UNKNOWN";
-    const stack = Object.getOwnPropertyDescriptor(error, "stack")?.value;
+    // V8 may expose `stack` as an accessor; read it (inside try) but use only frames.
+    const stack: unknown = (error as { stack?: unknown }).stack;
     if (typeof stack === "string") {
       for (const line of stack.split("\n").slice(0, 64)) {
         if (!/^\s+at\s/.test(line)) continue;
