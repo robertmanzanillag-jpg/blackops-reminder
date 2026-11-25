@@ -51,7 +51,7 @@ export async function runSoftwareFactoryOnce(worker: ReturnType<typeof createSof
       if (maintenance) await maintenance;
       if (failed) return outcome("quarantined");
       if (options.signal.aborted) return outcome("aborted");
-      if (result.kind === "quarantined") { fail("tick-quarantined", undefined); return outcome("quarantined"); }
+      if (result.kind === "quarantined") { let cause: unknown; try { cause = (worker as { lastFailure?: () => unknown }).lastFailure?.(); } catch { cause = undefined; } fail("tick-quarantined", cause); return outcome("quarantined"); }
       if (expired) return outcome("deadline");
       if (result.kind === "idle") return outcome("idle");
       if (result.kind === "retry") return outcome("busy");

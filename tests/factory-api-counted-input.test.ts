@@ -59,7 +59,9 @@ test('paid usage differing from the exact count retains escrow and prevents paid
 test('a receipt cannot outlive a slow monetary admission before paid dispatch',async()=>{
  const f=fixture(120001),p=provider(f);await p.run();
  assert.deepEqual(p.calls(),{counted:1,paid:0});
- assert.equal(f.state.reservations[0].status,'unknown');
+ // Paid request provably never sent: the API hold is released at $0, not left unknown.
+ assert.equal(f.state.reservations[0].status,'settled');
+ assert.equal(f.state.reservations[0].actualMicroUsd,0);
 });
 
 

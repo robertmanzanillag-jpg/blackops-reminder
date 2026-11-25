@@ -148,6 +148,10 @@ export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:i
  options={...options};
  if(guardedFetches.has(transport))return transport;
  const guarded=(async(url,init)=>{
+  // Every failure before the provider request leaves the process must be a
+  // FactoryApiBudgetError with dispatched=false, so callers can release their
+  // credit holds instead of marking them unknown (raw ZodError/TypeError did not).
+  try{
   if(options.requireParent&&!currentFactoryApiParent())throw new FactoryApiBudgetError("FACTORY_API_PARENT_CONTEXT_UNAVAILABLE");
   let method:unknown,encoded:unknown,signal:AbortSignal|undefined,headers:Headers;
   try{method=init?.method;encoded=init?.body;signal=init?.signal??undefined;headers=new Headers(init?.headers);}catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");}
@@ -170,6 +174,12 @@ export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:i
     return {response,body:JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)))};
    },usage:result=>usage('responses.create',result.body)});
   return output.response;
+  }catch(error){
+   // Inside invoke every post-reservation failure is already a FactoryApiBudgetError;
+   // anything else was thrown before any provider request could be dispatched.
+   if(error instanceof FactoryApiBudgetError)throw error;
+   throw new FactoryApiBudgetError("FACTORY_API_PREFLIGHT_UNAVAILABLE",false);
+  }
  }) as typeof fetch;
  guardedFetches.add(guarded);return guarded;
 }

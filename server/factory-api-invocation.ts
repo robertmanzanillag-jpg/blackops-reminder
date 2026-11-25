@@ -80,6 +80,13 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    if(settled?.settled===false)throw Error('overrun');
    return result;
   }catch{
+   // Provably undispatched (failed before input.call): release the hold at $0
+   // so the API ledger never reports FACTORY_API_UNKNOWN_HOLD for unsent work.
+   if(!dispatched){
+    const released=await options.store.settleApi(owner,key,{actualMicroUsd:0,evidenceSha256:apiEvidenceHash({requestSha256,notDispatched:true})}).then(r=>r?.settled!==false,()=>false);
+    if(!released)await options.store.unknownApi(owner,key).catch(()=>undefined);
+    throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',false);
+   }
    await options.store.unknownApi(owner,key).catch(()=>undefined);
    throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',dispatched);
   }

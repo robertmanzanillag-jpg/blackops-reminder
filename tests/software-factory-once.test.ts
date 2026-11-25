@@ -56,7 +56,9 @@ test("quarantine reports the failing stage and only a safe code-owned error code
  assert.equal((await runSoftwareFactoryOnce(b.worker,{...b.options,onFailure})).reason,"quarantined");
  const c=fixture();c.worker.tick=async()=>({kind:"quarantined"} as any);
  assert.equal((await runSoftwareFactoryOnce(c.worker,{...c.options,onFailure:(s,e)=>{onFailure(s,e);throw Error("x");}})).reason,"quarantined");
- assert.deepEqual(logs.map(l=>JSON.parse(l)),[
+ const parsed=logs.map(l=>JSON.parse(l));
+ assert.equal(parsed[1].errorClass,"CLASS_Error");assert.match(parsed[1].frame,/^[A-Za-z0-9_.-]+\.(?:ts|mjs|js):\d+$/);delete parsed[1].errorClass;delete parsed[1].frame;
+ assert.deepEqual(parsed,[
   {event:"factory_once_failure",phase:"execution",stage:"schedule",code:"FACTORY_DISCOVERY_SCOPE_INVALID",automaticReplay:false},
   {event:"factory_once_failure",phase:"execution",stage:"tick",code:"FACTORY_ONCE_UNAVAILABLE",automaticReplay:false},
   {event:"factory_once_failure",phase:"execution",stage:"tick-quarantined",code:"FACTORY_ONCE_UNAVAILABLE",automaticReplay:false}]);

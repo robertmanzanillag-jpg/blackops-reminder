@@ -45,7 +45,7 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
   const now = options.now || (() => new Date());
   const capabilities = () => Object.fromEntries(Object.entries(options.adapters || {}).map(([kind, adapter]) => [kind,
     typeof adapter?.execute === "function" && !(options.releaseMode === "review-only" && ["deploy", "verify", "rollback", "evaluate"].includes(kind))]));
-  let maintaining = false; let busy = false; let quarantined = false; let active: AbortController | undefined; let deadline = 0;
+  let lastFailure: unknown; let maintaining = false; let busy = false; let quarantined = false; let active: AbortController | undefined; let deadline = 0;
   return {
     async maintain() {
       if (quarantined || maintaining) return;
@@ -134,7 +134,7 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
         try {
           let result: FactoryAdapterResult;
           try { result=await withFactoryApiParent(job,()=>adapter.execute(job,{signal:controller.signal,maxCostCents:job.reservedCents-(job.recoveryCents || 0)}),controller.signal); }
-          catch { result={status:"unknown",costCents:0,reason:"FACTORY_EXECUTION_UNCONFIRMED"}; }
+          catch (error) { lastFailure=error; result={status:"unknown",costCents:0,reason:"FACTORY_EXECUTION_UNCONFIRMED"}; }
           if (quarantined || controller.signal.aborted) { await store.expire(); return { kind: "quarantined" }; }
           try { validateFactoryTransition(job,result); if(job.kind==="deploy" && result.status==="completed" && result.next?.recoveryCents!==requiredRollbackCents)throw new Error("FACTORY_ROLLBACK_ESCROW_REQUIRED"); }
           catch { result={status:"unknown",costCents:0,reason:"FACTORY_INVALID_ADAPTER_RESULT"}; }
@@ -153,11 +153,13 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
           }
           const {next,...outcome}=result;
           if (!await store.complete(job,outcome,next)) quarantined=true;
-          if (outcome.status === "unknown") quarantined=true;
+          if (outcome.status === "unknown") { quarantined=true; lastFailure ??= Error(outcome.reason || "FACTORY_EXECUTION_UNCONFIRMED"); }
           return { kind: quarantined ? "quarantined" : "progressed" };
         } finally {clearTimeout(timeout);active=undefined;}
       } finally {busy=false;}
     },
     stop() { quarantined=true; active?.abort(); },
+    /** Raw cause of the last quarantine, for code-owned classification only. Never log it directly. */
+    lastFailure() { return lastFailure; },
   };
 }
