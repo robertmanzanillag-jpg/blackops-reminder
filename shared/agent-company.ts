@@ -786,8 +786,27 @@ export function routeOrder(text: string, available: string[]): string[] {
       for (const agent of route.agents) if (available.includes(agent) && !picked.includes(agent)) picked.push(agent);
     }
   }
-  if (picked.length === 0) return available.includes("assistant") ? ["assistant"] : available.slice(0, 1);
-  return picked.slice(0, 4);
+  if (picked.length === 0 && !hasEngineeringIntent(normalized)) return available.includes("assistant") ? ["assistant"] : available.slice(0, 1);
+  const capped = picked.slice(0, 4);
+  // An app/website problem must always reach an engineering agent (the factory only admits orders
+  // with one), even when business routes fill the slots or no route word matched.
+  if (hasEngineeringIntent(normalized) && !capped.some((id) => ORDER_ENGINEERING_AGENT_IDS.includes(id))) {
+    const engineer = ["code", "app-qa", "mechanic"].find((id) => available.includes(id));
+    if (engineer) { if (capped.length >= 4) capped.pop(); capped.push(engineer); }
+  }
+  return capped.length ? capped : available.includes("assistant") ? ["assistant"] : available.slice(0, 1);
+}
+
+/** Agents the software factory accepts as an order's engineering owner (mirrors server/software-factory-company.ts). */
+export const ORDER_ENGINEERING_AGENT_IDS: readonly string[] = ["code", "github", "app-qa", "mechanic", "agent-factory", "claude-reviewer"];
+// Spanish + English words that describe a problem in an app or website. Whole words (plural ok), accents removed.
+const ENGINEERING_INTENT_WORDS = [
+  "app", "apps", "aplicacion", "web", "website", "pagina", "sitio", "landing", "login", "inicio de sesion", "iniciar sesion", "sign in", "signin",
+  "bug", "error", "falla", "fallo", "no funciona", "no sirve", "no carga", "no abre", "no deja", "se cae", "se cayo", "caido", "pantalla", "boton",
+  "formulario", "dashboard", "panel", "page", "site", "screen", "button", "crash", "broken", "not working", "doesn't work", "does not work", "won't load", "is down",
+];
+function hasEngineeringIntent(normalized: string): boolean {
+  return ENGINEERING_INTENT_WORDS.some((word) => new RegExp(`(^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(s|es)?([^a-z0-9]|$)`).test(normalized));
 }
 
 export function createOrder(
