@@ -15,14 +15,20 @@ interface OAuthApp {
   extraAuth?: Record<string, string>;
   clientKeyName?: string; // TikTok uses client_key
   basicAuth?: boolean; // Reddit, X
+  /** Reuse an existing app's credentials when the SH_* pair is not set. */
+  fallbackIdEnv?: string;
+  fallbackSecretEnv?: string;
 }
+
+const appId = (a: OAuthApp) => process.env[a.clientIdEnv] || (a.fallbackIdEnv ? process.env[a.fallbackIdEnv] : undefined);
+const appSecret = (a: OAuthApp) => process.env[a.clientSecretEnv] || (a.fallbackSecretEnv ? process.env[a.fallbackSecretEnv] : undefined);
 
 /** App credentials come from env: SH_<APP>_CLIENT_ID / SH_<APP>_CLIENT_SECRET. */
 export const OAUTH_APPS: Record<SocialNetwork, OAuthApp> = {
   facebook: { authUrl: "https://www.facebook.com/v21.0/dialog/oauth", tokenUrl: "https://graph.facebook.com/v21.0/oauth/access_token", scopes: ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "read_insights", "instagram_basic", "instagram_content_publish", "instagram_manage_insights", "business_management"], clientIdEnv: "SH_META_CLIENT_ID", clientSecretEnv: "SH_META_CLIENT_SECRET", scopeSep: "," },
   instagram: { authUrl: "https://www.facebook.com/v21.0/dialog/oauth", tokenUrl: "https://graph.facebook.com/v21.0/oauth/access_token", scopes: ["pages_show_list", "instagram_basic", "instagram_content_publish", "instagram_manage_insights", "business_management"], clientIdEnv: "SH_META_CLIENT_ID", clientSecretEnv: "SH_META_CLIENT_SECRET", scopeSep: "," },
   threads: { authUrl: "https://threads.net/oauth/authorize", tokenUrl: "https://graph.threads.net/oauth/access_token", scopes: ["threads_basic", "threads_content_publish", "threads_manage_insights"], clientIdEnv: "SH_THREADS_CLIENT_ID", clientSecretEnv: "SH_THREADS_CLIENT_SECRET", scopeSep: "," },
-  tiktok: { authUrl: "https://www.tiktok.com/v2/auth/authorize/", tokenUrl: "https://open.tiktokapis.com/v2/oauth/token/", scopes: ["user.info.basic", "video.publish", "video.upload", "video.list"], clientIdEnv: "SH_TIKTOK_CLIENT_KEY", clientSecretEnv: "SH_TIKTOK_CLIENT_SECRET", scopeSep: ",", clientKeyName: "client_key", pkce: true },
+  tiktok: { authUrl: "https://www.tiktok.com/v2/auth/authorize/", tokenUrl: "https://open.tiktokapis.com/v2/oauth/token/", scopes: ["user.info.basic", "video.publish", "video.upload", "video.list"], clientIdEnv: "SH_TIKTOK_CLIENT_KEY", clientSecretEnv: "SH_TIKTOK_CLIENT_SECRET", scopeSep: ",", clientKeyName: "client_key", pkce: true, fallbackIdEnv: "TIKTOK_CLIENT_KEY", fallbackSecretEnv: "TIKTOK_CLIENT_SECRET" },
   youtube: { authUrl: "https://accounts.google.com/o/oauth2/v2/auth", tokenUrl: "https://oauth2.googleapis.com/token", scopes: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"], clientIdEnv: "SH_GOOGLE_CLIENT_ID", clientSecretEnv: "SH_GOOGLE_CLIENT_SECRET", extraAuth: { access_type: "offline", prompt: "consent" } },
   x: { authUrl: "https://x.com/i/oauth2/authorize", tokenUrl: "https://api.x.com/2/oauth2/token", scopes: ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"], clientIdEnv: "SH_X_CLIENT_ID", clientSecretEnv: "SH_X_CLIENT_SECRET", pkce: true, basicAuth: true },
   linkedin: { authUrl: "https://www.linkedin.com/oauth/v2/authorization", tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken", scopes: ["w_organization_social", "r_organization_social", "rw_organization_admin", "w_member_social"], clientIdEnv: "SH_LINKEDIN_CLIENT_ID", clientSecretEnv: "SH_LINKEDIN_CLIENT_SECRET" },
@@ -79,7 +85,7 @@ const pending = new Map<string, { network: SocialNetwork; verifier?: string; cre
 
 export function oauthConfigured(network: SocialNetwork): boolean {
   const app = OAUTH_APPS[network];
-  return Boolean(process.env[app.clientIdEnv] && process.env[app.clientSecretEnv] && process.env.SOCIAL_HUB_PUBLIC_URL);
+  return Boolean(appId(app) && appSecret(app) && process.env.SOCIAL_HUB_PUBLIC_URL);
 }
 const redirectUri = () => `${process.env.SOCIAL_HUB_PUBLIC_URL!.replace(/\/$/, "")}/api/social-hub/oauth/callback`;
 
@@ -89,7 +95,7 @@ export function buildAuthUrl(network: SocialNetwork): string {
   for (const [k, v] of Array.from(pending)) if (Date.now() - v.createdAt > 15 * 60_000) pending.delete(k);
   const state = randomBytes(16).toString("hex");
   const params = new URLSearchParams({
-    [app.clientKeyName ?? "client_id"]: process.env[app.clientIdEnv]!,
+    [app.clientKeyName ?? "client_id"]: appId(app)!,
     redirect_uri: redirectUri(),
     response_type: "code",
     scope: app.scopes.join(app.scopeSep ?? " "),
@@ -108,8 +114,8 @@ export function buildAuthUrl(network: SocialNetwork): string {
 
 async function exchange(network: SocialNetwork, body: Record<string, string>, f: FetchLike): Promise<any> {
   const app = OAUTH_APPS[network];
-  const id = process.env[app.clientIdEnv]!;
-  const secret = process.env[app.clientSecretEnv]!;
+  const id = appId(app)!;
+  const secret = appSecret(app)!;
   const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "blackops-social-hub/1.0" };
   const params: Record<string, string> = { ...body };
   if (app.basicAuth) headers.Authorization = `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;

@@ -94,3 +94,20 @@ test("oauth: auth url has state+pkce, callback stores encrypted token, store res
   assert.equal((await store.get("tiktok", "kongnightlife"))?.accessToken, "PLAIN_TOKEN_x");
   assert.equal(persistentSocialHubStore().load().metrics.length, 1);
 });
+
+test("tiktok reuses the clippers app credentials when SH_TIKTOK_* is unset", async () => {
+  const { oauthConfigured, buildAuthUrl } = await import("../server/social-hub/oauth");
+  const saved = { ...process.env };
+  delete process.env.SH_TIKTOK_CLIENT_KEY; delete process.env.SH_TIKTOK_CLIENT_SECRET;
+  Object.assign(process.env, { TIKTOK_CLIENT_KEY: "clippers_ck", TIKTOK_CLIENT_SECRET: "clippers_cs", SOCIAL_HUB_PUBLIC_URL: "https://ops.example" });
+  assert.equal(oauthConfigured("tiktok"), true);
+  assert.equal(new URL(buildAuthUrl("tiktok")).searchParams.get("client_key"), "clippers_ck");
+  process.env = saved;
+});
+
+test("social hub oauth callback is reachable without a browser session (state-protected)", async () => {
+  const { isPublicApiPath } = await import("../server/user-context");
+  assert.equal(isPublicApiPath("/api/social-hub/oauth/callback"), true);
+  assert.equal(isPublicApiPath("/api/social-hub/oauth/start/facebook"), false);
+  assert.equal(isPublicApiPath("/api/social-hub/connections"), false);
+});
