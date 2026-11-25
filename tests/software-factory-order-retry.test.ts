@@ -8,7 +8,7 @@ import { recordSelfHealFactory, selfHealTestRecordId } from "../server/office-se
 import { emptyCompanyState } from "../shared/agent-company";
 
 const owner = "owner-fixture", ownerKey = createHash("sha256").update(owner).digest("hex");
-const rev = "a".repeat(64), orderId = "ord-1";
+const rev = "a".repeat(64), orderId = "ord-1", SH = "ord-sh-" + "c".repeat(20);
 let n = 0;
 const root = (retry = 0, status = "completed", result: any = {}) => ({ id: `root-${++n}`, ownerKey, kind: "discover", status, key: companyOrderRootKey("asistente", orderId, rev, retry),
   createdAt: "2026-11-25T04:00:00Z", completedAt: "2026-11-25T04:01:00Z", payload: { companyOrder: { version: 1, company: "main", orderId, revision: rev, ...(retry ? { retry } : {}) } }, result }) as any;
@@ -54,15 +54,15 @@ test("retry key and payload are distinct per attempt and bounded", () => {
 
 test("self-heal observes only the newest retry root and waits instead of burning an attempt", () => {
   const t = Date.parse("2026-11-25T06:00:00Z");
-  const r0 = { ...root(), payload: { companyOrder: { version: 1, company: "main", orderId: "ord-sh-x", revision: rev } } };
-  const r1 = { ...root(1), payload: { companyOrder: { version: 1, company: "main", orderId: "ord-sh-x", revision: rev, retry: 1 } } };
+  const r0 = { ...root(), payload: { companyOrder: { version: 1, company: "main", orderId: SH, revision: rev } } };
+  const r1 = { ...root(1), payload: { companyOrder: { version: 1, company: "main", orderId: SH, revision: rev, retry: 1 } } };
   const obs = observeFactoryForSelfHeal({ owner, jobs: [r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED"), r1, build(r1, "running")], proposals: [], proposalStatus: "complete", now: t });
   assert.equal(obs.length, 1); assert.equal(obs[0].rootJobId, r1.id); assert.equal(obs[0].state, "running");
 
   // An ORDERED entry whose build failed PROVIDER_BLOCKED advances to needs_owner (not retry_pending).
   const state = { version: 1, ownerKey, notes: [], entries: [{ id: "e".repeat(24), key: "f".repeat(64), episode: 1, role: "release-gate", code: "KNOWN_TEST_FAILURE", recordId: selfHealTestRecordId("tests/x.test.ts"), severity: 3, testPath: "tests/x.test.ts",
     detectedAt: "2026-11-25T03:00:00Z", baseline: { jobId: "j", artifactId: "a".repeat(64), completedAt: "2026-11-25T03:00:00Z", findings: [] }, status: "ordered", readyToMerge: false,
-    attempts: [{ n: 1, orderId: "ord-sh-x", orderRevision: rev, createdAt: "2026-11-25T03:00:00Z" }], updatedAt: "2026-11-25T03:00:00Z" }] };
+    attempts: [{ n: 1, orderId: SH, orderRevision: rev, createdAt: "2026-11-25T03:00:00Z" }], updatedAt: "2026-11-25T03:00:00Z" }] };
   const parsed: any = state;
   const failedObs = observeFactoryForSelfHeal({ owner, jobs: [r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED")], proposals: [], proposalStatus: "complete", now: t });
   const out = recordSelfHealFactory({ state: parsed, company: emptyCompanyState(), observations: failedObs, journal: { jobs: [] }, owner, now: t });

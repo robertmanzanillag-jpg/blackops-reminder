@@ -12,7 +12,8 @@ import { recordSelfHealFactory, type SelfHealFactoryObservation } from "./office
  * matching self-heal attempt inside one council transaction. It never admits,
  * enqueues, writes to GitHub, merges, dispatches or calls a model. */
 const SAFE_ID = /^[a-zA-Z0-9:_-]{1,200}$/;
-const REASON = /^[A-Z0-9_]{1,100}$/;
+// Factory reasons carry a stage prefix (FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED).
+const REASON = /^[A-Z0-9_:]{1,120}$/;
 type Observation = SelfHealFactoryObservation & { orderId: string; orderRevision: string };
 const pipelineRoot = (job: FactoryJob) => ((job.result as { evidence?: { pipelineState?: { rootJobId?: unknown } } } | undefined)?.evidence?.pipelineState?.rootJobId);
 
