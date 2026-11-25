@@ -18,6 +18,8 @@ export const ANTHROPIC_FACTORY_PRICES: Readonly<Record<string, Readonly<{ input:
   "claude-opus-5": Object.freeze({ input: 5000, output: 25000, cacheRead: 500, cacheWrite: 6250 }),
   "claude-opus-4-8": Object.freeze({ input: 5000, output: 25000, cacheRead: 500, cacheWrite: 6250 }),
 });
+/** Smallest max_tokens the factory accepts when clamping to the reservation. */
+export const ANTHROPIC_FACTORY_MIN_OUTPUT_TOKENS = 8192;
 /** Operator pricing must be re-verified by this date or calls block. */
 export const ANTHROPIC_FACTORY_PRICING_VALID_UNTIL = "2027-05-19T00:00:00.000Z";
 const MAX_PRICE = Object.freeze(Object.values(ANTHROPIC_FACTORY_PRICES).reduce((a, b) => ({
@@ -146,8 +148,14 @@ export function createAnthropicFactoryTextProvider(config: AnthropicFactoryModel
       // both at full max_tokens. The fallback attempt is priced at the max rate.
       const budget = BigInt(input.maxCostCents) * 10000000n, inputNano = BigInt(counted.input_tokens) * BigInt(listed.input + MAX_PRICE.input);
       const perOutput = BigInt(listed.output + MAX_PRICE.output), affordable = budget > inputNano ? (budget - inputNano) / perOutput : 0n;
-      if (affordable < BigInt(input.maxOutputTokens)) return blocked("FACTORY_ANTHROPIC_BUDGET_UNAVAILABLE");
-      const maxTokens = Math.max(input.maxOutputTokens, Math.min(ceiling, Number(affordable)));
+      // Claude's worst case (attempt + server-side fallback at the max rate) is
+      // ~2.25x the OpenAI one, so a 32k-token request never fit a <=$1 build
+      // reservation and every Claude build blocked (PROVIDER_BUDGET_UNAVAILABLE).
+      // Clamp max_tokens down to what the reservation covers, never below a
+      // floor that still fits a real exact-source edit; below it, block.
+      const floor = BigInt(Math.min(input.maxOutputTokens, ANTHROPIC_FACTORY_MIN_OUTPUT_TOKENS));
+      if (affordable < floor) return blocked("FACTORY_ANTHROPIC_BUDGET_UNAVAILABLE");
+      const maxTokens = Math.min(Number(affordable), Math.max(input.maxOutputTokens, Math.min(ceiling, Number(affordable))));
       if (!fresh() || controller.signal.aborted) return blocked("FACTORY_ANTHROPIC_ADMISSION_EXPIRED");
       submitted = true;
       const stream = client.stream({ ...base, max_tokens: maxTokens, betas: [ANTHROPIC_FACTORY_FALLBACK_BETA], fallbacks: "default" }, { signal: controller.signal });

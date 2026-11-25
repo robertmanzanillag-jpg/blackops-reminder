@@ -13,7 +13,7 @@ import { createCreditLimitedOfficeRun } from "./office-shared-credits";
 import { loadSharedCreditRuntime } from "./shared-openai-credit-runtime";
 import type { OfficeOpenAIResult } from "./office-openai";
 import type { OfficeAnthropicResult } from "./office-anthropic-credits";
-import { markProviderCreditExhausted, clearProviderCooldown, readProviderCooldowns, providerCooldownMs } from "./ai-provider-credit-cooldown";
+import { markProviderCreditExhausted, clearProviderCooldown, readProviderCooldowns, providerCooldownMs, refreshExpiredOpenAiCooldown } from "./ai-provider-credit-cooldown";
 
 type CooldownStore = Parameters<typeof markProviderCreditExhausted>[0];
 const codeOf = (error: unknown) => (error instanceof Error ? error.message : "");
@@ -21,12 +21,16 @@ const codeOf = (error: unknown) => (error instanceof Error ? error.message : "")
  * cooldown) the role job runs on the Claude API under its own office ledger.
  * Both out of credit, or Claude not configured: fail closed with a code. */
 export async function runWithProviderFailover(input: { env: NodeJS.ProcessEnv; now: () => Date; store?: CooldownStore; assigned: string; prompt: string;
-    openai: () => Promise<OfficeOpenAIResult>; claude?: (prompt: string, executionId: string) => Promise<OfficeAnthropicResult> }): Promise<OfficeOpenAIResult | OfficeAnthropicResult> {
+    openai: () => Promise<OfficeOpenAIResult>; claude?: (prompt: string, executionId: string) => Promise<OfficeAnthropicResult>;
+    /** Tests: zero-cost OpenAI credit probe injection. */
+    probe?: () => Promise<import("./ai-provider-credit-cooldown").OpenAiCreditProbe> }): Promise<OfficeOpenAIResult | OfficeAnthropicResult> {
   const { env, now } = input;
   const { officeAnthropicFallbackEnabled } = await import("./software-factory-anthropic-ledger");
   const claudeEnabled = !!input.claude || officeAnthropicFallbackEnabled(env);
   const store = input.store ?? (claudeEnabled && env.DATABASE_URL ? await (await import("./agent-council-store")).getCouncilStore().catch(() => undefined) : undefined);
-  const active = store ? (await readProviderCooldowns(store, now())).active : {};
+  const read = store ? (await readProviderCooldowns(store, now())).active : {};
+  // Expired OpenAI cooldown: zero-cost probe before the paid call; still out of credit = renew, go to Claude.
+  const active = store ? await refreshExpiredOpenAiCooldown({ store, now, env, claudeEnabled, active: read, probe: input.probe }) : read;
   const log = (provider: string, reason: string) => { try { console.error(`[ai-provider-credit-exhausted] ${JSON.stringify({ consumer: "office", provider, reason })}`); } catch { /* logging only */ } };
   if (!(claudeEnabled && active.openai)) {
     try {
@@ -42,9 +46,10 @@ export async function runWithProviderFailover(input: { env: NodeJS.ProcessEnv; n
   }
   if (active.anthropic) throw Error("OFFICE_ALL_PROVIDERS_CREDIT_EXHAUSTED");
   const claude = input.claude ?? await (async () => {
-    const [{ loadAnthropicOfficeRuntime }, { createCreditLimitedOfficeClaudeRun }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./office-anthropic-credits")]);
+    const [{ loadAnthropicOfficeRuntime }, { createCreditLimitedOfficeClaudeRun, defaultOfficeClaudeApiAuthority }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./office-anthropic-credits")]);
     const runtime = await loadAnthropicOfficeRuntime(env, now, store as any);
-    return createCreditLimitedOfficeClaudeRun({ ...runtime, apiKey: env.ANTHROPIC_API_KEY?.trim() || "", now, maxOutputTokens: Number(env.OFFICE_OPENAI_MAX_OUTPUT_TOKENS) || 1024 });
+    // Claude office spend also counts against the single monthly API authority cap.
+    return createCreditLimitedOfficeClaudeRun({ ...runtime, apiKey: env.ANTHROPIC_API_KEY?.trim() || "", now, maxOutputTokens: Number(env.OFFICE_OPENAI_MAX_OUTPUT_TOKENS) || 1024, authority: await defaultOfficeClaudeApiAuthority() });
   })();
   try {
     const result = await claude(input.prompt, input.assigned);

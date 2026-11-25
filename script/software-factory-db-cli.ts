@@ -64,6 +64,22 @@ export function shapeJobCounts(rows: Array<{ status: unknown; count: unknown }>)
   return { byStatus, running, unknown, attentionRequired: running > 0 || unknown > 0 };
 }
 
+/** Code-only reason for a stopped job. Earlier every reason that was not
+ * exactly [A-Z0-9_:]{1,120} became "UNSPECIFIED", which hid real causes:
+ * OpenAI rejections carry a lowercase provider code
+ * (FACTORY_REMOTE_BUILD_FAILED:PROVIDER_REQUEST_REJECTED:FACTORY_OPENAI_REQUEST_REJECTED:429:insufficient_quota),
+ * gate reasons are comma-joined, and long cause chains exceed 120 chars.
+ * Free text is still never shown: only code-shaped segments survive. */
+export function factoryStoppedReasonCode(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return "FACTORY_REASON_NOT_RECORDED";
+  if (typeof raw !== "string") return "FACTORY_REASON_NOT_A_CODE";
+  if (/^[A-Z0-9_:]{1,120}$/.test(raw)) return raw;
+  const parts = raw.split(",").map(p => p.trim()).filter(Boolean);
+  if (!parts.length || parts.some(p => p.length > 400 || !/^[A-Za-z0-9_:]+$/.test(p) || !/^[A-Z]/.test(p))) return "FACTORY_REASON_FREE_TEXT";
+  const first = parts[0].toUpperCase(), suffix = parts.length > 1 ? `:AND_${parts.length - 1}_MORE` : "";
+  return (first.length + suffix.length > 120 ? first.slice(0, 120 - suffix.length).replace(/:+$/, "") : first) + suffix;
+}
+
 /** Stopped (blocked/failed) jobs for the operator: kind, status, an uppercase
  * reason code only (free text is dropped), timestamps and whether the job came
  * from an office self-heal order. Never exposes inputs, keys, paths or evidence. */
@@ -72,7 +88,7 @@ export function shapeStoppedJobs(rows: Array<{ status: unknown; kind: unknown; r
   return rows.slice(0, 20).filter(r => r.status === "blocked" || r.status === "failed").map(r => ({
     status: r.status as "blocked" | "failed",
     kind: typeof r.kind === "string" && /^[a-z-]{1,40}$/.test(r.kind) ? r.kind : "unknown",
-    reason: typeof r.reason === "string" && /^[A-Z0-9_:]{1,120}$/.test(r.reason) ? r.reason : "UNSPECIFIED",
+    reason: factoryStoppedReasonCode(r.reason),
     selfHealOrder: typeof r.order_id === "string" && r.order_id.startsWith("ord-sh-"),
     createdAt: iso(r.created_at), completedAt: iso(r.completed_at),
   }));
