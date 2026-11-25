@@ -64,6 +64,14 @@ export async function assertWebSourceOwner(pool:SourcePool,owner:string,configur
  * sourceDocuments (office_source_documents) takes precedence per document
  * kind; files are read only for kinds without a durable copy, and only when
  * files are allowed (the web host). */
+/** Truthful, fail-closed execution labels. No exported row kind is a verified
+ * execution receipt yet (plans and collected metrics only), so these roles keep
+ * both labels until such a kind exists and is present. */
+export const EXECUTION_ROW_KINDS:ReadonlySet<string>=new Set<string>();
+export function executionDiagnostics(role:WebSourceRole,rows:readonly {kind:string}[]):Array<"PLANS_NOT_EXECUTION"|"COLLECTED_METRICS_ONLY">{
+ if(!["marketing-cmo","clippers"].includes(role))return [];
+ return rows.some(r=>EXECUTION_ROW_KINDS.has(r.kind))?[]:["PLANS_NOT_EXECUTION","COLLECTED_METRICS_ONLY"];
+}
 export async function readWebRoleSources(options:{pool:SourcePool;owner:string;configuredOwner:string;root:string;env?:Record<string,string|undefined>;now?:number;marketingLearning?:()=>Promise<unknown|null>;sourceDocuments?:()=>Promise<OfficeSourceDocumentSet|null>;files?:boolean}):Promise<WebRoleSource[]> {
  await assertWebSourceOwner(options.pool,options.owner,options.configuredOwner);
  const now=options.now ?? Date.now();if(!Number.isFinite(now))throw new Error("Invalid observation clock");
@@ -156,7 +164,7 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
   if([...counts.values()].some(count=>count>1))diagnostics.push("PARTIAL_COVERAGE");
   for(const p of parts){if(p.provenance.status!=="present")diagnostics.push(p.provenance.status==="missing"?"SOURCE_MISSING":p.provenance.status==="limit"?"SOURCE_LIMIT":"SOURCE_INVALID");else if(!p.provenance.sourceAt)diagnostics.push("SOURCE_TIME_UNKNOWN");else if(now-Date.parse(p.provenance.sourceAt)>86400000)diagnostics.push("SOURCE_STALE");}
   if(!all.length)diagnostics.push("NO_RECORDS");if(all.length>selected.length)diagnostics.push("PARTIAL_COVERAGE");if(all.some(r=>["blocked","quarantined","rejected"].includes(r.state)))diagnostics.push("RECORDED_BLOCKS");if(all.some(r=>(r.metrics.retry||0)>0))diagnostics.push("RETRY_BACKLOG");
-  if(["marketing-cmo","clippers"].includes(role))diagnostics.push("PLANS_NOT_EXECUTION","COLLECTED_METRICS_ONLY");if(role==="blackroom-videos")diagnostics.push("NO_CURRENT_SESSION_PROOF");
+  diagnostics.push(...executionDiagnostics(role,all));if(role==="blackroom-videos")diagnostics.push("NO_CURRENT_SESSION_PROOF");
   const body={version:1 as const,ownerKey:sourceDigest(options.owner),role,observedAt:new Date(now).toISOString(),rows:selected,total:all.length,truncated:all.length>selected.length,provenance:parts.map(p=>p.provenance).slice(0,20),diagnostics:[...new Set(diagnostics)]};
   return validateWebRoleSource({...body,sourceDigest:sourceDigest(body)},options.owner);
  };
