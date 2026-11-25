@@ -111,7 +111,7 @@ export function createOpenAiFactoryTextProvider(config:{
   }catch(error){
    // The monetary gate refused before dispatching anything to OpenAI (budget,
    // pricing, parent fence, reconciliation): nothing executed or billed.
-   const cause=factoryBlockCause(error),held=(reason:string):FactoryTextResult=>cause?{...blocked(reason),cause}:blocked(reason);
+   const cause=factoryBlockCause(error),held=(reason:string):FactoryTextResult=>cause?{status:"blocked",reason,costCents:0,cause}:blocked(reason);
    if(error instanceof FactoryApiBudgetError&&!error.dispatched&&error.message!=="FACTORY_API_EXECUTION_UNCONFIRMED")return held("FACTORY_OPENAI_ADMISSION_UNAVAILABLE");
    return submitted?{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0}:held("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
   finally{clearTimeout(timer);input.signal.removeEventListener("abort",abort);}
