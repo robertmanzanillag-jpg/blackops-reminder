@@ -1,6 +1,7 @@
 import { ceoFocusIntegrations } from "./ceo-domain-policy";
 import { advanceKongCareers, isKongCompanyAgent, isKongSnapshotAgent, type KongCompanyObservation } from "./kong-company";
 import { parseInternalWork } from "./office-internal-work";
+import { createDeskWorkRunner, parseDeskWork, readDeskSources } from "./office-desk-work";
 import {parseRoleAcademy} from "./office-role-academy";
 import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
@@ -328,7 +329,7 @@ function advanceCompanyCycle(
   company = learnClippersLessons(company, clippersLessons, now);
   const execution = state.officeExecution;
   // Generic outcome-learning loop: every agent with recorded jobs learns from its own outcomes ($0).
-  company = applyOutcomeLessons(company, collectOutcomeSamples({ roleWorkJobs, internalWorkJobs: execution?.internalWork?.jobs, factoryLedger: execution?.factoryCareers }), now, outcomeCostTrends(execution?.creditPacer, now));
+  company = applyOutcomeLessons(company, collectOutcomeSamples({ roleWorkJobs, internalWorkJobs: execution?.internalWork?.jobs, deskWorkJobs: execution?.deskWork?.jobs, factoryLedger: execution?.factoryCareers }), now, outcomeCostTrends(execution?.creditPacer, now));
   const holds: Record<string, string> = {
     ...pipelineHolds({ now, roleWorkJobs, internalWorkJobs: execution?.internalWork?.jobs, seats: execution?.roles?.roles as Record<string, { status?: string }> | undefined,
       factoryLedger: execution?.factoryCareers, streamerState: vitalityInput.streamerState, streamerRead: vitalityInput.streamerRead, scoutLastRunAt: state.scout.lastRunAt, scoutError: state.scout.error,
@@ -400,6 +401,7 @@ function parseDurableCouncilState(raw: string | null, owner: string): CouncilSta
     parseFactoryCareerLedger(value.officeExecution.factoryCareers);
     parseSelfHealState(value.officeExecution.selfHeal,owner);
     parseCreditPacerState(value.officeExecution.creditPacer);
+    parseDeskWork(value.officeExecution.deskWork);
   }
   return parseCouncilState(raw);
 }
@@ -1424,6 +1426,7 @@ export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = proces
       setTimeout(upkeep, 60_000).unref?.();
       setInterval(upkeep, KONG_UPKEEP_INTERVAL_MS).unref?.();
     }
+    startDeskWork(getAgentCouncil());
     return;
   }
   setAgentCouncilUser(getSystemUserId());
@@ -1435,6 +1438,21 @@ export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = proces
   };
   setTimeout(tick, 60_000).unref?.();
   setInterval(tick, COUNCIL_CYCLE_MS).unref?.();
+  startDeskWork(instance);
+}
+
+/**
+ * Daily recorded desk review for the Black Room team and KONG desks ($0, deterministic, review only).
+ * Needs shared durable storage (AGENT_COUNCIL_STORAGE=postgres); without it nothing is recorded.
+ * Disable with OFFICE_DESK_WORK_ENABLED=false.
+ */
+function startDeskWork(instance: ReturnType<typeof getAgentCouncil>, env: NodeJS.ProcessEnv = process.env) {
+  if (String(env.OFFICE_DESK_WORK_ENABLED || "").trim().toLowerCase() === "false") return;
+  const runner = createDeskWorkRunner({ council: instance, readSources: () => readDeskSources(() => instance.load()) });
+  let warned = false;
+  const run = () => { runner.tick().catch((error) => { if (!warned) { warned = true; console.warn("[agent-council] desk work unavailable:", error instanceof Error ? error.message : error); } }); };
+  setTimeout(run, 3 * 60_000).unref?.();
+  setInterval(run, COUNCIL_CYCLE_MS).unref?.();
 }
 
 export { emptyCouncilState };
