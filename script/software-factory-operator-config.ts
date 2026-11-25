@@ -76,7 +76,8 @@ export function buildOperatorConfig(input: OperatorConfigInput, source: Pick<Git
     allowGitHubResultsAzureHosts: input.allowGitHubResultsAzureHosts === true,
     archiveHosts,
     reservations: { discover: 10, build: 100, simulate: 1, review: 50 },
-    maxInputTokens: 32000, maxOutputTokens: 16000,
+    // 192000-byte source context can exceed 32k tokens; 100k stays inside the build reservation.
+    maxInputTokens: 100000, maxOutputTokens: 16000,
     orders: [],
     ui: { workflowId: input.workflowId, workflowSha256, harnessSha256 },
     ...(input.autoAdmitSince ? { autoAdmit: { enabled: true, since: input.autoAdmitSince, maxPerDay: 5 } } : {}),

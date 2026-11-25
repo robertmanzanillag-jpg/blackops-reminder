@@ -57,7 +57,7 @@ test('one whole approved catalog migrates a partial legacy profile without mixin
 });
 
 test('missing, inconsistent, unknown TTL or overlapping measured counters retain unknown full escrow',async()=>{
- const bad=[{cached_tokens:0},{cached_tokens:0,cache_write_tokens:10},
+ const bad=[{cached_tokens:0},{cache_write_tokens:10},{cached_tokens:0,cache_write_tokens:-1},
   {cached_tokens:0,cache_write_tokens:10,cache_write_tokens_details:{ttl_30m_tokens:5,ttl_12h_tokens:4}},
   {cached_tokens:80,cache_write_tokens:30,cache_write_tokens_details:{ttl_30m_tokens:30,ttl_12h_tokens:0}},
   {cached_tokens:0,cache_write_tokens:5,cache_write_tokens_details:{ttl_30m_tokens:0,ttl_12h_tokens:0,ttl_24h_tokens:5}},
@@ -169,4 +169,21 @@ test('partial profile migration cannot replace an explicitly supplied cache rate
   const c=client(f,response(),legacy,{FACTORY_API_PRICING_CONFIG:JSON.stringify({version:1,prices:[{provider:'openai',...price}]})});
   await assert.rejects(c.create(),/PRICING_PROFILE_MISMATCH/);assert.equal(c.calls(),0);assert.equal(f.reserved.length,0);
  }
+});
+
+// Documented shape (developers.openai.com prompt-caching guide): input_tokens_details
+// carries cached_tokens + cache_write_tokens with no TTL split. gpt-6.1-sol returned
+// this and the old parser rejected it after dispatch (FACTORY_REMOTE_EXECUTION_UNCONFIRMED).
+test('documented unsplit cache_write_tokens settles at the 12h upper-bound rate',async()=>{
+ const doc={cached_tokens:0,cache_write_tokens:60};
+ const parsed=readOpenAiCacheUsage(doc);
+ assert.equal(parsed.cacheWriteTokens,60);assert.equal(parsed.cacheWrite12hTokens,60);assert.equal(parsed.cacheWrite30mTokens,0);
+ const f=fixture();await client(f,response(doc)).create();
+ // 40 ordinary*2000 + 60*5000 (12h, never the cheaper 30m) + 10*10000 nano = 480 micro
+ assert.equal(f.settled[0].actualMicroUsd,480);
+ assert.equal(f.state.reservations[0].status,'settled');
+});
+test('documented cache read + write example (15000 in, 12000 cached, 3000 written)',()=>{
+ const p=readOpenAiCacheUsage({cached_tokens:12000,cache_write_tokens:3000});
+ assert.deepEqual([p.cachedInputTokens,p.cacheWriteTokens,p.cacheWrite12hTokens],[12000,3000,3000]);
 });
