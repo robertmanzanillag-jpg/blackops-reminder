@@ -13,7 +13,7 @@ import { createCreditLimitedOfficeRun } from "./office-shared-credits";
 import { loadSharedCreditRuntime } from "./shared-openai-credit-runtime";
 import type { OfficeOpenAIResult } from "./office-openai";
 import type { OfficeAnthropicResult } from "./office-anthropic-credits";
-import { resolveAiModel, type AiTaskKind } from "../shared/ai-model-policy";
+import { aiModelTieringEnabled, resolveAiModel, type AiTaskKind } from "../shared/ai-model-policy";
 import { policyOpenAiPrice } from "./ai-model-pricing";
 import { markProviderCreditExhausted, clearProviderCooldown, readProviderCooldowns, providerCooldownMs, refreshExpiredOpenAiCooldown } from "./ai-provider-credit-cooldown";
 
@@ -89,8 +89,9 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
   const run = async (prompt: string, executionId?: string, route: { agentId?: string; task?: AiTaskKind } = {}) => {
     if (!openai) return runOfficeClaude(prompt);
     const task = route.task ?? "role_job";
-    const openAiChoice = resolveAiModel({ provider: "openai", task, agentId: route.agentId, env }).model;
-    const claudeModel = resolveAiModel({ provider: "anthropic", task, agentId: route.agentId, env }).model;
+    const tiering = aiModelTieringEnabled(env);
+    const openAiChoice = tiering ? resolveAiModel({ provider: "openai", task, agentId: route.agentId, env }).model : env.OFFICE_OPENAI_MODEL ?? "";
+    const claudeModel = tiering ? resolveAiModel({ provider: "anthropic", task, agentId: route.agentId, env }).model : undefined;
     if (deps.sharedCredits || env.OPENAI_SHARED_CREDIT_CONFIG || env.OPENAI_SHARED_CREDITS_REQUIRED === "true") {
       const assigned = executionId || activeExecutionId;
       if (!assigned) throw Error("OFFICE_CREDIT_ASSIGNMENT_REQUIRED");
@@ -108,7 +109,7 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
           })(prompt, assigned);
         } });
     }
-    const tierPrice=policyOpenAiPrice(openAiChoice,env);
+    const tierPrice=tiering?policyOpenAiPrice(openAiChoice,env):null;
     const callEnv=tierPrice?{...env,OFFICE_OPENAI_MODEL:tierPrice.model}:env;
     const factoryPrice=tierPrice??configuredFactoryApiPrice("openai",env.OFFICE_OPENAI_MODEL??"",env.FACTORY_API_PRICING_CONFIG);
     const monetary=deps.factoryInvocation??await defaultFactoryApiInvocation();

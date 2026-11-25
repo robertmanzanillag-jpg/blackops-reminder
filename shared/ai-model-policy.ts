@@ -104,6 +104,12 @@ export function resolveAiModel(input: { provider: AiPolicyProvider; task: AiTask
   return { ...base, model: raw, source: "env" };
 }
 
+/** Rollback lever: AI_MODEL_TIERING=off keeps every office call on the previously configured
+ * model (OFFICE_OPENAI_MODEL / the factory's Opus price), exactly as before this policy. */
+export function aiModelTieringEnabled(env: Record<string, string | undefined> = {}) {
+  return env.AI_MODEL_TIERING?.trim().toLowerCase() !== "off";
+}
+
 /** Panel view: model per provider for one agent (chat/role work), Spanish label. */
 export function agentModelView(agentId: string, env: Record<string, string | undefined> = {}, task: AiTaskKind = "chat") {
   const openai = resolveAiModel({ provider: "openai", task, agentId, env }), anthropic = resolveAiModel({ provider: "anthropic", task, agentId, env });

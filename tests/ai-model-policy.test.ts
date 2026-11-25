@@ -60,3 +60,9 @@ test("server pricing: code-owned rows carry evidence; catalog row wins; unpriced
   const haiku = policyAnthropicPricing("claude-haiku-5-5")!;
   assert.equal(haiku.inputNanoUsdPerToken, 100); assert.equal(haiku.tierAboveInputTokens, 100000); assert.equal(haiku.above!.inputNanoUsdPerToken, 500);
 });
+
+test("AI_MODEL_TIERING=off is the rollback lever", async () => {
+  const { aiModelTieringEnabled } = await import("../shared/ai-model-policy");
+  assert.equal(aiModelTieringEnabled({}), true);
+  assert.equal(aiModelTieringEnabled({ AI_MODEL_TIERING: "OFF" }), false);
+});

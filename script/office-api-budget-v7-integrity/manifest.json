@@ -67,7 +67,7 @@
     },
     {
       "path": "server/office-execution.ts",
-      "sha256": "5617dc762b8bcfe792c3924d5503dfe7ac7a8ece0a0cb4538b5a693865d3b852"
+      "sha256": "6aa8021f8d90aaba401ed9644821b83337cb20d9a1e35c0b69c4ad980118ef7b"
     },
     {
       "path": "server/office-openai.ts",
