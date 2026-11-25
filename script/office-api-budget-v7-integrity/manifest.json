@@ -30,6 +30,10 @@
       "sha256": "3468a213bcf27c90923e9cf09efaa8912a4e2ff8e3feacbfc99cbb04e3cb1b49"
     },
     {
+      "path": "server/ai-provider-credit-cooldown.ts",
+      "sha256": "1330ab7409dda377d20a9bb772a853b06b992973f644a8b3ef1b86d7fa968371"
+    },
+    {
       "path": "server/clippers-local-news-translation.ts",
       "sha256": "56e86cad0c8b03672a2df9f1cbbc623c3531d25aa8fe48255705c67716cda03c"
     },
@@ -58,8 +62,12 @@
       "sha256": "c1cf4c0a763d99813a68e588dfad22e5c7a3c75e8df431f4bb0683abaf59dbf8"
     },
     {
+      "path": "server/office-anthropic-credits.ts",
+      "sha256": "70ba35d3df1588738ac65110e7d00ec2f3690abce31f1fb36a7dedcb64d046f4"
+    },
+    {
       "path": "server/office-execution.ts",
-      "sha256": "9d5590522a50b148c42ca69ac717726b78ec69acb8a3151d942e31228a3161da"
+      "sha256": "1c1e12a558c2d741588fc31463446f99232b7d8eb8c1b0dbd1ec9e3da59118ec"
     },
     {
       "path": "server/office-openai.ts",
@@ -71,11 +79,11 @@
     },
     {
       "path": "server/office-shared-credits.ts",
-      "sha256": "63c8906c4e48fffd60a8d6987fb2c2e82da683997371387e6b0b00cd93a4887f"
+      "sha256": "70740224e526d2f99fe5b62e61b758485afa13df998c75738547fe160bb2d0c3"
     },
     {
       "path": "server/office-token-budget.ts",
-      "sha256": "38284d938102822e2567f429524c4e70b4649e3d00d71f0b2b3a6ec1d3aa229b"
+      "sha256": "10dda76b80654dfccee10b0c7e2cd457ca74f16eb0be3cbc501b06a8ce603807"
     },
     {
       "path": "server/openai-client.ts",
@@ -94,8 +102,12 @@
       "sha256": "a41c76d9fd7751500a5bde35aac9bdc8d79908d431cc037ded34feb7932a64ca"
     },
     {
+      "path": "server/software-factory-anthropic-ledger.ts",
+      "sha256": "60ae3500cb183566d3bb6172ef0461d12c0b890e65f4f51ec00914bc170f7363"
+    },
+    {
       "path": "server/software-factory-anthropic.ts",
-      "sha256": "3b3940f65d8c38ab16f0cbdc87b1fd97acfa414ee377813c65aba49234fbbdc2"
+      "sha256": "ebbac1f02db3d905e23493194921a4d5381fe4c8251aa36fb6a87f890a6be97d"
     },
     {
       "path": "server/software-factory-api-budget.ts",
@@ -107,7 +119,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "3a6583c8a9b718277b5c7ef61d0913b0e87bf45c5a73bc83b82d9e7987a61a31"
+      "sha256": "9614065dcb7a41598a9b753e6161319dad483a25e470129540812866f430442c"
     },
     {
       "path": "server/software-factory-asistente-review.ts",
@@ -119,7 +131,7 @@
     },
     {
       "path": "server/software-factory-model-routes.ts",
-      "sha256": "9b5bafdc70ec5a36f814fdd3e9cb39174e8a93cd249c7a013cc5ca56cee076de"
+      "sha256": "4fb5cbccdfa06c6ea9d9684a91213c201247f9a183c41db9090d36fae49511f7"
     },
     {
       "path": "server/software-factory-object-store.ts",

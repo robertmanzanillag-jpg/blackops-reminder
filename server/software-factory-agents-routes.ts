@@ -21,7 +21,7 @@ async function readAutoAdmit(): Promise<{ enabled: boolean; since?: string; mapp
 }
 
 /** Read-only owner board: every factory agent with a status derived from persisted state. No AI calls. */
-export function registerSoftwareFactoryAgentsRoutes(app: Express, options: { store?: Store; readCouncil?: (owner: string) => Promise<any>; readConfig?: typeof readAutoAdmit; now?: () => Date } = {}) {
+export function registerSoftwareFactoryAgentsRoutes(app: Express, options: { store?: Store; readCouncil?: (owner: string) => Promise<any>; readConfig?: typeof readAutoAdmit; now?: () => Date; readCooldownRaw?: (owner: string) => Promise<string | null> } = {}) {
   const store = options.store ?? configuredSoftwareFactoryStore;
   const now = options.now ?? (() => new Date());
   const readCouncil = options.readCouncil ?? (async (owner: string) => { const raw = await (await (await import("./agent-council-store")).getCouncilStore()).read(owner); return raw ? JSON.parse(raw) : undefined; });
@@ -37,6 +37,12 @@ export function registerSoftwareFactoryAgentsRoutes(app: Express, options: { sto
       const [council, config, api] = await Promise.all([
         readCouncil(owner).catch(() => undefined), readConfig().catch(() => undefined),
         store.apiBudgetStatus ? store.apiBudgetStatus(owner).catch(() => undefined) : Promise.resolve(undefined)]);
+      const { readProviderCooldowns, describeActiveProvider, AI_PROVIDER_COOLDOWN_OWNER } = await import("./ai-provider-credit-cooldown");
+      const readRaw = options.readCooldownRaw ?? (async (key: string) => (await (await import("./agent-council-store")).getCouncilStore()).read(key));
+      const cooldowns = await readProviderCooldowns({ read: () => readRaw(AI_PROVIDER_COOLDOWN_OWNER) }, at);
+      // The web process may not hold the factory's Anthropic key: "configured" means the key or the flag is visible here.
+      const claudeVisible = !!process.env.ANTHROPIC_API_KEY?.trim() || process.env.FACTORY_ANTHROPIC_FALLBACK_ENABLED?.trim().toLowerCase() === "true";
+      const provider = { readable: cooldowns.readable, ...describeActiveProvider({ active: cooldowns.active, openAiConfigured: true, anthropicConfigured: claudeVisible }) };
       const orders: FactoryAgentOrder[] | undefined = Array.isArray(council?.company?.orders) ? council.company.orders : undefined;
       const summary = summarizeOwnerOrderAdmission(orders as any, config, at);
       const proposals = store.getCompletedJob ? await readFactoryOrderProposals({ owner, jobs, projects, getCompletedJob: (k, id) => store.getCompletedJob!(k, id), getRecoveredBuild: options.store ? undefined : readFactoryRecoveredBuild, now: at.getTime() }).catch(() => ({ proposals: [] })) : { proposals: [] };
@@ -46,6 +52,7 @@ export function registerSoftwareFactoryAgentsRoutes(app: Express, options: { sto
       const view: FactoryAgentsView = {
         checkedAt: at.toISOString(), paused: state.paused,
         api: { ...apiReadinessLabel(apiAny?.reason, apiAny?.paidAdmissionReady), remainingMicroUsd: typeof apiAny?.remainingMicroUsd === "number" ? apiAny.remainingMicroUsd : null },
+        provider,
         budget: { month: state.month, limitCents: state.limitCents, usedCents, remainingCents: Math.max(0, state.limitCents - usedCents), configured: state.configured },
         admissions: { today: admissionsToday(jobs, at.getTime()), cap: config?.maxPerDay ?? null },
         openOrders: summary.ordersReadable ? { readable: true, total: summary.openOwnerOrders, reasons: Object.entries(summary.reasons).sort((a, b) => b[1] - a[1]).map(([code, count]) => ({ code, label: ORDER_REASON_LABEL[code] ?? code, count })) } : { readable: false, total: 0, reasons: [] },

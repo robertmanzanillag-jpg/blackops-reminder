@@ -30,7 +30,14 @@ const monthWindow = (now: Date) => {
 const LEDGER_OWNER = JSON.stringify(["factory-anthropic-budget-ledger-v2", ANTHROPIC_FACTORY_ACCOUNT_SCOPE]);
 const GRANT_BASE = { id: "anthropic-factory-monthly-cap", accountScope: ANTHROPIC_FACTORY_ACCOUNT_SCOPE,
   observedAt: "2026-01-01T00:00:00.000Z", expiresAt: "2100-01-01T00:00:00.000Z", verificationEvidenceId: "operator-env-FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD" } as const;
-const emptyState = (): SharedCreditState => ({ version: 1, grant: { ...GRANT_BASE, availableMicroUsd: 0 }, reservations: [], lastObservedAt: GRANT_BASE.observedAt });
+/** The office's Claude API ledger: same rules, separate row and cap. */
+export const ANTHROPIC_OFFICE_ACCOUNT_SCOPE = "office-anthropic";
+const OFFICE_LEDGER_OWNER = JSON.stringify(["office-anthropic-budget-ledger-v1", ANTHROPIC_OFFICE_ACCOUNT_SCOPE]);
+const OFFICE_GRANT_BASE = { id: "anthropic-office-monthly-cap", accountScope: ANTHROPIC_OFFICE_ACCOUNT_SCOPE,
+  observedAt: "2026-01-01T00:00:00.000Z", expiresAt: "2100-01-01T00:00:00.000Z", verificationEvidenceId: "operator-env-OFFICE_ANTHROPIC_MONTHLY_BUDGET_USD" } as const;
+type GrantBase = typeof GRANT_BASE | typeof OFFICE_GRANT_BASE;
+const ledgerIdentity = (scope: "factory" | "office" = "factory") => scope === "office" ? { owner: OFFICE_LEDGER_OWNER, base: OFFICE_GRANT_BASE as GrantBase } : { owner: LEDGER_OWNER, base: GRANT_BASE as GrantBase };
+const emptyState = (base: GrantBase = GRANT_BASE): SharedCreditState => ({ version: 1, grant: { ...base, availableMicroUsd: 0 }, reservations: [], lastObservedAt: base.observedAt });
 /** Settled spend of reservations created before this month: not part of the
  * current month's cap. Earlier reserved/unknown/overrun rows still count and
  * still force reconciliation (fail closed). */
@@ -40,9 +47,9 @@ function priorMonthsSpend(state: SharedCreditState, monthStart: string) {
   if (!Number.isSafeInteger(spent)) throw Error("CREDIT_TOTAL_OVERFLOW");
   return spent;
 }
-const checkGrant = (state: SharedCreditState) => {
+const checkGrant = (state: SharedCreditState, base: GrantBase = GRANT_BASE) => {
   const g = state.grant;
-  if (!g || g.id !== GRANT_BASE.id || g.accountScope !== GRANT_BASE.accountScope || g.observedAt !== GRANT_BASE.observedAt || g.expiresAt !== GRANT_BASE.expiresAt || g.verificationEvidenceId !== GRANT_BASE.verificationEvidenceId) throw Error("FACTORY_ANTHROPIC_LEDGER_MISMATCH");
+  if (!g || g.id !== base.id || g.accountScope !== base.accountScope || g.observedAt !== base.observedAt || g.expiresAt !== base.expiresAt || g.verificationEvidenceId !== base.verificationEvidenceId) throw Error("FACTORY_ANTHROPIC_LEDGER_MISMATCH");
 };
 
 /** Monthly cap enforced on current-month spend + all open holds:
@@ -51,18 +58,19 @@ const checkGrant = (state: SharedCreditState) => {
  * executionWindow fail closed with CREDIT_EXPIRED) until restarted, which
  * recomputes the grant; settling and recording outcomes keep working. The cap is re-read on each start,
  * so raising/lowering it takes effect without losing any spend or receipt. */
-export async function createAnthropicFactoryLedger(options: { store: DurableStore; now: () => Date; capMicroUsd: number }) {
+export async function createAnthropicFactoryLedger(options: { store: DurableStore; now: () => Date; capMicroUsd: number; scope?: "factory" | "office" }) {
   const { store, now } = options, month = monthWindow(now());
+  const { owner: LEDGER_OWNER, base: GRANT_BASE } = ledgerIdentity(options.scope);
   if (!Number.isSafeInteger(options.capMicroUsd) || options.capMicroUsd < 0) throw Error("FACTORY_ANTHROPIC_BUDGET_INVALID");
   const raw = await store.read(LEDGER_OWNER);
-  const current: SharedCreditState = raw === null ? emptyState() : JSON.parse(raw);
-  checkGrant(current);
+  const current: SharedCreditState = raw === null ? emptyState(GRANT_BASE) : JSON.parse(raw);
+  checkGrant(current, GRANT_BASE);
   const grant: VerifiedCreditGrant = { ...GRANT_BASE, availableMicroUsd: options.capMicroUsd + priorMonthsSpend(current, month.start) };
   const transact: CreditTransaction = async <T>(mutate: (state: SharedCreditState) => T): Promise<T> => {
     let result: T;
     await store.transact(LEDGER_OWNER, async stored => {
-      const state: SharedCreditState = stored === null ? emptyState() : JSON.parse(stored);
-      checkGrant(state);
+      const state: SharedCreditState = stored === null ? emptyState(GRANT_BASE) : JSON.parse(stored);
+      checkGrant(state, GRANT_BASE);
       state.grant!.availableMicroUsd = grant.availableMicroUsd;
       result = structuredClone(mutate(state));
       return JSON.stringify(state);
@@ -106,6 +114,26 @@ export async function loadAnthropicFactoryRuntime(env: NodeJS.ProcessEnv, now: (
   if (!store && env.AGENT_COUNCIL_STORAGE !== "postgres") throw Error("FACTORY_ANTHROPIC_STORAGE_REQUIRED");
   const durable = store ?? await (await import("./agent-council-store")).getCouncilStore();
   const ledger = await createAnthropicFactoryLedger({ store: durable, now, capMicroUsd: factoryAnthropicMonthlyBudgetMicroUsd(env) });
+  await ledger.status();
+  return { ledger, pricing: anthropicFactoryPricing() };
+}
+
+/** Office Claude API fallback: on only with an Anthropic key AND
+ * OFFICE_ANTHROPIC_FALLBACK_ENABLED=true AND a positive monthly cap. */
+export function officeAnthropicFallbackEnabled(env: NodeJS.ProcessEnv) {
+  return !!env.ANTHROPIC_API_KEY?.trim() && env.OFFICE_ANTHROPIC_FALLBACK_ENABLED?.trim().toLowerCase() === "true";
+}
+/** Empty/0 = no Claude spend for the office (fail closed); invalid = error. */
+export function officeAnthropicMonthlyBudgetMicroUsd(env: NodeJS.ProcessEnv) {
+  const raw = env.OFFICE_ANTHROPIC_MONTHLY_BUDGET_USD?.trim();
+  const usd = raw ? Number(raw) : 0;
+  if (!Number.isFinite(usd) || usd < 0 || usd > 10000) throw Error("OFFICE_ANTHROPIC_BUDGET_INVALID");
+  return Math.floor(usd * 1000000);
+}
+export async function loadAnthropicOfficeRuntime(env: NodeJS.ProcessEnv, now: () => Date, store?: DurableStore) {
+  if (!officeAnthropicFallbackEnabled(env)) throw Error("OFFICE_ANTHROPIC_FALLBACK_DISABLED");
+  const durable = store ?? await (await import("./agent-council-store")).getCouncilStore();
+  const ledger = await createAnthropicFactoryLedger({ store: durable, now, capMicroUsd: officeAnthropicMonthlyBudgetMicroUsd(env), scope: "office" });
   await ledger.status();
   return { ledger, pricing: anthropicFactoryPricing() };
 }

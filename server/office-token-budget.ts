@@ -3,7 +3,7 @@ import type { OfficeOpenAIResult } from "./office-openai";
 
 export type OfficeTokenReservation = {
   id: string; month: string; model: string; reservedTokens: number; createdAt: string;
-  status: "reserved" | "accounted";
+  status: "reserved" | "accounted" | "released";
   result?: Omit<OfficeOpenAIResult, "text">;
 };
 export type OfficeTokenBudgetState = { reservations: OfficeTokenReservation[] };
@@ -17,9 +17,9 @@ function validate(state: OfficeTokenBudgetState) {
   for (const row of state.reservations) {
     if (!row || !row.id || ids.has(row.id) || !/^\d{4}-\d{2}$/.test(row.month) || !row.model ||
       !integer(row.reservedTokens) || row.reservedTokens < 1 || !Number.isFinite(Date.parse(row.createdAt)) ||
-      !["reserved", "accounted"].includes(row.status)) throw new OfficeTokenBudgetError("invalid_budget_state");
+      !["reserved", "accounted", "released"].includes(row.status)) throw new OfficeTokenBudgetError("invalid_budget_state");
     ids.add(row.id);
-    if (row.status === "reserved" && row.result !== undefined) throw new OfficeTokenBudgetError("invalid_budget_state");
+    if (row.status !== "accounted" && row.result !== undefined) throw new OfficeTokenBudgetError("invalid_budget_state");
     if (row.status === "accounted") {
       const r = row.result; const u = r?.usage;
       if (!r || r.provider !== "openai" || !r.sessionId?.startsWith("resp_") || responses.has(r.sessionId) || !r.model ||
@@ -49,11 +49,23 @@ export function createOfficeTokenBudget(options: {
       await options.transact(state => {
         validate(state);
         if (state.reservations.some(row => row.id === id)) return;
-        const spent = state.reservations.reduce((sum, row) => sum + (row.status === "reserved" ? row.reservedTokens : row.month === month ? row.result!.usage.totalTokens : 0), 0);
+        const spent = state.reservations.reduce((sum, row) => sum + (row.status === "reserved" ? row.reservedTokens : row.status === "accounted" && row.month === month ? row.result!.usage.totalTokens : 0), 0);
         if (!Number.isSafeInteger(spent) || spent + reservedTokens > options.limit) throw new OfficeTokenBudgetError("token_budget_exhausted");
         state.reservations.push({ id, month, model: input.model, reservedTokens, createdAt, status: "reserved" });
       });
       return id;
+    },
+    /** The provider rejected the request before executing it (not billed): the
+     * hold is released and counts 0 tokens. Only a still-reserved row can be released. */
+    async release(id: string): Promise<void> {
+      await options.transact(state => {
+        validate(state);
+        const row = state.reservations.find(r => r.id === id);
+        if (!row) throw new OfficeTokenBudgetError("reservation_missing");
+        if (row.status === "released") return;
+        if (row.status !== "reserved") throw new OfficeTokenBudgetError("accounting_conflict");
+        row.status = "released";
+      });
     },
     async recordUsage(id: string, result: Omit<OfficeOpenAIResult, "text">): Promise<void> {
       await options.transact(state => {
@@ -64,6 +76,7 @@ export function createOfficeTokenBudget(options: {
           if (JSON.stringify(row.result) !== JSON.stringify(result)) throw new OfficeTokenBudgetError("accounting_conflict");
           return;
         }
+        if (row.status === "released") throw new OfficeTokenBudgetError("accounting_conflict");
         // Snapshot result so subsequent caller mutation cannot alter accounting.
         row.result = JSON.parse(JSON.stringify(result)); row.status = "accounted";
         validate(state);

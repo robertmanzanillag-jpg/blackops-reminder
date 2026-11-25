@@ -60,6 +60,8 @@ const pacerSync=pacer && academy?pacerModule.createCreditPacerSync({council:acad
 // and rounding. Kept here so the pinned credit adapters (office-execution / office-shared-credits) stay unchanged.
 const recordUsage=(executionId:string,result:unknown)=>{
   try{
+    // Claude-fallback results are priced and settled on their own office ledger, not the OpenAI pacer.
+    if((result as {provider?:unknown}|undefined)?.provider==="anthropic")return;
     const usage=(result as {usage?:{inputTokens?:unknown;outputTokens?:unknown}}|undefined)?.usage,price=sharedCredits?.pricing;
     if(!pacer||!price||!usage||!Number.isSafeInteger(usage.inputTokens)||!Number.isSafeInteger(usage.outputTokens))return;
     const micro=Number((BigInt(usage.inputTokens as number)*BigInt(price.inputNanoUsdPerToken)+BigInt(usage.outputTokens as number)*BigInt(price.outputNanoUsdPerToken)+999n)/1000n);

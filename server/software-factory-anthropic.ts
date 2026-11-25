@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { BetaMessage, BetaMessageStreamParams, MessageCountTokensParams } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { currentFactoryApiParent } from "./factory-api-context";
 import type { FactoryTextResult } from "./software-factory-openai";
+import { isProviderCreditExhausted } from "./ai-provider-credit-cooldown";
 
 /** Claude fallback for Software Factory model calls. Anthropic-only code lives
  * here; OpenAI files never import the Anthropic SDK. */
@@ -177,7 +178,9 @@ export function createAnthropicFactoryTextProvider(config: AnthropicFactoryModel
       // An HTTP error status before the stream connected means the request was
       // rejected and not executed. Anything else may have been billed.
       if (!connected && error instanceof Anthropic.APIError && typeof error.status === "number") {
-        const s = error.status;
+        const s = error.status, body = (error as { error?: any }).error, err = body && typeof body === "object" ? (body.error && typeof body.error === "object" ? body.error : body) : undefined;
+        const detailsCode = typeof err?.details?.error_code === "string" ? err.details.error_code : null, type = typeof err?.type === "string" ? err.type : null;
+        if (isProviderCreditExhausted("anthropic", s, type, detailsCode)) return blocked("FACTORY_ANTHROPIC_CREDIT_EXHAUSTED");
         if (s === 401 || s === 403) return blocked("FACTORY_ANTHROPIC_CREDENTIAL_REJECTED");
         if (s === 429) return blocked("FACTORY_ANTHROPIC_RATE_LIMITED");
         if (s === 529) return blocked("FACTORY_ANTHROPIC_OVERLOADED");
