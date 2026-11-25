@@ -1,3 +1,4 @@
+import { createPublishingClient } from './social-publishing/provider.mjs';
 import { approvedNativeMedia, verifiedExternalSchedules, externalScheduleCollision } from './clippers-native-media-receipts.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -8,7 +9,7 @@ import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
 import { confirmedRenderReceipt, readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
 import { createClippersCreatorRouting } from './clippers-creator-routing.mjs';
 import {
-  createPortfolioMetricool, DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
+  DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
   exactPost, findDestination, localDay, providerTimestamp, canonicalDestinationKey, canonicalAccount, valueForDestination,
 } from './clippers-portfolio-metricool.mjs';
 import { createMacLedgerGuard, macLedgerEnv } from './clippers-mac-ledger-guard.mjs';
@@ -374,7 +375,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
         if ((!selected.METRICOOL_USER_TOKEN || !selected.METRICOOL_USER_ID) && env.CLIPPERS_CONFIG_ROOT) {
           loadClipperSelectedEnv(env.CLIPPERS_CONFIG_ROOT, selected);
         }
-        adapter = createPortfolioMetricool({ token: selected.METRICOOL_USER_TOKEN, userId: selected.METRICOOL_USER_ID });
+        adapter = createPublishingClient({ token: selected.METRICOOL_USER_TOKEN, userId: selected.METRICOOL_USER_ID }, { site: 'clippers-daily-learning' });
       } catch { counts.providerReadFailures++; }
     }
     if (adapter && configured.collect === true) {

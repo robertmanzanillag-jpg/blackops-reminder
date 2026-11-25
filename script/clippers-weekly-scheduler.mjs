@@ -1,3 +1,4 @@
+import { createPublishingClient } from './social-publishing/provider.mjs';
 import { verifiedExternalSchedules, externalScheduleCollision } from './clippers-native-media-receipts.mjs';
 import { canonicalSourceIdentity } from '../shared/clippers-priority-creators.mjs';
 import { constants } from 'node:fs';
@@ -7,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
-import { createPortfolioMetricool, DESTINATIONS, destinationKey, findDestination, localDay, providerTimestamp, canonicalAccount } from './clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, findDestination, localDay, providerTimestamp, canonicalAccount } from './clippers-portfolio-metricool.mjs';
 import { createMacLedgerGuard, macLedgerEnv } from './clippers-mac-ledger-guard.mjs';
 import { validateApprovedClippersAsset } from './clippers-daily-learning.mjs';
 import { validWeeklyWindow, readWeeklyPrivateJson, weeklyDeliveryCollision, weeklyDigest } from './clippers-weekly-policy.mjs';
@@ -76,7 +77,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
         const selected={...env};
         try{
           if((!selected.METRICOOL_USER_TOKEN||!selected.METRICOOL_USER_ID)&&env.CLIPPERS_CONFIG_ROOT)loadClipperSelectedEnv(env.CLIPPERS_CONFIG_ROOT,selected);
-          adapter=createPortfolioMetricool({token:selected.METRICOOL_USER_TOKEN,userId:selected.METRICOOL_USER_ID,
+          adapter=createPublishingClient({token:selected.METRICOOL_USER_TOKEN,userId:selected.METRICOOL_USER_ID,
             fetcher:(url,options={})=>fetch(url,{...options,signal:options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal})});
         }catch{outcome.reason='metricool_adapter_unavailable';continue;}
       }

@@ -1,9 +1,10 @@
+import { createPublishingClient } from './social-publishing/provider.mjs';
 import { createHash,randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open,realpath,mkdir,rename,unlink,writeFile,lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { findDestination,destinationKey,providerTimestamp,createPortfolioMetricool } from './clippers-portfolio-metricool.mjs';
+import { findDestination,destinationKey,providerTimestamp } from './clippers-portfolio-metricool.mjs';
 import { approvedEditorialSourceProof, weeklyDeliveryCollision, readWeeklyPrivateJson } from './clippers-weekly-policy.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
@@ -72,7 +73,7 @@ export async function reconcileExternalMetricoolSchedule({workspaceRoot,assetId,
  const file=path.resolve(root,receipt.draftFile);if(!file.startsWith(root+path.sep)||await realpath(file)!==file)throw Error('external_local_media_invalid');let fd;
  try{fd=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);const s=await fd.stat();if(!s.isFile()||s.nlink!==1||(s.mode&0o022)||(process.getuid&&s.uid!==process.getuid())||s.size!==external.sizeBytes||s.size>250000000)throw Error('external_local_media_invalid');const h=createHash('sha256');let count=0;const chunk=Buffer.alloc(65536);while(true){const {bytesRead}=await fd.read(chunk,0,Math.min(chunk.length,external.sizeBytes+1-count));if(!bytesRead)break;count+=bytesRead;if(count>external.sizeBytes)throw Error('external_local_media_invalid');h.update(chunk.subarray(0,bytesRead));}const after=await fd.stat();if(count!==external.sizeBytes||h.digest('hex')!==external.sha256||after.size!==s.size||after.mtimeMs!==s.mtimeMs)throw Error('external_local_media_invalid');}finally{await fd?.close();}
  if(!await verifyMetricoolNativeBytes(external.mediaUrl,external.sha256,external.sizeBytes,{fetcher}))throw Error('external_public_media_invalid');
- if(!adapter){const selected={...env};if((!selected.METRICOOL_USER_TOKEN||!selected.METRICOOL_USER_ID)&&env.CLIPPERS_CONFIG_ROOT)loadClipperSelectedEnv(env.CLIPPERS_CONFIG_ROOT,selected);adapter=createPortfolioMetricool({token:selected.METRICOOL_USER_TOKEN,userId:selected.METRICOOL_USER_ID});}
+ if(!adapter){const selected={...env};if((!selected.METRICOOL_USER_TOKEN||!selected.METRICOOL_USER_ID)&&env.CLIPPERS_CONFIG_ROOT)loadClipperSelectedEnv(env.CLIPPERS_CONFIG_ROOT,selected);adapter=createPublishingClient({token:selected.METRICOOL_USER_TOKEN,userId:selected.METRICOOL_USER_ID});}
  const item={...external.destination,id:assetId,scheduledAt:providerTimestamp(external.scheduledAt),caption:packet.caption,mediaUrl:external.mediaUrl,mediaSha256:external.sha256};
  const confirmed=await adapter.confirmSchedule(external.destination,item);
  if(!confirmed||confirmed.id!==external.metricoolId||confirmed.mediaUrl!==external.mediaUrl)throw Error('external_provider_get_unconfirmed');

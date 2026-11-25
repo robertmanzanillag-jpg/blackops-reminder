@@ -2,7 +2,7 @@
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {cloudPublishConfig,createGithubReleaseStager} from './clippers-streamer-cloud-worker.mjs';
-import {createPortfolioMetricool} from './clippers-portfolio-metricool.mjs';
+import {createPublishingClient} from './social-publishing/provider.mjs';
 import {STREAMER_STATE_NAMESPACE,parseStreamerStateStrict} from './clippers-streamer-discovery.mjs';
 
 const real=value=>typeof value==='string'&&value.trim().length>0&&!/^(replace|paste|your-|<|changeme)/i.test(value.trim());
@@ -46,7 +46,7 @@ export async function reviewedHourWindowReadiness({env=process.env,store,getStor
  }catch(error){return {status:'held',dueCount:0,reason:safeReason(error)};}
 }
 /** Dependencies are injected in tests. Only the worker owns rights/slot/write fences. */
-export async function runReviewedHourWindowCloud({env=process.env,store,getStore=loadStore,clock=Date.now,dueRecords=loadDue,createMetricool=createPortfolioMetricool,createStager=createGithubReleaseStager,runWorker=worker}={}){
+export async function runReviewedHourWindowCloud({env=process.env,store,getStore=loadStore,clock=Date.now,dueRecords=loadDue,createMetricool=createPublishingClient,createStager=createGithubReleaseStager,runWorker=worker}={}){
  const config=cloudPublishConfig(env),reason=unavailable(env,config);
  if(reason)return {status:'held',dueCount:0,scheduled:0,reason};
  const backend=store??await getStore();

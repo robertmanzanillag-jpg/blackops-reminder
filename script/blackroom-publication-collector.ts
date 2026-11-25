@@ -1,3 +1,4 @@
+import { resolveSocialPublishingProvider } from "../server/social-publishing/provider";
 import { emptyCalendarReceipts, publishedCalendarReceipts, type CalendarReceipts, type ManualClip } from "../server/blackroom-manual-observations";
 
 /** Same authenticated, read-only scheduler endpoint used by the publishing
@@ -6,6 +7,9 @@ export async function collectBlackRoomPublicationReceipts(clips: ManualClip[], p
   { env = process.env, fetcher = fetch, now = new Date() }: { env?: NodeJS.ProcessEnv; fetcher?: typeof fetch; now?: Date } = {}): Promise<CalendarReceipts> {
   if (previous.version !== 1 || previous.brandId !== "6585226" || previous.source !== "authenticated-metricool-scheduler"
     || !Array.isArray(previous.receipts) || !previous.checkedDays) throw new Error("Invalid calendar receipt archive");
+  // Publishing seam: these receipts come from the Metricool scheduler only; another/unknown provider => no read.
+  const publishing = resolveSocialPublishingProvider(env, undefined, { site: "blackroom-publication-collector" });
+  if (publishing.provider?.name !== "metricool") return { ...previous, lastError: `Publishing provider ${publishing.name} has no Metricool calendar; publications remain unverified.` };
   if (!env.METRICOOL_USER_TOKEN || !/^\d+$/.test(env.METRICOOL_USER_ID || "")) return { ...previous, lastError: "Existing Metricool read credentials unavailable; publications remain unverified." };
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const cutoff = new Date(now.getTime()-30*86400000).toISOString().slice(0,10);

@@ -17,6 +17,7 @@
 // cancel it in Actions. A Metricool write is never retried blindly (an uncertain outcome is reconciled
 // read-only). Each run stops taking new clips after CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES (default 20).
 // Dry runs never write state. State: agent_council_state `clippers-streamers:<owner>` -> cloudPublish.
+import { createPublishingClient } from './social-publishing/provider.mjs';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -26,7 +27,7 @@ import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption
 import { sourceRightsGate, rightsDestinationDetail } from '../shared/clippers-source-authorization.mjs';
 import { autoApproveConfig, autoApprovalDecision, applyStreamerRequirements, blocklistFromTakedowns, autoApprovedToday, recordAutoApproval, autoApprovalSummary, detectStreamerRequirements, ownerDefaultPolicyGrant, recordOwnerDefaultGrant, revokeOwnerDefaultGrants } from '../shared/clippers-auto-approval.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
-import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, findDestination, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText, detectSpeechLanguage, whisperConfigured } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
@@ -1168,7 +1169,7 @@ async function main() {
   const owner = process.env.DEFAULT_USER_ID.trim();
   let metricool = null, stager = null;
   if (!config.missing.length) {
-    try { metricool = createPortfolioMetricool({ token: process.env.METRICOOL_USER_TOKEN.trim(), userId: process.env.METRICOOL_USER_ID.trim() }); }
+    try { metricool = createPublishingClient({ token: process.env.METRICOOL_USER_TOKEN.trim(), userId: process.env.METRICOOL_USER_ID.trim() }, { site: 'clippers-streamer-cloud-worker' }); }
     catch (e) { console.log(`::warning::Metricool adapter unavailable: ${code(e)}`); }
   } else console.log(`::notice::Missing secrets for publishing: ${config.missing.join(', ')}.`);
   if (!config.dryRun && !growthOnly) {

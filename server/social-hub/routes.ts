@@ -5,7 +5,7 @@ import { NETWORK_CAPABILITIES, SOCIAL_NETWORKS, type SocialNetwork, type SocialP
 import { getCurrentUserId, getSystemUserId } from "../user-context";
 import { envCredentialStore, listEnvAccounts } from "./providers";
 import { buildAuthUrl, completeOAuth, loadTokens, oauthConfigured, oauthCredentialStore, OAUTH_APPS, removeToken, tokenStoreStatus } from "./oauth";
-import { metricoolScheduled } from "./metricool-calendar";
+import { publishingCapability } from "../social-publishing/provider";
 import { MEDIA_MAX_BYTES, MediaRejected, postgresMediaStore, saveUpload, serveMedia, type MediaStore } from "./media";
 import { hydrateSocialHub, kvFlush, kvFlushOrThrow, kvGet, kvSet, kvStatus } from "./persist";
 import { listSetVideos, streamSetVideo, trashSetVideo } from "./drive-sets";
@@ -132,7 +132,9 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
     const from = req.query.from ? new Date(String(req.query.from)) : new Date();
     const to = req.query.to ? new Date(String(req.query.to)) : new Date(Date.now() + 7 * 86_400_000);
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to.getTime() - from.getTime() > 45 * 86_400_000) throw new Error("Rango de fechas inválido (máx. 45 días).");
-    return metricoolScheduled(from, to);
+    // Publishing seam: another/unknown provider => no Metricool read (reported, not hidden).
+    try { return await publishingCapability("scheduledCalendar", { site: "social-hub-metricool-calendar" })(from, to); }
+    catch (refusal) { return { items: [], errors: [refusal instanceof Error ? refusal.message : String(refusal)], configured: false }; }
   }));
   // ---- Agent API (cloud workers: clippers, Black Room). Outside /api on purpose: no browser session,
   // authenticated only by Bearer SOCIAL_HUB_AGENT_TOKEN (>= 32 chars, otherwise the API is off). ----
