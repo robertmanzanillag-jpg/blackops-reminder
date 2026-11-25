@@ -13,8 +13,8 @@ import type { FactoryJobInput } from "./software-factory-store";
 import { configuredSoftwareFactoryStore } from "./software-factory-store-provider";
 import { loadSharedCreditRuntime } from "./shared-openai-credit-runtime";
 import { getCouncilStore } from "./agent-council-store";
-import { companyOrderJob, createCompanyOrderDiscovery, ASISTENTE_REPOSITORY } from "./software-factory-company";
-import { companyOrderRetryAttempt } from "./software-factory-order-retry";
+import { companyOrderJob, createCompanyOrderDiscovery, classifyCompanyOrderAdmission, ASISTENTE_REPOSITORY } from "./software-factory-company";
+import { companyOrderRetryAttempt, isZeroCostInfrastructureChain } from "./software-factory-order-retry";
 import { createFactoryCompanyOrderScheduler } from "./software-factory-company-scheduler";
 import { createTrustedFactoryProposalWorkerOptions } from "./software-factory-runtime";
 import { createAsistenteFactoryBuild } from "./software-factory-asistente-build";
@@ -92,7 +92,9 @@ export function countAutoAdmissionsToday(jobs: readonly FactoryJob[], now: Date,
     if (!Array.isArray(jobs) || (jobs.length >= listLimit && jobs.every(job => Date.parse(job.createdAt) >= since))) throw Error("FACTORY_AUTO_ADMISSION_COUNT_UNVERIFIED");
     return jobs.filter(job => {
         const source = job.payload?.companyOrder as { orderId?: unknown; revision?: unknown } | undefined;
-        return job.ownerKey === ownerKey && job.kind === "discover" && Date.parse(job.createdAt) >= since && typeof source?.orderId === "string" && typeof source.revision === "string" && !isMapped(source.orderId, source.revision);
+        return job.ownerKey === ownerKey && job.kind === "discover" && Date.parse(job.createdAt) >= since && typeof source?.orderId === "string" && typeof source.revision === "string" && !isMapped(source.orderId, source.revision)
+            // A zero-cost infrastructure stop never reached a provider (#550): it does not consume autoAdmit.maxPerDay.
+            && !isZeroCostInfrastructureChain(jobs, job);
     }).length;
 }
 /** Admission-side variant: an unprovable count defers admission (no hold). */
@@ -318,25 +320,34 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             return { kind: selected.kind, regressionScenarioId: COMPANY_ORDER_CHECKS_ID, sourcePaths: selected.paths, costCents: selected.costCents, ...(selected.modelProvider ? { modelProvider: selected.modelProvider } : {}) };
         } if (baseSha !== mapping.baseSha)
             throw Error("FACTORY_OPERATOR_ACCEPTANCE_BASE_CHANGED"); return { kind: mapping.kind, regressionScenarioId: mapping.scenarioId, sourcePaths: [...mapping.paths] }; } });
-    const schedule = createFactoryCompanyOrderScheduler({ owner, project, readOrders: async () => { const rows = await orders(), jobs = await store.list(owner), at = now(); if (countDraftPullRequestsTodaySafe(jobs, at, ownerKey) >= config.maxDraftPullRequestsPerDay) return [];
+    /** Safe schedule summary: decision codes and counts only (no ids, text or amounts). */
+    const logSchedule = (rows: readonly CompanyOrder[], decide: (order: CompanyOrder) => string) => { const reasons: Record<string, number> = {};
+        for (const order of rows) { if (order.doneAt) continue; const code = decide(order); reasons[code] = (reasons[code] ?? 0) + 1; }
+        deps.log?.(`Factory schedule: ${JSON.stringify({ open: Object.values(reasons).reduce((a, b) => a + b, 0), reasons })}`); };
+    const ineligibleCode = (order: CompanyOrder) => { const c = classifyCompanyOrderAdmission(order, undefined); return c === "self_heal_order" || c === "auto_admit_disabled" ? "ineligible" : c; };
+    const schedule = createFactoryCompanyOrderScheduler({ owner, project, readOrders: async () => { const rows = await orders(), jobs = await store.list(owner), at = now();
+            if (countDraftPullRequestsTodaySafe(jobs, at, ownerKey) >= config.maxDraftPullRequestsPerDay) { logSchedule(rows, () => "draft_pr_cap"); return []; }
             // Daily credit pace reached: no new admission today (already admitted jobs continue).
-            if (!(await paceAdmits())) return [];
+            if (!(await paceAdmits())) { logSchedule(rows, () => "daily_credit_pace"); return []; }
             retries.clear();
             for (const order of rows) { try { const n = await retryIndex(order, jobs); if (n) retries.set(order.id, n); } catch { /* ineligible */ } }
             const explicit = rows.filter(o => config.orders.some(m => m.id === o.id)).sort(newestFirst);
-            if (!auto) return explicit;
+            if (!auto) { logSchedule(rows, o => explicit.includes(o) ? "mapped" : "auto_admit_disabled"); return explicit; }
             let admittedToday: number;
             try { admittedToday = countAutoAdmissionsToday(jobs, at, ownerKey, isMapped); } catch { admittedToday = Number.POSITIVE_INFINITY; }
-            const p = await project(), automatic: CompanyOrder[] = [];
+            const p = await project(), automatic: CompanyOrder[] = [], decided = new Map<string, string>();
             for (const order of rows.filter(autoEligible).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id))) {
                 let input: FactoryJobInput;
-                try { input = companyOrderJob(order, p, config.reservations.discover, retries.get(order.id) ?? 0); } catch { continue; } // Ineligible (Kong, closed, too long, no engineering assignee).
+                try { input = companyOrderJob(order, p, config.reservations.discover, retries.get(order.id) ?? 0); } catch { decided.set(order.id, ineligibleCode(order)); continue; } // Ineligible (Kong, closed, too long, no engineering assignee).
                 // Recent admissions stay visible so a pending one stops the scan;
                 // older settled admissions are history and never re-admitted.
-                if (jobs.some(j => j.ownerKey === ownerKey && j.kind === "discover" && j.key === input.key)) { automatic.push(order); continue; }
-                if (await settledAdmission(input.key)) continue;
-                if (admittedToday < auto.maxPerDay) automatic.push(order);
+                if (jobs.some(j => j.ownerKey === ownerKey && j.kind === "discover" && j.key === input.key)) { automatic.push(order); decided.set(order.id, "already_admitted"); continue; }
+                if (await settledAdmission(input.key)) { decided.set(order.id, "settled"); continue; }
+                if (admittedToday < auto.maxPerDay) { automatic.push(order); decided.set(order.id, retries.get(order.id) ? "retry_eligible" : "admissible"); }
+                else decided.set(order.id, "daily_auto_admission_limit");
             }
+            logSchedule(rows, o => explicit.includes(o) ? "mapped" : decided.get(o.id) ?? (Date.parse(o.createdAt) < auto.since ? "before_since"
+                : isSelfHealOrder(o) && !auto.systemOrders ? "not_system_allowed" : isSelfHealOrder(o) ? "invalid_self_heal" : "not_eligible"));
             return [...explicit, ...automatic]; }, ordering: "as-read", retryFor: order => retries.get(order.id) ?? 0, ledger: credits.ledger, reservationCents: config.reservations.discover, admit: admitWithinCredits });
     // Reconciliation sweep over verified, recorded draft PRs: crash-safe because
     // every (factory job, head) maps to one permanent office idempotency key.

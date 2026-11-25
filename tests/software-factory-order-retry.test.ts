@@ -74,3 +74,14 @@ test("self-heal observes only the newest retry root and waits instead of burning
   const later = recordSelfHealFactory({ state: out.state, company: emptyCompanyState(), observations: obs, journal: { jobs: [] }, owner, now: t + 1000 });
   assert.equal(later.state.entries[0].status, "in_factory");
 });
+
+test("zero-cost infrastructure stops do not consume autoAdmit.maxPerDay", async () => {
+  const { countAutoAdmissionsToday } = await import("../server/software-factory-asistente-operator");
+  const at = new Date("2026-11-25T08:00:00Z"), notMapped = () => false;
+  const infra = root(), infraBuild = build(infra, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED");
+  const spent = root(), spentBuild = build(spent, "failed", "FACTORY_REMOTE_BUILD_FAILED:PATCH", 12);
+  const code = root(), codeBuild = build(code, "blocked", "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED");
+  const running = root(0, "running");
+  assert.equal(countAutoAdmissionsToday([infra, infraBuild], at, ownerKey, notMapped), 0);
+  assert.equal(countAutoAdmissionsToday([infra, infraBuild, spent, spentBuild, code, codeBuild, running], at, ownerKey, notMapped), 3);
+});

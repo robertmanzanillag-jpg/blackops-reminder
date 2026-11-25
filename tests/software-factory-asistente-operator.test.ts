@@ -317,6 +317,18 @@ test("system self-heal orders are admitted only with autoAdmit.systemOrders and 
     assert.throws(() => validateAsistenteOperatorConfig({ ...baseConfig, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", systemOrders: "yes" } } as any));
 });
 
+test("schedule prints a safe decision summary: codes and counts only", async () => {
+    const orders = [autoOrder("ord-summary-first", "2026-11-06T01:00:00Z"), autoOrder("ord-summary-second", "2026-11-06T02:00:00Z"), autoOrder("ord-summary-old", "2026-11-01T02:00:00Z")];
+    const f = await autoFixture({ orders, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 1 } }), logs: string[] = [];
+    const worker = await createAsistenteOperatorComposition(f.config, { ...f.deps, log: (m: string) => logs.push(m) }).createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner); f.jobs[0].status = "completed";
+    await worker.scheduleCompanyOrders!(owner);
+    const lines = logs.filter(m => m.startsWith("Factory schedule: ")).map(m => JSON.parse(m.slice("Factory schedule: ".length)));
+    assert.deepEqual(lines[0], { open: 3, reasons: { admissible: 2, before_since: 1 } });
+    assert.deepEqual(lines[1], { open: 3, reasons: { already_admitted: 1, daily_auto_admission_limit: 1, before_since: 1 } });
+    for (const m of logs) for (const o of orders) assert.ok(!m.includes(o.id) && !m.includes(o.text));
+});
+
 test("auto admission honors maxPerDay and the draft PR cap with no credit hold", async () => {
     const orders = [autoOrder("a", "2026-11-06T01:00:00Z"), autoOrder("b", "2026-11-06T02:00:00Z")];
     const f = await autoFixture({ orders, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 1 } }), operator = createAsistenteOperatorComposition(f.config, f.deps), worker = await operator.createFactoryWorkerOptions();
@@ -464,7 +476,7 @@ test("office review handoff sweep runs before order scheduling, is off by defaul
     worker = await createAsistenteOperatorComposition(f.config, { ...f.deps, log: (m: string) => logs.push(m), enqueueOfficeReview: async () => { throw Error("unreachable"); } }).createFactoryWorkerOptions();
     await worker.scheduleCompanyOrders!(owner);
     assert.equal(f.calls(), 1);
-    assert.equal(logs.length, 1);
+    assert.equal(logs.filter(m => !m.startsWith("Factory schedule: ")).length, 1);
 });
 
 test("office career scoring sweep runs before order scheduling, is off by default and never blocks scheduling", async () => {
