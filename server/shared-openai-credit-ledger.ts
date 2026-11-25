@@ -174,12 +174,15 @@ export function createSharedOpenAiCreditLedger(options: {
      * execution window opened). Never touches `unknown` or `settled` rows, so it
      * cannot refund spend or clear an uncertain outcome. A late executionWindow
      * for the dropped key fails closed with RESERVATION_UNAVAILABLE. */
-    async releaseUndispatched(key: string) {
+    async releaseUndispatched(key: string, expectedCreatedAt?: string) {
       identifier.parse(key);
+      if (expectedCreatedAt !== undefined && !Number.isFinite(Date.parse(expectedCreatedAt))) fail("CONFIGURATION_INVALID");
       return transaction(state => {
         const index = state.reservations.findIndex(item => item.key === key);
         if (index < 0) return { released: false };
         if (state.reservations[index].status !== "reserved") fail("RELEASE_NOT_ALLOWED");
+        // Compare-and-delete: never drop a newer hold re-reserved by a concurrent run.
+        if (expectedCreatedAt !== undefined && state.reservations[index].createdAt !== expectedCreatedAt) fail("RELEASE_NOT_ALLOWED");
         state.reservations.splice(index, 1);
         return { released: true };
       });

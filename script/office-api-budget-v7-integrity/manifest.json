@@ -87,7 +87,7 @@
     },
     {
       "path": "server/shared-openai-credit-ledger.ts",
-      "sha256": "ad6916c768671403db8c0ca57e7565709569212d191406b76beed90d457b9477"
+      "sha256": "62d88e96520ed83ee49877b4e41c9fce52ae08ebbb452dfb2f7328812ff72ca1"
     },
     {
       "path": "server/shared-openai-credit-runtime.ts",
@@ -107,7 +107,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "d5af4f120bcfaddb32c28a7613cf660bde5ec7d4f363ef135b73013089950177"
+      "sha256": "12e0a14cf2b371cc1dfd91e1c2e085412b39f9df3a04eea24053d0f295638435"
     },
     {
       "path": "server/software-factory-asistente-review.ts",

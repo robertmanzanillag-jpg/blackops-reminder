@@ -242,7 +242,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             const found = await queued();
             if (found.length === 1) { await credits.ledger.settle({ key, actualMicroUsd: 0, evidenceId: noProviderEvidence }); return found[0]; }
             if (found.length !== 0) throw Error("FACTORY_OPERATOR_ADMISSION_RECEIPT_UNAVAILABLE");
-            await credits.ledger.releaseUndispatched(key);
+            await credits.ledger.releaseUndispatched(key, (reservation.reservation as { createdAt: string }).createdAt);
             reservation = await credits.ledger.reserve({ key, consumer: "factory", requestSha256, maximumMicroUsd });
         }
         if (!reservation.admitted) {
@@ -270,7 +270,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             try {
                 const found = await queued();
                 if (found.length === 1) await credits.ledger.settle({ key, actualMicroUsd: 0, evidenceId: noProviderEvidence });
-                else if (found.length === 0) await credits.ledger.releaseUndispatched(key);
+                else if (found.length === 0) await credits.ledger.releaseUndispatched(key, (reservation.reservation as { createdAt: string }).createdAt);
             } catch { /* leave the exact hold `reserved`; never fabricate a receipt */ }
             throw Error("FACTORY_OPERATOR_ADMISSION_UNCONFIRMED");
         }

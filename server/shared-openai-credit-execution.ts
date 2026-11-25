@@ -20,7 +20,7 @@ export async function executeWithinSharedCredits<T>(ledger: Ledger, input: {
     // Proven pre-dispatch failure (e.g. execution window refused): no provider
     // call happened, so the hold is dropped and the shared ledger stays usable.
     if (dispatched && !dispatched()) {
-      const released = await ledger.releaseUndispatched(request.key).then(r => r.released, () => false);
+      const released = await ledger.releaseUndispatched(request.key, receipt.reservation.createdAt).then(r => r.released, () => false);
       if (released) throw Error("CREDIT_EXECUTION_NOT_DISPATCHED");
     }
     // Includes unknown network outcomes and lost settlement acknowledgement.
