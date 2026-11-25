@@ -314,7 +314,7 @@ export function planBlackRoomDeterministicEdit(input: {
     const day = dayOf(entry.publicationDateTime) || dayOf(entry.jobId);
     if (Number.isFinite(day) && Math.abs(day - targetDay) < cooldownMs) djOnCooldown.add(entry.dj);
   }
-  const selectable = eligible.filter((candidate) => !failedVideos.has(candidate.video.id) && !djOnCooldown.has(candidate.dj));
+  const notFailed = eligible.filter((candidate) => !failedVideos.has(candidate.video.id));
   // Complete declared cross-day blocks before opening more unrelated sources.
   // Segment availability, failed-source exclusion and the DJ quota still apply.
   const daypart = Math.floor(Number(slot.split(":")[0]) / 6);
@@ -326,9 +326,12 @@ export function planBlackRoomDeterministicEdit(input: {
     && Math.floor(Number(entry.slot.split(":")[0]) / 6) === daypart
     && targetNetworks.every((network) => entry.targetNetworks?.includes(network))
     && ["drop_first", "instant_drop"].includes(entry.creativeStrategy || ""));
-  const pairCandidates = selectable.filter((candidate) => sourceHasReusableHistory(candidate.video.id)
+  const pairCandidates = notFailed.filter((candidate) => sourceHasReusableHistory(candidate.video.id)
     && comparable.some((entry) => entry.videoId === candidate.video.id)
     && (!durationStudy || !comparable.some(entry=>entry.videoId===candidate.video.id && entry.durationSeconds===durationSeconds)));
+  // Only controlled learning pairs (same set, different arm) may bring a DJ back before the cooldown ends
+  // (Robert: "excepción solo para pruebas"). Everything else respects the 15-day DJ rule.
+  const selectable = notFailed.filter((candidate) => !djOnCooldown.has(candidate.dj) || pairCandidates.includes(candidate));
   const preferFreshSource = (candidates: typeof selectable): typeof selectable => {
     const pairs = candidates.filter((candidate) => pairCandidates.includes(candidate));
     if (pairs.length) return pairs;
