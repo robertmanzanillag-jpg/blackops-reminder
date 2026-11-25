@@ -59,13 +59,30 @@ export function unclassifiedShape(error: unknown): { errorClass?: string; frame?
     if (!(error instanceof Error)) return error === undefined ? {} : { errorClass: `CLASS_${error === null ? "null" : typeof error}` };
     const name = error.constructor?.name;
     out.errorClass = typeof name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(name) ? `CLASS_${name}` : "CLASS_UNKNOWN";
-    // V8 may expose `stack` as an accessor; read it (inside try) but use only frames.
-    const stack: unknown = (error as { stack?: unknown }).stack;
-    if (typeof stack === "string") {
+    // V8 formats `stack` lazily and that default formatting reads `message`
+    // (possibly a hostile getter). Format with call sites only, never message.
+    type Site = { getFileName?: () => unknown; getLineNumber?: () => unknown };
+    const ErrorCtor = Error as unknown as { prepareStackTrace?: unknown };
+    const previous = ErrorCtor.prepareStackTrace;
+    let stack: unknown;
+    ErrorCtor.prepareStackTrace = (_error: unknown, sites: Site[]) => ({ sites });
+    try { stack = (error as { stack?: unknown }).stack; } finally { ErrorCtor.prepareStackTrace = previous; }
+    const basename = (file: string, line: number) => {
+      const name = file.split(/[\\/]/).pop() ?? "";
+      return /^[A-Za-z0-9_.-]{1,80}\.(?:ts|tsx|mts|cts|mjs|cjs|js)$/.test(name) && Number.isSafeInteger(line) && line > 0 ? `${name}:${line}` : undefined;
+    };
+    if (stack && typeof stack === "object" && Array.isArray((stack as { sites?: unknown }).sites)) {
+      for (const site of (stack as { sites: Site[] }).sites.slice(0, 64)) {
+        const file = site?.getFileName?.(), line = site?.getLineNumber?.();
+        if (typeof file !== "string" || typeof line !== "number") continue;
+        const frame = basename(file, line); if (frame) { out.frame = frame; break; }
+      }
+    } else if (typeof stack === "string") {
       for (const line of stack.split("\n").slice(0, 64)) {
         if (!/^\s+at\s/.test(line)) continue;
-        const match = /([A-Za-z0-9_.-]{1,80}\.(?:ts|tsx|mts|cts|mjs|cjs|js)):(\d{1,6})(?::\d{1,6})?\)?\s*$/.exec(line);
-        if (match) { out.frame = `${match[1]}:${match[2]}`; break; }
+        const match = /([^\s()]{1,400}?):(\d{1,6})(?::\d{1,6})?\)?\s*$/.exec(line);
+        const frame = match ? basename(match[1], Number(match[2])) : undefined;
+        if (frame) { out.frame = frame; break; }
       }
     }
   } catch { /* hostile getters: keep what is known */ }
