@@ -109,7 +109,8 @@ export function getConfiguredClippersDriveRootFolderId(): string | null {
   );
 }
 
-async function getDriveClient(userId: string) {
+/** Exported for the Social Hub agent API (Black Room sets folder). */
+export async function getDriveClient(userId: string) {
   const googleDrive = await getGoogleDriveApi();
   if (
     getGoogleDriveRefreshTokenFromEnv() ||

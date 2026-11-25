@@ -7,7 +7,8 @@ import { envCredentialStore, listEnvAccounts } from "./providers";
 import { buildAuthUrl, completeOAuth, loadTokens, oauthConfigured, oauthCredentialStore, OAUTH_APPS, removeToken, tokenStoreStatus } from "./oauth";
 import { metricoolScheduled } from "./metricool-calendar";
 import { MEDIA_MAX_BYTES, MediaRejected, postgresMediaStore, saveUpload, serveMedia, type MediaStore } from "./media";
-import { hydrateSocialHub, kvFlush, kvFlushOrThrow, kvStatus } from "./persist";
+import { hydrateSocialHub, kvFlush, kvFlushOrThrow, kvGet, kvSet, kvStatus } from "./persist";
+import { listSetVideos, streamSetVideo, trashSetVideo } from "./drive-sets";
 import { persistentSocialHubStore, SocialHub, SocialHubValidationError } from "./scheduler";
 
 let hub: SocialHub | undefined;
@@ -163,6 +164,16 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
       res.status(e instanceof MediaRejected ? 400 : 500).json({ error: e instanceof Error ? e.message : "No se pudo subir" });
     }
   });
+  // Free the clip bytes once the networks already pulled it: only media of a post that is published everywhere.
+  app.post("/social-hub-agent/media/cleanup", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    await socialHubReady();
+    const post = getHub().list().find((p) => p.id === String(req.body?.postId || ""));
+    if (!post || post.status !== "published") return res.status(409).json({ error: "El post aún no está publicado." });
+    const ids = post.mediaUrls.map((u) => u.match(/\/social-hub-media\/([A-Za-z0-9_-]+)/)?.[1]).filter(Boolean) as string[];
+    for (const id of ids) await media.remove?.(id);
+    res.json({ removed: ids.length });
+  });
   app.post("/social-hub-agent/posts", async (req, res) => {
     if (!agentAuth(req, res)) return;
     try {
@@ -186,6 +197,40 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
     await socialHubReady();
     const days = Math.min(90, Math.max(1, Number(req.query.days ?? 30)));
     res.json(getHub().metricsSince(days));
+  });
+  // Worker state (e.g. Black Room clip ledger) lives in the same Postgres kv, namespaced per agent.
+  const stateKey = (k: unknown) => `agent-state:${agentName(k)}`;
+  const loadedState = new Set<string>();
+  const loadState = async (k: string) => {
+    await socialHubReady();
+    if (loadedState.has(k)) return;
+    await hydrateSocialHub([k]);
+    loadedState.add(k);
+  };
+  app.get("/social-hub-agent/state/:key", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    await loadState(stateKey(req.params.key));
+    res.json(JSON.parse(kvGet(stateKey(req.params.key)) || "null"));
+  });
+  app.post("/social-hub-agent/state/:key", express.json({ limit: "2mb" }), async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    await loadState(stateKey(req.params.key));
+    kvSet(stateKey(req.params.key), JSON.stringify(req.body ?? null));
+    try { await kvFlushOrThrow(); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e instanceof Error ? e.message : "No se pudo guardar" }); }
+  });
+  // Drive "sets para clips" folder: credentials stay on the server; only files inside that folder are reachable.
+  const driveErr = (res: Response, e: unknown) => res.status(502).json({ error: e instanceof Error ? e.message : "Drive error" });
+  app.get("/social-hub-agent/drive/sets", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    try { res.json(await listSetVideos()); } catch (e) { driveErr(res, e); }
+  });
+  app.get("/social-hub-agent/drive/sets/:id", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    try { await streamSetVideo(req.params.id, res); } catch (e) { if (!res.headersSent) driveErr(res, e); else res.destroy(); }
+  });
+  app.post("/social-hub-agent/drive/sets/:id/trash", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    try { res.json(await trashSetVideo(req.params.id)); } catch (e) { driveErr(res, e); }
   });
   app.get("/api/social-hub/best-time", h((req) => ({ at: getHub().bestTime(String(req.query.networks ?? "instagram").split(",") as any).toISOString() })));
 }
