@@ -287,3 +287,131 @@ export function stampSelfImprovementCooldowns(company: CompanyState, created: Co
   }
   return careers === company.careers ? company : { ...company, careers };
 }
+
+// ---------- Generic outcome-learning loop (every agent with recorded jobs; $0, no AI) ----------
+//
+// After each completed/blocked job the council already persists, derive deterministic lessons
+// from metrics that ARE recorded (status, block reason, diagnostic codes, duration, factory stage
+// outcome/verdict, credit-pacer cost per task type). No metric is ever estimated: an agent with
+// no recorded outcome gets no lesson. Lessons are bounded per agent, stored on its career and
+// injected into its next prompt (server/agent-chat.ts factsText) and shown by the roster panel.
+
+export type AgentLessonKind = "bloqueo" | "diagnostico" | "duracion" | "costo" | "revision";
+export type AgentLesson = { id: string; kind: AgentLessonKind; text: string; evidence: number; firstAt: string; lastAt: string };
+export type AgentLearning = { lessons: AgentLesson[]; total: number; updatedAt: string };
+export type OutcomeSample = { agentId: string; jobId: string; status: "completed" | "blocked"; at: string; reason?: string; diagnostics: string[]; durationMs?: number; verdict?: "success" | "attributable_failure" };
+export type CostTrend = { taskType: string; avgMicroUsd: number; previousAvgMicroUsd: number | null };
+
+export const MAX_AGENT_LESSONS = 6;
+export const PROMPT_LESSONS = 3;
+const OUTCOME_WINDOW_MS = 7 * 24 * 3600_000;
+const CODE = /^[A-Za-z0-9_:.-]{2,80}$/;
+/** Credit-pacer task types that belong to exactly one agent (others are shared: never attributed). */
+export const COST_OWNERS: Record<string, string> = { factory_select: "factory-scout", factory_build: "factory-builder", factory_review: "factory-reviewer", office_review: "claude-reviewer", reviewer_academy: "claude-reviewer" };
+const REASON_HINTS: Record<string, string> = {
+  source_unavailable: "verifica que la fuente de datos responda antes de empezar",
+  web_export_missing: "pide la exportación web de la fuente antes del turno",
+  web_export_unverified: "revalida la exportación web (firma y fecha) antes de usarla",
+  expired_no_automatic_retry: "divide el trabajo para terminar dentro del plazo",
+  lease_or_generation_changed: "no inicies trabajo si el puesto está en relevo",
+};
+
+/** Normalizes persisted jobs (role work, internal work, factory ledger) into outcome samples. Invalid rows are dropped (fail closed). */
+export function collectOutcomeSamples(input: { roleWorkJobs?: unknown; internalWorkJobs?: unknown; factoryLedger?: unknown }): OutcomeSample[] {
+  const out: OutcomeSample[] = [];
+  for (const list of [input.roleWorkJobs, input.internalWorkJobs]) {
+    for (const job of Array.isArray(list) ? list as Array<RoleWorkLike & { reason?: unknown }> : []) {
+      if (!isObj(job) || typeof job.role !== "string" || typeof job.id !== "string" || !["completed", "blocked"].includes(String(job.status))) continue;
+      const start = ms(job.startedAt), end = ms(job.completedAt) || (job.status === "blocked" ? start : 0);
+      if (!start || !end) continue;
+      const reason = typeof job.reason === "string" && CODE.test(job.reason) ? job.reason : undefined;
+      out.push({ agentId: job.role, jobId: job.id, status: job.status as "completed" | "blocked", at: new Date(end).toISOString(), reason, diagnostics: diagnosticsOf(job),
+        ...(ms(job.completedAt) && end >= start ? { durationMs: end - start } : {}) });
+    }
+  }
+  const ledger = isObj(input.factoryLedger) && Array.isArray(input.factoryLedger.processed) ? input.factoryLedger.processed : [];
+  for (const e of ledger) {
+    if (!isObj(e) || typeof e.agentId !== "string" || typeof e.jobId !== "string" || !ms(e.completedAt) || !["success", "attributable_failure"].includes(e.outcome)) continue;
+    out.push({ agentId: e.agentId, jobId: `${e.jobId}:${e.evidenceId}`, status: e.outcome === "success" ? "completed" : "blocked", at: e.completedAt, verdict: e.outcome,
+      reason: typeof e.reason === "string" && CODE.test(e.reason) ? e.reason : undefined, diagnostics: [] });
+  }
+  return out;
+}
+
+const median = (values: number[]) => { const s = [...values].sort((a, b) => a - b); return s.length ? s[Math.floor((s.length - 1) / 2)] : 0; };
+
+/** Pure lesson derivation for one agent from its own samples (last 7 days) and an attributable cost trend. */
+export function deriveAgentLessons(samples: OutcomeSample[], now: number, cost?: CostTrend): Array<Omit<AgentLesson, "firstAt">> {
+  const recent = samples.filter(s => now - ms(s.at) <= OUTCOME_WINDOW_MS && ms(s.at) <= now + 5_000).sort((a, b) => ms(a.at) - ms(b.at));
+  const lessons: Array<Omit<AgentLesson, "firstAt">> = [];
+  const lastAt = (list: OutcomeSample[]) => list[list.length - 1].at;
+  const byReason = new Map<string, OutcomeSample[]>();
+  for (const s of recent) if (s.status === "blocked" && s.reason && !s.verdict) byReason.set(s.reason, [...(byReason.get(s.reason) || []), s]);
+  for (const [reason, list] of byReason) if (list.length >= 2)
+    lessons.push({ id: `bloqueo:${reason}`, kind: "bloqueo", evidence: list.length, lastAt: lastAt(list), text: `Bloqueo repetido (${reason}, ${list.length} veces en 7 días): ${REASON_HINTS[reason] || "resuelve esa causa antes de repetir el trabajo"}.` });
+  const byCode = new Map<string, { days: Set<string>; list: OutcomeSample[] }>();
+  for (const s of recent) for (const code of s.diagnostics) { const e = byCode.get(code) || { days: new Set(), list: [] }; e.days.add(s.at.slice(0, 10)); e.list.push(s); byCode.set(code, e); }
+  for (const [code, e] of byCode) if (e.days.size >= 2)
+    lessons.push({ id: `diagnostico:${code}`, kind: "diagnostico", evidence: e.days.size, lastAt: lastAt(e.list), text: `Prioridad: ${DIAGNOSTIC_HINTS[code] || `resolver ${code}`} (${code} apareció ${e.days.size} días distintos).` });
+  const timed = recent.filter(s => s.status === "completed" && Number.isSafeInteger(s.durationMs) && s.durationMs! > 0);
+  if (timed.length >= 4) {
+    const last = timed[timed.length - 1], base = median(timed.slice(0, -1).map(s => s.durationMs!));
+    if (base > 0 && last.durationMs! > 2 * base) lessons.push({ id: "duracion:alta", kind: "duracion", evidence: timed.length, lastAt: last.at, text: `El último trabajo tardó ${Math.round(last.durationMs! / 1000)} s, más del doble de la mediana (${Math.round(base / 1000)} s): reduce el alcance por turno.` });
+  }
+  const verdicts = recent.filter(s => s.verdict === "attributable_failure");
+  const byVerdict = new Map<string, OutcomeSample[]>();
+  for (const s of verdicts) { const k = s.reason || "FALLO"; byVerdict.set(k, [...(byVerdict.get(k) || []), s]); }
+  for (const [reason, list] of byVerdict) if (list.length >= 2)
+    lessons.push({ id: `revision:${reason}`, kind: "revision", evidence: list.length, lastAt: lastAt(list), text: `La revisión marcó ${list.length} fallos propios por ${reason} en 7 días: comprueba eso antes de entregar.` });
+  if (cost && Number.isSafeInteger(cost.avgMicroUsd) && Number.isSafeInteger(cost.previousAvgMicroUsd) && cost.previousAvgMicroUsd! > 0 && cost.avgMicroUsd > 1.25 * cost.previousAvgMicroUsd! && recent.length) {
+    const usd = (n: number) => (n / 1e6).toFixed(3);
+    lessons.push({ id: `costo:${cost.taskType}`, kind: "costo", evidence: 1, lastAt: lastAt(recent), text: `Costo medio subió de $${usd(cost.previousAvgMicroUsd!)} a $${usd(cost.avgMicroUsd)} por tarea (${cost.taskType}): mantén el presupuesto en ≤ $${usd(cost.previousAvgMicroUsd!)} y recorta contexto.` });
+  }
+  return lessons;
+}
+
+/**
+ * Records lessons on each career (bounded to MAX_AGENT_LESSONS, newest first; total counts distinct
+ * lessons ever learned). Agents with no recorded outcome are untouched. Training careers learn too.
+ */
+export function applyOutcomeLessons(company: CompanyState, samples: OutcomeSample[], now: number, costTrends: CostTrend[] = []): CompanyState {
+  const iso = new Date(now).toISOString();
+  const byAgent = new Map<string, OutcomeSample[]>();
+  for (const s of samples) byAgent.set(s.agentId, [...(byAgent.get(s.agentId) || []), s]);
+  let careers = company.careers;
+  for (const [agentId, list] of byAgent) {
+    const career = careers[agentId];
+    if (!career) continue;
+    const cost = costTrends.find(t => COST_OWNERS[t.taskType] === agentId);
+    const derived = deriveAgentLessons(list, now, cost);
+    if (!derived.length) continue;
+    const prev = career.learning && Array.isArray(career.learning.lessons) ? career.learning : { lessons: [], total: 0, updatedAt: iso };
+    const merged = new Map(prev.lessons.map(l => [l.id, l]));
+    let added = 0, changed = false;
+    for (const d of derived) {
+      const old = merged.get(d.id);
+      if (!old) added++;
+      if (!old || old.lastAt !== d.lastAt || old.evidence !== d.evidence) changed = true;
+      merged.set(d.id, { ...d, firstAt: old?.firstAt || iso });
+    }
+    if (!changed) continue;
+    const lessons = [...merged.values()].sort((a, b) => ms(b.lastAt) - ms(a.lastAt) || a.id.localeCompare(b.id)).slice(0, MAX_AGENT_LESSONS);
+    const total = Math.min(Number.isSafeInteger(prev.total) ? prev.total + added : added, 1_000_000);
+    careers = { ...careers, [agentId]: { ...career, learning: { lessons, total, updatedAt: iso } } };
+  }
+  return careers === company.careers ? company : { ...company, careers };
+}
+
+/** Top-N lessons as prompt lines for the agent's next job (empty when nothing was learned). */
+export function lessonPromptLines(learning: unknown, n = PROMPT_LESSONS): string[] {
+  if (!isObj(learning) || !Array.isArray(learning.lessons)) return [];
+  return (learning.lessons as AgentLesson[]).filter(l => isObj(l) && typeof l.text === "string").slice(0, n).map(l => l.text.slice(0, 240));
+}
+
+/** Roster summary: count of lessons learned and the latest one. */
+export function learningSummary(learning: unknown): { aprendizajes: number; ultimoAprendizaje: string | null } {
+  if (!isObj(learning) || !Array.isArray(learning.lessons)) return { aprendizajes: 0, ultimoAprendizaje: null };
+  const total = Number.isSafeInteger(learning.total) ? Math.max(learning.total, learning.lessons.length) : learning.lessons.length;
+  const last = learning.lessons[0];
+  return { aprendizajes: total, ultimoAprendizaje: isObj(last) && typeof last.text === "string" ? last.text.slice(0, 240) : null };
+}

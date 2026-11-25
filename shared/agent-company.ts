@@ -39,6 +39,8 @@ export type AgentCareer = {
   qualitySignalIds?: string[];
   /** Cadence-based vida clock (shared/agent-vitality.ts). Absent until the first vitality tick. */
   vitality?: import("./agent-vitality").CareerVitality;
+  /** Deterministic lessons from this agent's own measured job outcomes (shared/agent-self-improvement.ts). */
+  learning?: import("./agent-self-improvement").AgentLearning;
 };
 
 export type SkillSource = "academia" | "orden" | "leccion";

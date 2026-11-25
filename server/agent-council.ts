@@ -8,7 +8,7 @@ import { roleWorkActivityView } from "../shared/office-role-work-activity";
 import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
 import { CLIPPERS_AGENT_NAMES } from "../shared/clippers-office-agents";
 import { parseSelfHealState, selfHealOfficeView } from "./office-self-heal";
-import { creditPacerView, parseCreditPacerState } from "./credit-pacer";
+import { creditPacerView, parseCreditPacerState, taskEfficiency } from "./credit-pacer";
 import { getSystemUserId } from "./user-context";
 import { createChatOrder } from "../shared/agent-chat-routing";
 import type { OfficeKongAuditResult } from "./office-kong";
@@ -97,7 +97,7 @@ import {
 } from "@shared/agent-company";
 import { advanceBlackRoomAcademy, scheduleBlackRoomAcademy, BLACKROOM_ACADEMY_ROLES } from "@shared/blackroom-academy";
 import { applyVitality, closeStaleVitalityFlags, deriveVitalityFlagProposals, publicCareerVitality, vitalityView } from "@shared/agent-vitality";
-import { clippersAcademyLessons, deriveSelfImprovementProposals, learnClippersLessons, pipelineHolds, roleWorkVitalityEvidence, stampSelfImprovementCooldowns, streamerVitalityEvidence } from "@shared/agent-self-improvement";
+import { applyOutcomeLessons, collectOutcomeSamples, type CostTrend, clippersAcademyLessons, deriveSelfImprovementProposals, learnClippersLessons, pipelineHolds, roleWorkVitalityEvidence, stampSelfImprovementCooldowns, streamerVitalityEvidence } from "@shared/agent-self-improvement";
 import type { BlackRoomTeamLessonRule } from "@shared/blackroom-team";
 import { blackRoomCurriculumModules } from "./office-role-blackroom-curricula";
 
@@ -327,6 +327,8 @@ function advanceCompanyCycle(
   const clippersLessons = clippersAcademyLessons(vitalityInput.streamerState);
   company = learnClippersLessons(company, clippersLessons, now);
   const execution = state.officeExecution;
+  // Generic outcome-learning loop: every agent with recorded jobs learns from its own outcomes ($0).
+  company = applyOutcomeLessons(company, collectOutcomeSamples({ roleWorkJobs, internalWorkJobs: execution?.internalWork?.jobs, factoryLedger: execution?.factoryCareers }), now, outcomeCostTrends(execution?.creditPacer, now));
   const holds: Record<string, string> = {
     ...pipelineHolds({ now, roleWorkJobs, internalWorkJobs: execution?.internalWork?.jobs, seats: execution?.roles?.roles as Record<string, { status?: string }> | undefined,
       factoryLedger: execution?.factoryCareers, streamerState: vitalityInput.streamerState, streamerRead: vitalityInput.streamerRead, scoutLastRunAt: state.scout.lastRunAt, scoutError: state.scout.error,
@@ -1436,3 +1438,14 @@ export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = proces
 }
 
 export { emptyCouncilState };
+
+/** Cost trend per task type, only when exactly one pacer ledger measured it (ambiguity = no lesson). */
+function outcomeCostTrends(pacer: unknown, now: number): CostTrend[] {
+  try {
+    const parsed = parseCreditPacerState(pacer);
+    const today = new Date(now).toISOString().slice(0, 10);
+    const rows = Object.values(parsed.ledgers).flatMap(ledger => taskEfficiency(ledger, today));
+    return rows.filter(row => rows.filter(other => other.taskType === row.taskType).length === 1)
+      .map(row => ({ taskType: row.taskType, avgMicroUsd: row.avgMicroUsd, previousAvgMicroUsd: row.previousAvgMicroUsd }));
+  } catch { return []; }
+}

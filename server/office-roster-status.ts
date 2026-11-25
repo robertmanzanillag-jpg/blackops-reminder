@@ -9,6 +9,7 @@
 import { buildAgentChatDirectory, AGENT_CHAT_GROUP_LABELS } from "../shared/agent-chat-directory";
 import { CLIPPERS_AGENTS } from "../shared/clippers-office-agents";
 import type { CouncilState } from "../shared/agent-council";
+import { learningSummary } from "../shared/agent-self-improvement";
 
 export type RosterState = "trabajando" | "en_espera" | "bloqueado" | "sin_datos";
 export type RosterEntry = {
@@ -24,6 +25,9 @@ export type RosterEntry = {
   doing?: string;
   /** Spanish reason (only when state is "bloqueado"). */
   reason?: string;
+  /** Lessons learned from its own measured outcomes (0 when none are recorded). */
+  aprendizajes: number;
+  ultimoAprendizaje: string | null;
 };
 export type RosterView = { observedAt: string; workingWindowMs: number; counts: Record<RosterState, number>; agents: RosterEntry[] };
 
@@ -95,7 +99,8 @@ export function buildOfficeRoster(state: RosterInput, now: number, windowMs = RO
   const agents = roster.map(entry => {
     const status = deriveAgentStatus(entry.id, state, now, windowMs);
     counts[status.state] += 1;
-    return { ...entry, ...status };
+    const career = state.company?.careers?.[entry.id] ?? state.kongCompany?.careers?.[entry.id];
+    return { ...entry, ...status, ...learningSummary(career?.learning) };
   });
   return { observedAt: new Date(now).toISOString(), workingWindowMs: windowMs, counts, agents };
 }

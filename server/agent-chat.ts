@@ -23,6 +23,7 @@ import { AGENT_CHAT_GROUP_LABELS, buildAgentChatDirectory, directoryCityNames, f
 import { effectiveIntegrations, integrationFor, parseIntegrationOverrides } from "@shared/agent-integrations";
 import { factoryAgentsView, isFactoryAgentId } from "@shared/factory-office-agents";
 import { OFFICE_KONG_CITY_TASKS } from "@shared/office-kong-supervisor";
+import { lessonPromptLines } from "@shared/agent-self-improvement";
 
 export type AgentChatRole = "user" | "agent" | "handoff" | "peer";
 export type AgentChatMessage = { id: string; threadId: string; role: AgentChatRole; agentId: string; fromAgentId?: string; text: string; at: string; requestId?: string; handoffTo?: string };
@@ -140,6 +141,8 @@ function lastWorkBlock(f: Facts) {
   lines.push(...f.extra);
   const memory = f.career?.memory?.slice(0, 3) || [];
   if (memory.length) lines.push(`Mi memoria reciente:\n${memory.map(m => `- ${when(m.at)}: ${m.text}`).join("\n")}`);
+  const lessons = lessonPromptLines(f.career?.learning);
+  if (lessons.length) lines.push(`Mis aprendizajes (aplícalos en mi próximo trabajo):\n${lessons.map(l => `- ${l}`).join("\n")}`);
   return lines.join("\n");
 }
 function handoffBlock(f: Facts) {
