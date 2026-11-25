@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { CompanyOrder, CompanyState } from "../shared/agent-company";
 import { isKongCompanyAgent } from "../shared/agent-company";
+import { SELF_HEAL_APP_QA_ROUTE, selfHealAppQaRecordId } from "./app-qa-self-heal";
 import type { SelfHealAgentSummary, SelfHealOfficeView } from "../shared/office-self-heal-view";
 
 /**
@@ -124,11 +125,8 @@ const INFRASTRUCTURE = /CREDIT|BUDGET|DAILY|LIMIT|PAUSED|UNKNOWN|UNCONFIRMED|UNA
 // ---------- normalized audits (built from the role-work journal) ----------
 
 export type SelfHealAuditRecord = { repo: string; number?: number; draft?: boolean; headRef?: string; testPath?: string; qaRoute?: string };
-/** A page/route App QA reported on this repo's web app (path only, no query, never KONG). */
-export const SELF_HEAL_APP_QA_ROUTE = /^\/[A-Za-z0-9._~\/-]{0,80}$/;
 export const isSelfHealAppQaCode = (code: string) => /^APP_QA_[A-Z_]{1,40}$/.test(code);
-/** Record id (evidence id) of one App QA finding class on one route of this repo. */
-export const selfHealAppQaRecordId = (code: string, qaRoute: string) => digest(["app-qa-finding", SELF_HEAL_REPOSITORY, code, qaRoute]);
+export { SELF_HEAL_APP_QA_ROUTE, selfHealAppQaRecordId };
 const validAppQaRoute = (route: unknown): route is string => typeof route === "string" && SELF_HEAL_APP_QA_ROUTE.test(route) && !/kong/i.test(route) && !route.includes("..");
 /** Agent head branches whose non-draft PRs may receive a PR_FAILING_CHECKS order. */
 export const SELF_HEAL_AGENT_HEAD = /^(?:claude|codex)\/[A-Za-z0-9._\/-]{1,180}$/;

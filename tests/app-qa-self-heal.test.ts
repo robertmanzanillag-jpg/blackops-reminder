@@ -4,7 +4,7 @@ import type { CompanyOrder } from "../shared/agent-company";
 import { emptyCompanyState } from "../shared/agent-company";
 import {
   appQaFactoryRoute, appQaRoute, appQaSelfHealCode, buildAppQaSelfHealAudit, parseAppQaSelfHealSnapshot,
-  persistAppQaSelfHealAudit, readAppQaSelfHealAudits,
+  persistAppQaSelfHealAudit, readAppQaSelfHealAudits, APP_QA_OWN_REPOSITORY,
 } from "../server/app-qa-self-heal";
 import { SELF_HEAL_REPOSITORY, isValidSelfHealOrder, planSelfHeal, selfHealAppQaRecordId } from "../server/office-self-heal";
 import { companyOrderJob } from "../server/software-factory-company";
@@ -15,6 +15,8 @@ const T0 = Date.parse("2026-11-25T10:00:00Z");
 const iso = (t: number) => new Date(t).toISOString();
 const own = new Map<string, string | null>([["blackops", SELF_HEAL_REPOSITORY], ["kong", "robertmanzanillag-jpg/kong-nightlife"]]);
 const f = (over: Record<string, unknown>) => ({ id: "x", appName: "Visual QA", sourceAgent: "visual-click-scout", severity: "high", title: "QA visual fallo", area: "Home", url: "https://example.test/dashboard?x=1", ...over }) as any;
+
+test("own repository constant matches the self-heal repository", () => assert.equal(APP_QA_OWN_REPOSITORY, SELF_HEAL_REPOSITORY));
 
 test("classification: only code-fixable classes on this repo become factory routes; setup, KONG and low never do", () => {
   assert.equal(appQaSelfHealCode(f({})), "APP_QA_VISUAL_FAILED");

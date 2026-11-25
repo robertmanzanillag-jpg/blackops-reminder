@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
-import {
-  SELF_HEAL_APP_QA_ROUTE, SELF_HEAL_REPOSITORY, selfHealAppQaRecordId, type SelfHealObservedAudit,
-} from "./office-self-heal";
+// Type-only import: this module is loaded by App QA in the web process and must stay free of zod
+// and the office graph. office-self-heal.ts imports the record-id helpers from here.
+import type { SelfHealObservedAudit } from "./office-self-heal";
+
+/** Same value as SELF_HEAL_REPOSITORY in office-self-heal.ts (asserted by tests). */
+export const APP_QA_OWN_REPOSITORY = "robertmanzanillag-jpg/blackops-reminder";
+const SELF_HEAL_REPOSITORY = APP_QA_OWN_REPOSITORY;
+/** A page/route App QA reported on this repo's web app (path only, no query, never KONG). */
+export const SELF_HEAL_APP_QA_ROUTE = /^\/[A-Za-z0-9._~\/-]{0,80}$/;
+/** Record id (evidence id) of one App QA finding class on one route of this repo. */
+export const selfHealAppQaRecordId = (code: string, qaRoute: string) =>
+  createHash("sha256").update(JSON.stringify(["app-qa-finding", SELF_HEAL_REPOSITORY, code, qaRoute])).digest("hex");
 
 /**
  * App QA -> office self-heal bridge.
