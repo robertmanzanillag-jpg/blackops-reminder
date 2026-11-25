@@ -54,13 +54,15 @@ export function prohibitionSignal(state, candidate, { description = null, blockl
 }
 
 /**
- * Decision for one candidate still waiting for an owner review.
+ * Decision for one candidate still waiting for an owner review (pending or never requested).
  * Returns { approve: true, rule, evidence } or { approve: false, reason }.
  */
 export function autoApprovalDecision(state, candidate, { now = Date.now(), config, maxSourceAgeHours = 48, ledger = null, description = null } = {}) {
   if (!config?.enabled) return { approve: false, reason: 'auto_approve_disabled' };
   if (!candidate) return { approve: false, reason: 'candidate_missing' };
-  if (candidate.approval?.status !== 'pending') return { approve: false, reason: `approval_${candidate.approval?.status ?? 'missing'}` };
+  // A pending owner request, or a candidate no request was ever queued for (no row id yet), is judged by the policy.
+  const st = candidate.approval?.status ?? 'not_requested';
+  if (!(st === 'pending' || (st === 'not_requested' && !candidate.approval?.pendingActionId))) return { approve: false, reason: `approval_${candidate.approval?.status ?? 'missing'}` };
   const creator = state?.creators?.[candidate.creatorKey];
   if (!creator?.policy || creator.policy.source === 'not_checked') return { approve: false, reason: 'creator_policy_not_checked' };
   const prohibited = prohibitionSignal(state, candidate, { description, blocklist: config.blocklist });
