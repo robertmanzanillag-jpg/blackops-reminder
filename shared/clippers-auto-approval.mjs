@@ -3,10 +3,12 @@
 // explicitly prohibits clipping/reuploads (description/About text, clip settings off, prohibition detector),
 // has any takedown/complaint (-> permanent auto-blocklist) or is on the owner blocklist.
 // Streamer-stated requirements (credit, link, no music, #ad) are detected and applied automatically.
-// Off unless CLIPPERS_AUTO_APPROVE_ENABLED=true. Never overrides an owner rejection. Never creates or
-// replaces a per-source rights grant (sourceRightsGate still runs at publish time).
+// Off unless CLIPPERS_AUTO_APPROVE_ENABLED=true. Never overrides an owner rejection. When the policy passes it records
+// an owner standing-policy grant (basis owner_default_policy: Robert's rule "no objection from the streamer = permission");
+// it never replaces an existing grant, and any takedown or later prohibition revokes it.
 import { detectClipProhibition, takedownBlocks, resolveClipPolicy, clipLengthAllowed, captionHasCredit } from './clippers-streamer-policy.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from './clippers-priority-creators.mjs';
+import { createHash } from 'node:crypto';
 
 const HOUR = 3_600_000;
 export const AUTO_APPROVE_RULE = 'default_no_prohibition_signals';
@@ -115,4 +117,37 @@ export function autoApprovalSummary(report) {
   const why = Object.entries(a.rules ?? {}).map(([k, v]) => `${k}=${v}`).join(',') || 'none';
   const held = Object.entries(a.held ?? {}).sort((x, y) => y[1] - x[1]).slice(0, 6).map(([k, v]) => `${k}=${v}`).join(',') || 'none';
   return `auto_approve=${a.enabled ? 'on' : 'off'} approved=${a.approved} [${why}] manual[${held}]`;
+}
+
+export const OWNER_DEFAULT_POLICY_VERSION = 1;
+export const OWNER_DEFAULT_POLICY_HOURS = 48;
+
+/** Standing-policy grant for one source (satisfies sourceRightsGate; distinct basis, never 'permission'). */
+export function ownerDefaultPolicyGrant(candidate, evidence, { now = Date.now(), destinations = [] } = {}) {
+  const snapshot = createHash('sha256').update(JSON.stringify({ candidateId: candidate.id, creatorKey: candidate.creatorKey, sourceUrl: candidate.sourceUrl, evidence })).digest('hex');
+  const at = new Date(now).toISOString();
+  return { schemaVersion: 1, status: 'approved', basis: 'owner_default_policy', candidateId: candidate.id, sourceUrl: candidate.sourceUrl, creatorKey: candidate.creatorKey,
+    rightsHolder: candidate.creatorKey, review: { actor: 'owner', method: 'standing_policy', id: `owner-default-policy:v${OWNER_DEFAULT_POLICY_VERSION}`, at },
+    evidence: { reference: `clippers-auto-approve:${AUTO_APPROVE_RULE}`, sha256: snapshot }, policy: { version: OWNER_DEFAULT_POLICY_VERSION, rule: AUTO_APPROVE_RULE },
+    scope: { video: true, audio: true, editing: true, commercialSocial: true, wholeSource: true, publicMediaStaging: true },
+    validFrom: at, validUntil: new Date(now + OWNER_DEFAULT_POLICY_HOURS * HOUR).toISOString(), destinations: [...destinations] };
+}
+
+/** Records the grant only when no grant exists for that source (real owner grants are never replaced). */
+export function recordOwnerDefaultGrant(state, grant) {
+  state.sourceAuthorizations = state.sourceAuthorizations && typeof state.sourceAuthorizations === 'object' ? state.sourceAuthorizations : {};
+  const prior = state.sourceAuthorizations[grant.candidateId];
+  if (prior && !(prior.basis === 'owner_default_policy' && prior.status !== 'approved')) return prior.basis === 'owner_default_policy';
+  if (prior?.status === 'revoked') return false; // a revoked standing grant is never re-issued for the same source
+  state.sourceAuthorizations[grant.candidateId] = grant; return true;
+}
+
+/** Revokes standing-policy grants for a source/creator (takedown or prohibition). Returns the number revoked. */
+export function revokeOwnerDefaultGrants(state, { candidateId = null, creatorKeys = [] } = {}, reason = 'prohibition', now = Date.now()) {
+  let n = 0;
+  for (const g of Object.values(state?.sourceAuthorizations ?? {})) {
+    if (g?.basis !== 'owner_default_policy' || g.status !== 'approved') continue;
+    if (g.candidateId === candidateId || creatorKeys.includes(g.creatorKey)) { g.status = 'revoked'; g.revokedAt = new Date(now).toISOString(); g.revokedReason = reason; n++; }
+  }
+  return n;
 }

@@ -12,7 +12,7 @@ export function sourceRightsGate(state, candidate, { now = Date.now(), destinati
   if (grant.status !== 'approved') return 'rights_authorization_inactive';
   if (grant.schemaVersion !== 1 || grant.review?.actor !== 'owner' || !nonempty(grant.review?.id) ||
       !Number.isFinite(instant(grant.review?.at)) || instant(grant.review.at) > now ||
-      !['owned', 'licensed', 'permission'].includes(grant.basis) || !nonempty(grant.rightsHolder) ||
+      !['owned', 'licensed', 'permission', 'owner_default_policy'].includes(grant.basis) || (grant.basis === 'owner_default_policy' && (grant.policy?.version !== 1 || grant.review?.method !== 'standing_policy')) || !nonempty(grant.rightsHolder) ||
       !nonempty(grant.evidence?.reference) || !/^[a-f0-9]{64}$/.test(grant.evidence?.sha256 ?? '')) return 'rights_evidence_unverified';
   if (grant.candidateId !== candidate.id || grant.sourceUrl !== candidate.sourceUrl || grant.creatorKey !== candidate.creatorKey) return 'rights_source_mismatch';
   // Narrow/segment-only grants are not promoted to whole-source permissions.

@@ -74,3 +74,35 @@ test('summary line and office clip_report carry auto-approved count and reasons'
   assert.equal(cycle.document.automation.totals.autoApproved, 1); assert.equal(cycle.document.automation.totals.autoApproveCapped, 2);
   assert.equal(cycle.document.automation.posts[0].autoApprovalRule, AUTO_APPROVE_RULE);
 });
+
+import { ownerDefaultPolicyGrant, recordOwnerDefaultGrant, revokeOwnerDefaultGrants } from '../shared/clippers-auto-approval.mjs';
+import { sourceRightsGate } from '../shared/clippers-source-authorization.mjs';
+import { publishGate } from '../script/clippers-streamer-cloud-worker.mjs';
+
+const DEST = '6431685:tiktok:streamersus';
+const ready = () => { const c = cand({ caption: 'Play @streamer https://clips.twitch.tv/abc' }); return { s: { ...st(), candidates: [c] }, c }; };
+
+test('standing grant: enabled + no signals -> rights gate and publish gate pass', () => {
+  const { s, c } = ready();
+  assert.equal(sourceRightsGate(s, c, { now: NOW }), 'rights_authorization_missing'); // disabled: held, no grant
+  const d = autoApprovalDecision(s, c, { now: NOW, config: on });
+  assert.equal(d.approve, true);
+  assert.equal(recordOwnerDefaultGrant(s, ownerDefaultPolicyGrant(c, d.evidence, { now: NOW, destinations: [DEST] })), true);
+  assert.equal(sourceRightsGate(s, c, { now: NOW + 1000, destinationKey: DEST, scheduledAt: new Date(NOW + 3_600_000).toISOString() }), null);
+  assert.equal(publishGate(s, c, { now: NOW + 1000, destinationKey: DEST }), null);
+  const g = s.sourceAuthorizations.c1;
+  assert.equal(g.basis, 'owner_default_policy'); assert.equal(g.policy.version, 1); assert.match(g.evidence.sha256, /^[a-f0-9]{64}$/);
+});
+
+test('standing grant: prohibition -> no grant and held; takedown revokes; real grants never replaced', () => {
+  const { s, c } = ready();
+  assert.equal(autoApprovalDecision(s, c, { now: NOW, config: on, description: 'no clips allowed' }).approve, false);
+  assert.equal(sourceRightsGate(s, c, { now: NOW }), 'rights_authorization_missing');
+  recordOwnerDefaultGrant(s, ownerDefaultPolicyGrant(c, {}, { now: NOW, destinations: [DEST] }));
+  assert.equal(revokeOwnerDefaultGrants(s, { creatorKeys: [KEY] }, 'takedown', NOW), 1);
+  assert.equal(sourceRightsGate(s, c, { now: NOW + 1000 }), 'rights_authorization_inactive');
+  assert.equal(recordOwnerDefaultGrant(s, ownerDefaultPolicyGrant(c, {}, { now: NOW + 2000, destinations: [DEST] })), false); // never re-issued
+  const real = { ...ready().s, sourceAuthorizations: { c1: { basis: 'permission', status: 'approved' } } };
+  assert.equal(recordOwnerDefaultGrant(real, ownerDefaultPolicyGrant(c, {}, { now: NOW, destinations: [DEST] })), false);
+  assert.equal(real.sourceAuthorizations.c1.basis, 'permission');
+});

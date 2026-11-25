@@ -24,7 +24,7 @@ import { pathToFileURL } from 'node:url';
 import { STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createTwitchClient, createYoutubeClient, createPendingActionsQueue } from './clippers-streamer-discovery.mjs';
 import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption, clipLengthAllowed, detectClipProhibition, STREAMER_CLIP_MAX_SECONDS } from '../shared/clippers-streamer-policy.mjs';
 import { sourceRightsGate } from '../shared/clippers-source-authorization.mjs';
-import { autoApproveConfig, autoApprovalDecision, applyStreamerRequirements, blocklistFromTakedowns, autoApprovedToday, recordAutoApproval, autoApprovalSummary, detectStreamerRequirements } from '../shared/clippers-auto-approval.mjs';
+import { autoApproveConfig, autoApprovalDecision, applyStreamerRequirements, blocklistFromTakedowns, autoApprovedToday, recordAutoApproval, autoApprovalSummary, detectStreamerRequirements, ownerDefaultPolicyGrant, recordOwnerDefaultGrant, revokeOwnerDefaultGrants } from '../shared/clippers-auto-approval.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
@@ -706,7 +706,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
 
   // 3) New clips. Any takedown/complaint first lands on the permanent auto-approve blocklist.
   report.autoApproval = { enabled: config.autoApprove.enabled, approved: 0, rules: {}, held: {}, capPerAccount: config.autoApprove.dailyCapPerAccount };
-  await update((s, c) => { report.autoApproval.blocklistAdded = blocklistFromTakedowns(s, c, now); });
+  await update((s, c) => { report.autoApproval.blocklistAdded = blocklistFromTakedowns(s, c, now);
+    // Takedown/complaint/blocklist revokes every standing-policy grant for that streamer.
+    const keys = [...new Set([...(c.autoApproveBlocklist ?? []).map(b => b.key), ...config.autoApprove.blocklist])];
+    const ck = Object.entries(s.creators ?? {}).filter(([k, v]) => keys.includes(k) || (v?.creatorGroupId && keys.includes(v.creatorGroupId))).map(([k]) => k);
+    report.autoApproval.grantsRevoked = revokeOwnerDefaultGrants(s, { creatorKeys: [...new Set([...keys, ...ck])] }, 'takedown_or_blocklist', now); });
   const state = parseStreamerState(await store.read(ns));
   const ledger = cloudPublishOf(state);
   const holdAuto = r => { report.autoApproval.held[r] = (report.autoApproval.held[r] ?? 0) + 1; };
@@ -751,13 +755,19 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         : autoApprovalDecision(freshState, candidate, { now: clock(), config: config.autoApprove, maxSourceAgeHours: config.maxSourceAgeHours, ledger: freshLedger, description: desc.description ?? null });
       const dayKey = localDay(new Date(clock()));
       const usedToday = config.destinations.reduce((n, d) => n + autoApprovedToday(freshLedger.posts, destinationKey(d), dayKey, localDay), 0);
-      if (!decision.approve) { holdAuto(decision.reason); continue; }
+      if (!decision.approve) {
+        holdAuto(decision.reason);
+        if (!['auto_approve_disabled', 'duplicate', 'source_too_old', 'clip_too_long', 'live_stream_not_clipped'].includes(decision.reason) && !config.dryRun)
+          await update(s => { report.autoApproval.grantsRevoked = (report.autoApproval.grantsRevoked ?? 0) + revokeOwnerDefaultGrants(s, { candidateId: candidate.id }, decision.reason, clock()); });
+        continue;
+      }
       if (usedToday >= config.autoApprove.dailyCapPerAccount * Math.max(1, config.destinations.length)) { holdAuto('auto_approve_daily_cap'); continue; }
       if (!config.dryRun) {
         const ok = approvals?.autoApprove ? await approvals.autoApprove(owner, candidate.approval.pendingActionId, decision.rule).catch(() => false) : false;
         if (!ok) { holdAuto('auto_approve_row_not_pending'); continue; }
-        await update((s, c) => recordAutoApproval(c, { candidateId: candidate.id, creatorKey: candidate.creatorKey, pendingActionId: candidate.approval.pendingActionId, rule: decision.rule,
-          evidence: { ...decision.evidence, liveDescription: desc.checked ? 'checked' : desc.reason }, at: iso(clock()) }));
+        const grant = ownerDefaultPolicyGrant(candidate, decision.evidence, { now: clock(), destinations: config.destinations.map(destinationKey) });
+        await update((s, c) => { const granted = recordOwnerDefaultGrant(s, grant); recordAutoApproval(c, { grant: granted ? { basis: grant.basis, policyVersion: grant.policy.version, evidenceSha256: grant.evidence.sha256 } : null, candidateId: candidate.id, creatorKey: candidate.creatorKey, pendingActionId: candidate.approval.pendingActionId, rule: decision.rule,
+          evidence: { ...decision.evidence, liveDescription: desc.checked ? 'checked' : desc.reason }, at: iso(clock()) }); });
       }
       autoPicked.set(candidate.id, { rule: decision.rule, requirements: decision.evidence.requirements });
       report.autoApproval.approved++; report.autoApproval.rules[decision.rule] = (report.autoApproval.rules[decision.rule] ?? 0) + 1;
@@ -771,7 +781,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const gate = publishGate(parseStreamerStateStrict(await store.read(ns)), candidate, { now: clock() });
     if (gate) { const rightsHeld = gate.startsWith('rights_'); await setClip({ status: rightsHeld ? 'deferred' : 'blocked', reason: gate }); report.counts[rightsHeld ? 'deferred' : 'blocked']++; if (rightsHeld) report.heldReasons.push(gate); continue; }
     const fresh = await liveDescriptionCheck({ candidate, env, fetch: fetchImpl });
-    if (fresh.checked && fresh.prohibited) { await setClip({ status: 'blocked', reason: 'live_description_prohibits_clipping', evidence: fresh.excerpt }); report.counts.blocked++; continue; }
+    if (fresh.checked && fresh.prohibited) { await update(s => revokeOwnerDefaultGrants(s, { creatorKeys: [candidate.creatorKey] }, 'live_description_prohibits_clipping', clock())); await setClip({ status: 'blocked', reason: 'live_description_prohibits_clipping', evidence: fresh.excerpt }); report.counts.blocked++; continue; }
     if (!fresh.checked && fresh.reason !== 'live_check_keys_missing') {
       // Keys are configured but the re-check failed: fail closed (retry on a later run, bounded by attempts).
       await setClip({ status: 'deferred', reason: `live_check_unavailable:${fresh.reason}`, attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1 });
