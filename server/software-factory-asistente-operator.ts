@@ -236,7 +236,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         const noProviderEvidence = `factory-admission-no-provider:${hash([owner, expected.key])}`;
         let reservation = elsewhere ? { admitted: false as const, reservation: elsewhere } : await credits.ledger.reserve({ key, consumer: "factory", requestSha256, maximumMicroUsd });
         if (!elsewhere && !reservation.admitted && reservation.reservation.status === "reserved"
-            && now().getTime() - Date.parse(reservation.reservation.createdAt) >= STALE_ADMISSION_HOLD_MS) {
+            && now().getTime() - Date.parse((reservation.reservation as { createdAt?: string }).createdAt ?? "") >= STALE_ADMISSION_HOLD_MS) {
             // A hold left by an earlier interrupted admission on THIS ledger (old
             // enough that no concurrent admission can still be enqueuing it).
             const found = await queued();
