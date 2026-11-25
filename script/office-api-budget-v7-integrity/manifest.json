@@ -43,7 +43,7 @@
     },
     {
       "path": "server/factory-api-invocation.ts",
-      "sha256": "2a1535d64e54f3eec1aed51e4b17114d747341f00374a8d3ab75f49ac9b411c0"
+      "sha256": "6bad1ea5222e30302ac28a967fba8db51e2a2aa571454fb356d6b9e5b06f30f9"
     },
     {
       "path": "server/factory-api-sdk.ts",
