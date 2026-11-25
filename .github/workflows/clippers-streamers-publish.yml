@@ -259,6 +259,10 @@ jobs:
           CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
           # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
           CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
+          # Policy auto-approval (off by default): CLIPPERS_AUTO_APPROVE_ENABLED=true approves clips with no prohibition signal.
+          CLIPPERS_AUTO_APPROVE_ENABLED: ${{ vars.CLIPPERS_AUTO_APPROVE_ENABLED || 'false' }}
+          CLIPPERS_AUTO_APPROVE_DAILY_CAP_PER_ACCOUNT: ${{ vars.CLIPPERS_AUTO_APPROVE_DAILY_CAP_PER_ACCOUNT || '3' }}
+          CLIPPERS_AUTO_APPROVE_BLOCKLIST: ${{ vars.CLIPPERS_AUTO_APPROVE_BLOCKLIST }}
           CLIPPERS_OFFICE_SOURCES_SYNC: ${{ vars.CLIPPERS_OFFICE_SOURCES_SYNC || 'true' }}
           CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
@@ -438,6 +442,10 @@ jobs:
           CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
           # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
           CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
+          # Policy auto-approval (off by default): CLIPPERS_AUTO_APPROVE_ENABLED=true approves clips with no prohibition signal.
+          CLIPPERS_AUTO_APPROVE_ENABLED: ${{ vars.CLIPPERS_AUTO_APPROVE_ENABLED || 'false' }}
+          CLIPPERS_AUTO_APPROVE_DAILY_CAP_PER_ACCOUNT: ${{ vars.CLIPPERS_AUTO_APPROVE_DAILY_CAP_PER_ACCOUNT || '3' }}
+          CLIPPERS_AUTO_APPROVE_BLOCKLIST: ${{ vars.CLIPPERS_AUTO_APPROVE_BLOCKLIST }}
           CLIPPERS_OFFICE_SOURCES_SYNC: ${{ vars.CLIPPERS_OFFICE_SOURCES_SYNC || 'true' }}
           CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
@@ -518,5 +526,9 @@ jobs:
           CLIPPERS_STREAMER_LANES_ENABLED: 'true'
           # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
           CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
+          # Policy auto-approval (off by default): CLIPPERS_AUTO_APPROVE_ENABLED=true approves clips with no prohibition signal.
+          CLIPPERS_AUTO_APPROVE_ENABLED: ${{ vars.CLIPPERS_AUTO_APPROVE_ENABLED || 'false' }}
+          CLIPPERS_AUTO_APPROVE_DAILY_CAP_PER_ACCOUNT: ${{ vars.CLIPPERS_AUTO_APPROVE_DAILY_CAP_PER_ACCOUNT || '3' }}
+          CLIPPERS_AUTO_APPROVE_BLOCKLIST: ${{ vars.CLIPPERS_AUTO_APPROVE_BLOCKLIST }}
           CLIPPERS_OFFICE_SOURCES_SYNC: ${{ vars.CLIPPERS_OFFICE_SOURCES_SYNC || 'true' }}
         run: node --import tsx script/clippers-streamer-cloud-worker.mjs --growth-only

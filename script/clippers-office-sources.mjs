@@ -61,11 +61,14 @@ export function buildCycleReport(cloudPublish, { owner, now, dailyTargetPosts })
     backlogPosts: count(p => BACKLOG.has(p.status)), gapToDailyTarget: Math.max(0, target - scheduled - draftReady),
     scheduled, readyForManual: draftReady, blocked: count(p => BLOCKED.has(p.status)), draftReady,
     rightsReview: count(p => p.status === 'held_media_review'), needsSource: 0,
+    // Policy auto-approvals (rule recorded per post + audit in cloudPublish.autoApprovals); capped = held by the daily cap.
+    autoApproved: count(p => !!p.autoApproval),
+    autoApproveCapped: Math.max(0, Math.trunc(Number(cloudPublish?.lastRun?.autoApproval?.held?.auto_approve_daily_cap) || 0)),
   };
   const status = target > 0 && scheduled + draftReady >= target ? 'ready' : scheduled + draftReady > 0 ? 'partial' : 'blocked';
   const id = `streamer-cloud-${at}`;
   return { key: cycleReportKey(now), document: { id, userId: owner, createdAt: at,
-    automation: { id, createdAt: at, status, totals, posts: posts.map(p => ({ status: String(p.status ?? 'unknown').slice(0, 40), draft: p.draft === true })) } } };
+    automation: { id, createdAt: at, status, totals, posts: posts.map(p => ({ status: String(p.status ?? 'unknown').slice(0, 40), draft: p.draft === true, ...(p.autoApproval ? { autoApprovalRule: String(p.autoApproval.rule ?? '').slice(0, 60) } : {}) })) } } };
 }
 
 /**

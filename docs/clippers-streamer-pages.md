@@ -233,3 +233,11 @@ Facebook Reels has a 30-per-rolling-24-hour limit; TikTok does not disclose a nu
 and Metricool recommends at least five minutes between TikTok posts. Failed attempts may also affect
 provider quotas. The local five-post policy does not override provider errors, account restrictions,
 rights gates or unknown-send holds, and does not attest the account's current subscription quota.
+
+## Auto-aprobación por política (`CLIPPERS_AUTO_APPROVE_ENABLED`, apagada por defecto)
+
+Con `CLIPPERS_AUTO_APPROVE_ENABLED=true` el publicador cloud aprueba sin revisión manual toda fila `pending` que pase todas las puertas automáticas, salvo que el streamer prohíba clips/resubidas. Señales revisadas (en descubrimiento y otra vez en publicación, con lectura fresca de la descripción): descripción/About con el detector de prohibición, `clipsDisabled`, política del creador `prohibited`, lista conocida, takedowns/quejas y la lista negra. Cualquier takedown agrega al creador a `cloudPublish.autoApproveBlocklist` de forma permanente. Requisitos que el streamer pida (crédito, enlace, `#ad`) se añaden al caption; el carril nunca añade música. Un rechazo del dueño nunca se anula. Regla del dueño (“si el streamer no tiene nada en contra, hay permiso”): al pasar la política se registra en `sourceAuthorizations` una concesión permanente del dueño con `basis: owner_default_policy`, `policy.version: 1`, sha de la evidencia y validez de 48 h; nunca reemplaza una concesión real y cualquier takedown, lista negra o prohibición posterior la revoca (no se vuelve a emitir). Con el interruptor apagado no se crea ninguna concesión.
+
+- `CLIPPERS_AUTO_APPROVE_DAILY_CAP_PER_ACCOUNT` (defecto 3) — tope de posts auto-aprobados por cuenta y día.
+- `CLIPPERS_AUTO_APPROVE_BLOCKLIST` — lista negra manual: `creatorKey` (`twitch:<id>`, `youtube:<channelId>`) o `creatorGroupId`, separados por comas.
+- Auditoría: `cloudPublish.autoApprovals` (regla, evidencia revisada, fila `pending_actions` marcada `approved_by=clippers-auto-approve-policy`).

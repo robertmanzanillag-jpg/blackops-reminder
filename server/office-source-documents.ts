@@ -58,7 +58,7 @@ export const rawProducts=z.array(z.object({id,updatedAt:stamp,status:productStat
 export const rawSuppliers=z.array(z.object({id,updatedAt:stamp,status:supplierState,score:num})).max(10000);
 export const rawSocial=z.array(z.object({id,createdAt:stamp,campaignId:z.string().max(500),postId:id,platform:z.enum(["tiktok","instagram","facebook","youtube_shorts","pinterest","email","manual"]),impressions:num,views:num,orders:num,revenueUsd:num,spendUsd:num})).max(10000);
 export const rawClipReport=z.object({id,userId:id,createdAt:stamp,publishMode,plannedClips:z.array(z.unknown()).max(10000)});
-export const cycleTotals=z.object({posts:num.int(),dailyTargetPosts:num.int(),weeklyTargetClips:num.int(),backlogPosts:num.int(),gapToDailyTarget:num.int(),scheduled:num.int(),readyForManual:num.int(),blocked:num.int(),draftReady:num.int(),rightsReview:num.int(),needsSource:num.int()});
+export const cycleTotals=z.object({posts:num.int(),dailyTargetPosts:num.int(),weeklyTargetClips:num.int(),backlogPosts:num.int(),gapToDailyTarget:num.int(),scheduled:num.int(),readyForManual:num.int(),blocked:num.int(),draftReady:num.int(),rightsReview:num.int(),needsSource:num.int(),autoApproved:num.int().optional(),autoApproveCapped:num.int().optional()});
 export const rawClipCycle=z.object({id,userId:id,createdAt:stamp,automation:z.object({id,createdAt:stamp,status:cycleState,totals:cycleTotals,posts:z.array(z.unknown()).max(10000)})});
 /** publishedAt is copied verbatim by the producer from platform/Metricool CSV
  * exports ("2026-11-18", "11/18/2026 10:00", ...). It is never stored or

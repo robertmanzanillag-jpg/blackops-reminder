@@ -24,6 +24,7 @@ import { pathToFileURL } from 'node:url';
 import { STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createTwitchClient, createYoutubeClient, createPendingActionsQueue } from './clippers-streamer-discovery.mjs';
 import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption, clipLengthAllowed, detectClipProhibition, STREAMER_CLIP_MAX_SECONDS } from '../shared/clippers-streamer-policy.mjs';
 import { sourceRightsGate } from '../shared/clippers-source-authorization.mjs';
+import { autoApproveConfig, autoApprovalDecision, applyStreamerRequirements, blocklistFromTakedowns, autoApprovedToday, recordAutoApproval, autoApprovalSummary, detectStreamerRequirements, ownerDefaultPolicyGrant, recordOwnerDefaultGrant, revokeOwnerDefaultGrants } from '../shared/clippers-auto-approval.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
@@ -225,13 +226,13 @@ export async function liveDescriptionCheck({ candidate, env, fetch: fetchImpl })
       const client = createTwitchClient({ fetch: fetchImpl, clientId: env.TWITCH_CLIENT_ID, clientSecret: env.TWITCH_CLIENT_SECRET });
       const [user] = await client.helix('users', [['id', id]]);
       if (!user) return { checked: false, reason: 'creator_not_found' };
-      return { checked: true, ...detectClipProhibition(user.description ?? '') };
+      return { checked: true, description: String(user.description ?? '').slice(0, 2000), ...detectClipProhibition(user.description ?? '') };
     }
     if (platform === 'youtube' && real(env.YOUTUBE_API_KEY)) {
       const client = createYoutubeClient({ fetch: fetchImpl, apiKey: env.YOUTUBE_API_KEY, unitBudget: 2 });
       const [channel] = await client.api('channels', { part: 'snippet', id, maxResults: 1 });
       if (!channel) return { checked: false, reason: 'creator_not_found' };
-      return { checked: true, ...detectClipProhibition(channel.snippet?.description ?? '') };
+      return { checked: true, description: String(channel.snippet?.description ?? '').slice(0, 2000), ...detectClipProhibition(channel.snippet?.description ?? '') };
     }
   } catch (e) { return { checked: false, reason: code(e, 'LIVE_CHECK_FAILED') }; }
   return { checked: false, reason: 'live_check_keys_missing' };
@@ -422,6 +423,12 @@ export function createApprovalLedger(query) {
       await query(`UPDATE pending_actions SET status='executed', executed_at=COALESCE(executed_at, CURRENT_TIMESTAMP), execution_result=$4::jsonb, updated_at=CURRENT_TIMESTAMP
         WHERE user_id=$1 AND action_type=$2 AND id=$3 AND status IN ('approved','executed')`, [owner, STREAMER_APPROVAL_ACTION, id, JSON.stringify(result)]);
     },
+    // Policy auto-approval: only a still-pending row moves (an owner rejection is never overridden).
+    async autoApprove(owner, id, rule) {
+      const r = await query(`UPDATE pending_actions SET status='approved', approved_by='clippers-auto-approve-policy', approved_at=CURRENT_TIMESTAMP, approval_reason=$4, updated_at=CURRENT_TIMESTAMP
+        WHERE user_id=$1 AND action_type=$2 AND id=$3 AND status='pending' RETURNING id`, [owner, STREAMER_APPROVAL_ACTION, id, `CLIPPERS_AUTO_APPROVE_ENABLED policy:${rule}`]);
+      return (r?.rows?.length ?? 0) > 0;
+    },
   };
 }
 
@@ -438,8 +445,8 @@ export function queueFunnel(state, ledger, config, now) {
   for (const c of state.candidates ?? []) {
     const clip = ledger.clips?.[c.id];
     if (!config.platforms.includes(c.platform)) drop(`platform_not_served:${c.platform}`);
-    else if (c.approval?.status !== 'approved') drop(`approval_${c.approval?.status ?? 'missing'}`);
-    else if (!workIds.has(c.id)) drop('policy_or_takedown');
+    else if (c.approval?.status !== 'approved' && !(config.autoApprove?.enabled && c.approval?.status === 'pending')) drop(`approval_${c.approval?.status ?? 'missing'}`);
+    else if (!workIds.has(c.id) && !(config.autoApprove?.enabled && autoApprovalDecision(state, c, { now, config: config.autoApprove, maxSourceAgeHours: config.maxSourceAgeHours, ledger }).approve)) drop('policy_or_takedown');
     else if (clip && !(['failed', 'deferred'].includes(clip.status) && (clip.attempts ?? 0) < config.maxAttempts))
       drop(['failed', 'deferred'].includes(clip.status) ? `attempts_exhausted:${clip.status}` : `already_${String(clip.status ?? 'done').split(':')[0]}`);
     else if (!(now - Date.parse(c.publishedAt) <= config.maxSourceAgeHours * HOUR)) drop('source_too_old');
@@ -455,13 +462,13 @@ export function funnelSummary(report) {
   if (!f) return `clippers funnel: status=${report.status} (no queue evaluated) rendered=${report.counts?.rendered ?? 0} scheduled=${report.counts?.scheduled ?? 0}`;
   const drops = Object.entries(f.dropped).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(' ') || 'none';
   const held = [...new Set(report.heldReasons ?? [])].slice(0, 8).join(',') || 'none';
-  return `clippers funnel: candidates=${f.candidates} -> dropped[${drops}] -> eligible=${f.eligible} -> rendered=${report.counts.rendered} -> scheduled=${report.counts.scheduled} (held: ${held}; status=${report.status})`;
+  return `clippers funnel: candidates=${f.candidates} -> dropped[${drops}] -> eligible=${f.eligible} -> rendered=${report.counts.rendered} -> scheduled=${report.counts.scheduled} (held: ${held}; status=${report.status}; ${autoApprovalSummary(report)})`;
 }
 
 export async function runCloudPublisher({ env = process.env, now = Date.now(), owner, store, approvals, metricool, stager, fetch: fetchImpl = globalThis.fetch,
   download = downloadSource, render = renderVerticalClip, detectLanguage = detectSpeechLanguage, makeDir = makeWorkDir, outputDir = null, minIntervalMs = 0, clock = () => Date.now(), growthOnly = false }) {
   // A growth-only pass (read-only analytics) runs even while publishing is off; the kill switch still stops it.
-  const config = { ...cloudPublishConfig(env), ...(growthOnly ? { enabled: true } : {}) };
+  const config = { ...cloudPublishConfig(env), ...(growthOnly ? { enabled: true } : {}), autoApprove: autoApproveConfig(env) };
   const ns = STREAMER_STATE_NAMESPACE(owner);
   const report = { at: iso(now), status: 'completed', heldReasons: [], errors: [], counts: { rendered: 0, scheduled: 0, heldQueued: 0, heldReleased: 0, verificationPending: 0, deferred: 0, blocked: 0, failed: 0, reconciled: 0, observed: 0, assetsRemoved: 0 }, dryRun: config.dryRun, paidSpendUsd: 0, aiSpendUsd: 0 };
   if (!config.enabled) return { report: { ...report, status: 'disabled' }, skipped: true };
@@ -600,11 +607,13 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now, override: overrideApplies(config, destination) })) } : null; // override: TikTok only, so Facebook releases need the real 1k gate
       const item = postItem({ candidate: { id: q.candidateId, creatorKey: q.creatorKey }, destination, scheduledAt, caption: q.caption, mediaUrl, mediaSha256: q.mediaSha256, hookVariant: q.hookVariant, lane });
       if (!lane) item.draft = true; // queued without lane fields (lanes off): owner approves it as a draft, whatever the current lane mode
+      if (q.autoApproval) item.autoApproval = q.autoApproval;
       const blocked = await update((s, c) => {
         const cand = s.candidates.find(x => x.id === q.candidateId);
         const queuedSource = cand ? { ...cand, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl } : null;
         const reason = cand ? publishGate(s, queuedSource, { now: clock(), destinationKey: destinationKey(destination), scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 }) : 'candidate_missing';
         if (reason) { if (!reason.startsWith('rights_')) c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return reason; }
+        if (q.autoApproval && autoApprovedToday(c.posts, item.destinationKey, localDay(new Date(scheduledAt)), localDay) >= config.autoApprove.dailyCapPerAccount) return 'auto_approve_daily_cap';
         const prior = c.posts.find(x => x.id === item.id);
         if (prior && prior.status !== 'deferred') { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return 'already_attempted'; }
         if (lane) { // Same one-file-one-account check + claim as the main write path, inside this transaction.
@@ -695,13 +704,25 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     return { report: { ...report, status: report.growth ? 'growth_updated' : 'growth_unavailable' }, skipped: false };
   }
 
-  // 3) New clips.
+  // 3) New clips. Any takedown/complaint first lands on the permanent auto-approve blocklist.
+  report.autoApproval = { enabled: config.autoApprove.enabled, approved: 0, rules: {}, held: {}, capPerAccount: config.autoApprove.dailyCapPerAccount };
+  await update((s, c) => { report.autoApproval.blocklistAdded = blocklistFromTakedowns(s, c, now);
+    // Takedown/complaint/blocklist revokes every standing-policy grant for that streamer.
+    const keys = [...new Set([...(c.autoApproveBlocklist ?? []).map(b => b.key), ...config.autoApprove.blocklist])];
+    const ck = Object.entries(s.creators ?? {}).filter(([k, v]) => keys.includes(k) || (v?.creatorGroupId && keys.includes(v.creatorGroupId))).map(([k]) => k);
+    report.autoApproval.grantsRevoked = revokeOwnerDefaultGrants(s, { creatorKeys: [...new Set([...keys, ...ck])] }, 'takedown_or_blocklist', now); });
   const state = parseStreamerState(await store.read(ns));
   const ledger = cloudPublishOf(state);
+  const holdAuto = r => { report.autoApproval.held[r] = (report.autoApproval.held[r] ?? 0) + 1; };
+  const autoIds = new Set(), autoPicked = new Map();
+  if (config.autoApprove.enabled) for (const c of state.candidates) if (c.approval?.status === 'pending') {
+    const d = autoApprovalDecision(state, c, { now, config: config.autoApprove, maxSourceAgeHours: config.maxSourceAgeHours, ledger });
+    if (d.approve && c.download?.mode === 'needs_local_download') autoIds.add(c.id); else if (!d.approve) holdAuto(d.reason);
+  }
   const candidatesById = new Map(state.candidates.map(c => [c.id, c]));
   const funnel = queueFunnel(state, ledger, config, now);
   report.funnel = funnel;
-  const queue = localWorkQueue(state).map(w => candidatesById.get(w.candidateId)).filter(Boolean)
+  const queue = [...localWorkQueue(state).map(w => w.candidateId), ...autoIds].map(id => candidatesById.get(id)).filter(Boolean)
     .filter(c => { const clip = ledger.clips[c.id]; return !clip || (['failed', 'deferred'].includes(clip.status) && (clip.attempts ?? 0) < config.maxAttempts); })
     .filter(c => now - Date.parse(c.publishedAt) <= config.maxSourceAgeHours * HOUR)
     .filter(c => config.platforms.includes(c.platform))
@@ -724,7 +745,34 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     if (clock() - runStartedAt > config.runDeadlineMs) { report.heldReasons.push('run_deadline_reached'); break; }
     const setClip = (patch) => update((s, c) => { c.clips[candidate.id] = { ...(c.clips[candidate.id] ?? { attempts: 0 }), ...patch, updatedAt: iso(clock()) }; });
     // Approval gate (live): only approved/executed rows publish. AUTO_PUBLISH rows are inserted as approved.
-    const approval = live.get(candidate.approval?.pendingActionId);
+    let approval = live.get(candidate.approval?.pendingActionId);
+    if (approval === 'pending' && autoIds.has(candidate.id)) {
+      // Policy auto-approval: re-check every signal on the freshest state + a fresh description read.
+      const freshState = parseStreamerStateStrict(await store.read(ns));
+      const freshLedger = cloudPublishOf(freshState);
+      const desc = await liveDescriptionCheck({ candidate, env, fetch: fetchImpl });
+      const decision = desc.checked && desc.prohibited ? { approve: false, reason: 'description_prohibits_clipping' }
+        : autoApprovalDecision(freshState, candidate, { now: clock(), config: config.autoApprove, maxSourceAgeHours: config.maxSourceAgeHours, ledger: freshLedger, description: desc.description ?? null });
+      const dayKey = localDay(new Date(clock()));
+      const usedToday = config.destinations.reduce((n, d) => n + autoApprovedToday(freshLedger.posts, destinationKey(d), dayKey, localDay), 0);
+      if (!decision.approve) {
+        holdAuto(decision.reason);
+        if (!['auto_approve_disabled', 'duplicate', 'source_too_old', 'clip_too_long', 'live_stream_not_clipped'].includes(decision.reason) && !config.dryRun)
+          await update(s => { report.autoApproval.grantsRevoked = (report.autoApproval.grantsRevoked ?? 0) + revokeOwnerDefaultGrants(s, { candidateId: candidate.id }, decision.reason, clock()); });
+        continue;
+      }
+      if (usedToday >= config.autoApprove.dailyCapPerAccount * Math.max(1, config.destinations.length)) { holdAuto('auto_approve_daily_cap'); continue; }
+      if (!config.dryRun) {
+        const ok = approvals?.autoApprove ? await approvals.autoApprove(owner, candidate.approval.pendingActionId, decision.rule).catch(() => false) : false;
+        if (!ok) { holdAuto('auto_approve_row_not_pending'); continue; }
+        const grant = ownerDefaultPolicyGrant(candidate, decision.evidence, { now: clock(), destinations: config.destinations.map(destinationKey) });
+        await update((s, c) => { const granted = recordOwnerDefaultGrant(s, grant); recordAutoApproval(c, { grant: granted ? { basis: grant.basis, policyVersion: grant.policy.version, evidenceSha256: grant.evidence.sha256 } : null, candidateId: candidate.id, creatorKey: candidate.creatorKey, pendingActionId: candidate.approval.pendingActionId, rule: decision.rule,
+          evidence: { ...decision.evidence, liveDescription: desc.checked ? 'checked' : desc.reason }, at: iso(clock()) }); });
+      }
+      autoPicked.set(candidate.id, { rule: decision.rule, requirements: decision.evidence.requirements });
+      report.autoApproval.approved++; report.autoApproval.rules[decision.rule] = (report.autoApproval.rules[decision.rule] ?? 0) + 1;
+      approval = 'approved';
+    }
     if (!['approved', 'executed'].includes(approval)) {
       if (['rejected', 'failed'].includes(approval)) { await setClip({ status: 'blocked', reason: `approval_${approval}` }); report.counts.blocked++; }
       else report.heldReasons.push(`approval_not_live:${approval ?? 'missing'}`);
@@ -733,7 +781,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const gate = publishGate(parseStreamerStateStrict(await store.read(ns)), candidate, { now: clock() });
     if (gate) { const rightsHeld = gate.startsWith('rights_'); await setClip({ status: rightsHeld ? 'deferred' : 'blocked', reason: gate }); report.counts[rightsHeld ? 'deferred' : 'blocked']++; if (rightsHeld) report.heldReasons.push(gate); continue; }
     const fresh = await liveDescriptionCheck({ candidate, env, fetch: fetchImpl });
-    if (fresh.checked && fresh.prohibited) { await setClip({ status: 'blocked', reason: 'live_description_prohibits_clipping', evidence: fresh.excerpt }); report.counts.blocked++; continue; }
+    if (fresh.checked && fresh.prohibited) { await update(s => revokeOwnerDefaultGrants(s, { creatorKeys: [candidate.creatorKey] }, 'live_description_prohibits_clipping', clock())); await setClip({ status: 'blocked', reason: 'live_description_prohibits_clipping', evidence: fresh.excerpt }); report.counts.blocked++; continue; }
     if (!fresh.checked && fresh.reason !== 'live_check_keys_missing') {
       // Keys are configured but the re-check failed: fail closed (retry on a later run, bounded by attempts).
       await setClip({ status: 'deferred', reason: `live_check_unavailable:${fresh.reason}`, attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1 });
@@ -863,9 +911,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     let { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
     if (lanePick?.killedHooks?.includes(hookVariant)) { hookVariant = hookVariant === 'title' ? 'teaser' : 'title'; hookMode = 'killed_arm_swap'; }
     const creatorName = state.creators?.[candidate.creatorKey]?.displayName ?? candidate.handle;
-    const caption = lanePick
+    let caption = lanePick
       ? laneCaption({ lane: lanePick.lane, title: candidate.title, name: creatorName, handle: candidate.handle, platform: candidate.platform, sourceUrl: candidate.sourceUrl })
       : clipCaption(candidate, hookVariant);
+    const autoInfo = autoPicked.get(candidate.id) ?? null;
+    if (autoInfo) caption = applyStreamerRequirements(caption, autoInfo.requirements, candidate);
     if (!captionHasCredit(caption, candidate.handle, candidate.sourceUrl)) { await discardPre(); await setClip({ status: 'blocked', reason: 'caption_missing_credit' }); report.counts.blocked++; continue; }
     let workDir = null, rendered = null, asset = null;
     try {
@@ -918,11 +968,13 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           item.byteLength=Number.isSafeInteger(rendered.sizeBytes)?rendered.sizeBytes:null;
           item.segment??=sourceSegment(candidate,{start:(source.cut?.start??0)+(rendered.cutStart??0)});
           item.streamKey??=streamKeyOf(candidate);
+          if (autoInfo) item.autoApproval = { rule: autoInfo.rule };
           if (!lanePick) item.draft = true; // lanes off: single account, owner approves every post
           // Fresh gate + durable "pending_write" BEFORE the write (a crash can never authorise a resend).
           const blocked = await update((s, c) => {
             const reason = publishGate(s, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt:at,segment:item.segment,mediaSha256:item.mediaSha256 });
             if (reason) return reason;
+            if (autoInfo && autoApprovedToday(c.posts, item.destinationKey, localDay(new Date(at)), localDay) >= config.autoApprove.dailyCapPerAccount) return 'auto_approve_daily_cap';
             const prior = c.posts.find(x => x.id === item.id);
             if (prior && prior.status !== 'deferred') return 'already_attempted';
             if (lanePick) { // One video file / source segment -> one account (checked and claimed atomically).
@@ -997,7 +1049,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             const lane = h.lane ? { lane: h.lane.lane, language: h.lane.language, streamKey: h.lane.streamKey,
               segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }), dailyLimit: h.lane.dailyLimit, draft: h.lane.draft, countDrafts: true, allowDuetStitch: true } : null;
             c.heldQueue.push({ id, candidateId: candidate.id, creatorKey: candidate.creatorKey, sourceUrl: candidate.sourceUrl, destination: { ...h.destination }, destinationKey: key, index: h.index,
-              caption, mediaSha256: rendered.sha256, hookVariant, queuedAt: iso(clock()), status: HOLD_OWNER_ACTION, lane, draft: lane ? lane.draft : true });
+              caption, mediaSha256: rendered.sha256, hookVariant, queuedAt: iso(clock()), status: HOLD_OWNER_ACTION, lane, draft: lane ? lane.draft : true, ...(autoInfo ? { autoApproval: { rule: autoInfo.rule } } : {}) });
             report.counts.heldQueued++;
           }
           c.heldQueue = c.heldQueue.slice(-100);
@@ -1095,7 +1147,7 @@ async function main() {
     console.log(JSON.stringify({reviewedDerivative:derivativeReport}));
   }
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
-  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, captions: report.captions ?? null, learning: report.learning ?? null,
+  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, autoApproval: report.autoApproval ?? null, captions: report.captions ?? null, learning: report.learning ?? null,
     growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish, autoPublishMode: a.autoPublishMode }])), decisions: report.growth.decisions.length } : null }));
   console.log(funnelSummary({ ...report, status: report.status }));
   for (const d of report.diagnostics ?? []) console.log(`clip diagnostics: ${JSON.stringify(d)}`);
