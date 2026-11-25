@@ -71,6 +71,8 @@ export function createOfficeCloudWorker(options: {
   reviewOnlyOwner?: string;
   admission?: { ready: () => Promise<boolean>; begin: (run: OfficeCloudRun) => Promise<boolean>; finish: (run: OfficeCloudRun, result: OfficeCloudCompletion) => Promise<void> };
   now?: () => Date;
+  /** Real-time bound for the pre-claim readiness check (default: the remaining 30 s admission bound). */
+  admissionReadyBoundMs?: number;
 } = {}) {
   const store = options.store || officeCloudStore;
   const execute = options.execute || createOfficeRuntime().executeForCloud;
@@ -83,6 +85,8 @@ export function createOfficeCloudWorker(options: {
   let checkingCapabilities: Promise<void> | undefined;
   let maintenance: Promise<void> | undefined;
   let lastScheduleCheck: number | undefined;
+  // A readiness check that outlived its bound keeps running; no new check or claim until it settles.
+  let admissionCheck: Promise<void> | undefined;
   // True when the latest tick claimed a run; lets the bounded cloud run exit when idle.
   let lastTickClaimed = false;
   const overdue = () => {
@@ -145,7 +149,25 @@ export function createOfficeCloudWorker(options: {
           catch { console.error("Office worker could not confirm its recurring KONG audit"); }
           if (overdue()) throw new Error("OFFICE_WORKER_PROGRESS_STALLED");
         }
-        if (options.admission && !(await options.admission.ready())) return;
+        if (options.admission) {
+          // Readiness is a council read under the shared owner lock. The Replit web council takes
+          // that lock on the same :00/:30 boundaries (while its host wakes), so the check can wait
+          // past the admission bound. Nothing is claimed yet, so a slow check skips this cycle
+          // instead of quarantining the worker. The claim itself keeps its own fresh bound below.
+          if (admissionCheck) return;
+          const budget = options.admissionReadyBoundMs ?? Math.max(0, (executionDeadline ?? now().getTime()) - now().getTime());
+          executionDeadline = undefined;
+          const check = options.admission.ready();
+          admissionCheck = check.then(() => undefined, () => undefined).finally(() => { admissionCheck = undefined; });
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const outcome = await Promise.race([
+            check.then(ready => ready ? "ready" as const : "idle" as const),
+            new Promise<"slow">(resolve => { timer = setTimeout(() => resolve("slow"), budget); }),
+          ]).finally(() => clearTimeout(timer));
+          if (outcome === "slow") { console.error("Office worker admission check outlived its bound; nothing was claimed, cycle skipped."); return; }
+          if (outcome === "idle") return;
+          executionDeadline = now().getTime() + 30_000;
+        }
         const claimed = await store.claim(workerId, options.reviewOnlyOwner ? { ownerId: options.reviewOnlyOwner, reviewOnly: true } : undefined);
         // A late claim may have committed while its response was uncertain.
         // Never replace its expired admission deadline with a new lease budget.

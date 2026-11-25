@@ -90,3 +90,31 @@ test("an invalid claimed lease prevents provider execution", async () => {
   await assert.rejects(worker.tick(), /LEASE_UNVERIFIED/);
   assert.equal(executions, 0);
 });
+
+test("a readiness check slowed by the shared owner lock skips the cycle without quarantining the worker", async () => {
+  let clock = Date.parse("2026-11-25T15:30:00Z");
+  let heartbeats = 0; let claims = 0; let executions = 0; let readyCalls = 0;
+  let releaseReady!: (value: boolean) => void;
+  const store = {
+    markExpiredUnknown: async () => 0,
+    heartbeat: async (workerId: string) => { heartbeats++; return { workerId, lastSeenAt: new Date(clock).toISOString() }; },
+    claim: async () => { claims++; return undefined; },
+  } as unknown as typeof officeCloudStore;
+  const admission = {
+    // First check hangs on the council owner lock (Replit web council at the :30 boundary).
+    ready: () => { readyCalls++; return readyCalls === 1 ? new Promise<boolean>(resolve => { releaseReady = resolve; clock += 45_000; }) : Promise.resolve(true); },
+    begin: async () => true, finish: async () => undefined,
+  };
+  const worker = createOfficeCloudWorker({ store, admission, admissionReadyBoundMs: 20, now: () => new Date(clock), execute: async () => { executions++; return { text: "x" }; } });
+  await worker.tick();
+  assert.equal(claims, 0, "nothing is claimed while readiness is unconfirmed");
+  await worker.maintain();
+  assert.equal(heartbeats, 2, "the worker keeps advertising liveness: no lease was at risk");
+  await worker.tick();
+  assert.equal(readyCalls, 1, "no second check or claim while the slow check is unsettled");
+  releaseReady(false);
+  await new Promise(resolve => setImmediate(resolve));
+  await worker.tick();
+  assert.equal(readyCalls, 2); assert.equal(claims, 1, "the next cycle claims normally");
+  assert.equal(executions, 0);
+});

@@ -172,3 +172,12 @@ test("PostgreSQL: dry-run/apply migration, guarded upsert, owner isolation, cons
  }
  assert.ok(OFFICE_SOURCE_DOCUMENT_SCHEMA_SQL.startsWith("CREATE TABLE IF NOT EXISTS office_source_documents"));
 });
+
+test("cycle report auto-approval counters are accepted but not stored (pre-#573 readers parse totals strictly)",()=>{
+ const at="2026-11-25T21:00:00.000Z",key="automation-cycle-2026-11-25T21-00-00-000Z.json",id=`streamer-cloud-${at}`;
+ const totals={posts:1,dailyTargetPosts:3,weeklyTargetClips:21,backlogPosts:0,gapToDailyTarget:2,scheduled:1,readyForManual:0,blocked:0,draftReady:0,rightsReview:0,needsSource:0,autoApproved:1,autoApproveCapped:2};
+ const prepared=prepareOfficeSourceDocument("clip_report",{id,userId:"owner",createdAt:at,automation:{id,createdAt:at,status:"partial",totals,posts:[{}]}},{owner:"owner",key});
+ assert.equal(prepared.status,"present");
+ const stored=(prepared.document as {totals:Record<string,number>}).totals;
+ assert.equal("autoApproved" in stored,false);assert.equal("autoApproveCapped" in stored,false);assert.equal(stored.posts,1);
+});
