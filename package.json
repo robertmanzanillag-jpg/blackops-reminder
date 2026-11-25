@@ -11,7 +11,6 @@
     "office:worker": "node dist/office-worker.cjs",
     "office:cloud": "node script/office-cloud-launch.mjs",
     "codebase:map": "node --import tsx script/codebase-map.ts",
-    "context:pack": "node --import tsx script/app-context-pack.ts",
     "test:dropshipping-ceo": "node --import tsx --test tests/dropshipping-ceo.test.ts",
     "test:ceo": "node --import tsx --test tests/ceo-briefing.test.ts",
     "test:ceo-brief-cli": "node --import tsx --test tests/ceo-brief-cli.test.ts",

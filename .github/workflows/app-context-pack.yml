@@ -30,7 +30,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run codebase:map && npm run context:pack
+      - run: npm run codebase:map && node --import tsx script/app-context-pack.ts
       - name: Open or update the refresh PR
         env:
           GH_TOKEN: ${{ github.token }}

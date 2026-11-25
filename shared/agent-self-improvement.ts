@@ -457,7 +457,7 @@ export function applyOutcomeLessons(company: CompanyState, samples: OutcomeSampl
     }
     if (!derived.length) continue;
     const prevCareer = careers[agentId];
-    const prev = prevCareer.learning && Array.isArray(career.learning.lessons) ? career.learning : { lessons: [], total: 0, updatedAt: iso };
+    const prev = prevCareer.learning && Array.isArray(prevCareer.learning.lessons) ? prevCareer.learning : { lessons: [], total: 0, updatedAt: iso };
     const merged = new Map(prev.lessons.map(l => [l.id, l]));
     let added = 0, changed = false;
     for (const d of derived) {
