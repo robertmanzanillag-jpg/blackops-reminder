@@ -23,7 +23,7 @@ import { AGENT_CHAT_GROUP_LABELS, buildAgentChatDirectory, directoryCityNames, f
 import { effectiveIntegrations, integrationFor, parseIntegrationOverrides } from "@shared/agent-integrations";
 import { factoryAgentsView, isFactoryAgentId } from "@shared/factory-office-agents";
 import { OFFICE_KONG_CITY_TASKS } from "@shared/office-kong-supervisor";
-import { lessonPromptLines } from "@shared/agent-self-improvement";
+import { efficiencyTuningOf, lessonPromptLines } from "@shared/agent-self-improvement";
 
 export type AgentChatRole = "user" | "agent" | "handoff" | "peer";
 export type AgentChatMessage = { id: string; threadId: string; role: AgentChatRole; agentId: string; fromAgentId?: string; text: string; at: string; requestId?: string; handoffTo?: string };
@@ -165,8 +165,8 @@ export function deterministicAnswer(route: AgentChatRoute, f: Facts) {
   }
 }
 
-function modelPrompt(f: Facts, facts: string, question: string, history: AgentChatMessage[]) {
-  const recent = history.slice(-6).map(m => `${m.role === "user" ? "Robert" : f.profile.name}: ${m.text.slice(0, 300)}`).join("\n");
+function modelPrompt(f: Facts, facts: string, question: string, history: AgentChatMessage[], historyMessages = 6) {
+  const recent = history.slice(-historyMessages).map(m => `${m.role === "user" ? "Robert" : f.profile.name}: ${m.text.slice(0, 300)}`).join("\n");
   return `Eres ${f.profile.name}, un agente de la oficina BlackOps de Robert. Responde en el idioma de Robert, en markdown, máximo 120 palabras.
 Usa SOLO los datos registrados de abajo. Si la respuesta no está en los datos, responde exactamente "${NO_DATA}" y nada más.
 No inventes actividad, resultados, fechas, nombres ni cifras: cada número de tu respuesta debe aparecer en los datos.
@@ -234,6 +234,8 @@ export function createAgentChatService(deps: {
   store: AgentThreadStore; council: Council; now?: () => number; model?: AgentChatModel; env?: NodeJS.ProcessEnv;
   /** KONG office orders; without it KONG desks keep the honest "no orders from here" reply. */
   kongOrders?: KongOfficeOrderClient;
+  /** Relevant app-context-pack slice (server/app-context-pack-loader.ts); "" when the question is not about the app. */
+  contextSlice?: (question: string, entries: number) => string;
 }) {
   const now = deps.now || Date.now;
   const done = new Map<string, unknown>();
@@ -285,8 +287,11 @@ export function createAgentChatService(deps: {
     if (!deps.model) return { text: `${NO_DATA} No tengo una regla para responder eso y el modelo de IA está apagado para este chat (costo $0). ${recorded}`, model: "off" as const, noData: true };
     try {
       // The verified facts are computed once: the prompt injects them and the guard checks against them only.
-      const facts = factsText(f).slice(0, 3000);
-      const prompt = modelPrompt(f, facts, text, history);
+      // Efficiency tuning learned from this agent's own cost/outcomes (bounded, shared/agent-self-improvement.ts).
+      const tuning = efficiencyTuningOf(f.career?.tuning);
+      const slice = deps.contextSlice ? deps.contextSlice(text, tuning.contextSlices) : "";
+      const facts = `${factsText(f).slice(0, 3000)}${slice ? `\n${slice}` : ""}`;
+      const prompt = modelPrompt(f, facts, text, history, tuning.historyMessages);
       const answer = (await deps.model.ask(prompt, requestId)).trim();
       if (!answer) throw new AgentChatModelError("unavailable");
       // Grounding guard: a figure the injected data does not contain is a fabrication, never shown.

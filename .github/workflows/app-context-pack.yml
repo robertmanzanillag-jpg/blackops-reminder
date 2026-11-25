@@ -1,0 +1,49 @@
+name: App context pack
+
+# Cheap, deterministic (no AI, no provider keys) refresh of docs/codebase-map.{md,json} and
+# docs/app-context-pack.json after every merge to main. PR-first: it never pushes to main; it
+# updates the branch auto/app-context-pack and opens (or reuses) a PR for review.
+
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", "shared/**", "client/src/**", "script/**", ".github/workflows/**", "package.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: app-context-pack
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run codebase:map && node --import tsx script/app-context-pack.ts
+      - name: Open or update the refresh PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- docs/codebase-map.md docs/codebase-map.json docs/app-context-pack.json; then echo "No context change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B auto/app-context-pack
+          git add docs/codebase-map.md docs/codebase-map.json docs/app-context-pack.json
+          git commit -m "chore(context): refresh codebase map and app context pack for ${GITHUB_SHA::7}"
+          git push --force origin auto/app-context-pack
+          open=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?head=${GITHUB_REPOSITORY_OWNER}:auto/app-context-pack&state=open" --jq 'length')
+          if [ "$open" = "0" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/pulls" -f title="chore(context): refrescar mapa y paquete de contexto" -f head=auto/app-context-pack -f base=main \
+              -f body="Regeneración determinista (sin IA, costo \$0) del mapa del código y del paquete de contexto tras un merge a main. Revisar y fusionar como cualquier PR."
+          fi
