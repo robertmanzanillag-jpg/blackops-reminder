@@ -381,6 +381,7 @@ const OPENAI_STARTUP_FALLBACK_CODES = new Set([
     "FACTORY_OPERATOR_CREDIT_UNAVAILABLE", "FACTORY_OPERATOR_CREDIT_UNCERTAIN", "FACTORY_OPERATOR_CREDIT_EXPIRED",
     "FACTORY_OPERATOR_CREDIT_OVERRUN", "FACTORY_OPERATOR_CREDIT_INSUFFICIENT", "FACTORY_OPERATOR_PRICING_EXPIRED",
     "CREDIT_RUNTIME_CONFIGURATION_REQUIRED", "CREDIT_NOT_INITIALIZED", "CREDIT_EXPIRED", "FACTORY_OPENAI_CREDENTIAL_REQUIRED",
+    "FACTORY_OPENAI_PROVIDER_COOLDOWN",
 ]);
 /** An admission reserve -> enqueue -> settle takes seconds; a `reserved`
  * admission hold older than this belongs to an interrupted run. */
@@ -396,13 +397,18 @@ export async function resolveFactoryModelCredits(input: { env: NodeJS.ProcessEnv
      * loaded OpenAI ledger available as admission history. */
     loadOpenAi: () => Promise<{ credits: Credits; apiPrice?: FactoryApiPrice; createRequest: () => (url: string, init: RequestInit) => Promise<Response> }>;
     loadAnthropic: () => Promise<{ credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> }>;
-    log?: (message: string) => void; }) {
+    log?: (message: string) => void;
+    /** Active persisted out-of-credit flags (server/ai-provider-credit-cooldown). */
+    cooldowns?: Partial<Record<"openai" | "anthropic", { reason: string; until: string }>>; }) {
     const { factoryAnthropicFallbackEnabled } = await import("./software-factory-anthropic-ledger");
     const enabled = factoryAnthropicFallbackEnabled(input.env);
     let openAi: { credits: Credits; apiPrice?: FactoryApiPrice; modelRequest: (url: string, init: RequestInit) => Promise<Response> } | undefined, openAiLedger: Credits["ledger"] | undefined, openAiError: unknown;
     try {
         const loaded = await input.loadOpenAi();
         openAiLedger = loaded.credits.ledger;
+        // OpenAI said "out of credit" recently: go straight to Claude until the
+        // cooldown expires (then this job probes OpenAI again).
+        if (enabled && input.cooldowns?.openai) throw Error("FACTORY_OPENAI_PROVIDER_COOLDOWN");
         assertFactoryCreditReady(await loaded.credits.ledger.status(), input.requiredMicroUsd, loaded.credits.pricing.validUntil, input.now().getTime());
         openAi = { credits: loaded.credits, modelRequest: loaded.createRequest(), ...(loaded.apiPrice?{apiPrice:loaded.apiPrice}:{}) };
     } catch (error) {
@@ -415,9 +421,13 @@ export async function resolveFactoryModelCredits(input: { env: NodeJS.ProcessEnv
         // failure never blocks the OpenAI path.
         try {
             const claude = await input.loadAnthropic();
+            // Claude is out of credit: OpenAI alone; the Claude ledger stays as
+            // read-only history so a key is never replayed across providers.
+            if (input.cooldowns?.anthropic) { input.log?.("Factory Claude fallback paused (ANTHROPIC_CREDIT_EXHAUSTED cooldown); OpenAI only."); return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, ...(openAi!.apiPrice?{apiPrice:openAi!.apiPrice}:{}), priorLedgers: [claude.credits.ledger] }; }
             return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, ...(openAi!.apiPrice?{apiPrice:openAi!.apiPrice}:{}), fallback: { ledger: claude.credits.ledger, pricing: claude.credits.pricing, request: claude.modelRequest }, priorLedgers: [claude.credits.ledger] };
         } catch (error) { input.log?.(`Factory Claude fallback unavailable (${errorCode(error) ?? "FACTORY_ANTHROPIC_FALLBACK_UNAVAILABLE"}); continuing with OpenAI only.`); return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, ...(openAi!.apiPrice?{apiPrice:openAi!.apiPrice}:{}) }; }
     }
+    if (input.cooldowns?.anthropic) throw Error("FACTORY_ALL_PROVIDERS_CREDIT_EXHAUSTED");
     // Surface the real code-owned cause (never exception text or data).
     const claude = await input.loadAnthropic().catch(error => { const code = errorCode(error); throw Error(code && /^(?:FACTORY_ANTHROPIC_|CREDIT_)/.test(code) ? (code.startsWith("CREDIT_") ? `FACTORY_ANTHROPIC_${code}` : code) : "FACTORY_ANTHROPIC_FALLBACK_UNAVAILABLE"); });
     try { assertFactoryCreditReady(await claude.credits.ledger.status(), input.requiredMicroUsd, claude.credits.pricing.validUntil, input.now().getTime()); }
@@ -444,7 +454,18 @@ async function installed(store: Store) {
     const config = validateAsistenteOperatorConfig(applyFactoryOperatorEnvOverride(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)), env));
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
-    const selected = await resolveFactoryModelCredits({ env, now, requiredMicroUsd: (config.reservations.build + config.reservations.review) * 10000, log: message => console.error(message),
+    // Persisted out-of-credit flags shared with the office (read failure = none;
+    // each ledger still fails closed on its own).
+    const cooldown = await import("./ai-provider-credit-cooldown");
+    const cooldownStore = env.AGENT_COUNCIL_STORAGE === "postgres" ? await getCouncilStore() : undefined;
+    const cooldowns = cooldownStore ? (await cooldown.readProviderCooldowns(cooldownStore, now())).active : {};
+    if (cooldownStore) {
+        const { setFactoryProviderCreditHooks } = await import("./software-factory-model-routes");
+        setFactoryProviderCreditHooks({
+            onCreditExhausted: async (provider, reason) => { console.error(`[ai-provider-credit-exhausted] ${JSON.stringify({ consumer: "factory", provider, reason })}`); await cooldown.markProviderCreditExhausted(cooldownStore, provider, reason, now(), cooldown.providerCooldownMs(env)); },
+            onProviderCompleted: provider => cooldown.clearProviderCooldown(cooldownStore, provider) });
+    }
+    const selected = await resolveFactoryModelCredits({ env, now, cooldowns, requiredMicroUsd: (config.reservations.build + config.reservations.review) * 10000, log: message => console.error(message),
         loadOpenAi: async () => {
             const credits = await loadSharedCreditRuntime(env, now);
             // Monetary gate price: the operator catalog when configured, else the

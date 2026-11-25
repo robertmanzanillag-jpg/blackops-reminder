@@ -1,7 +1,8 @@
 import {guardFactoryOpenAiFetch,selectFactoryApiTextPrice} from "./factory-api-sdk";
 import {defaultFactoryApiInvocation,apiEvidenceHash} from "./factory-api-invocation";
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd} from "./factory-api-token-cost";
-import {readOpenAiCacheUsage} from "./factory-api-cache-usage";
+import {readOpenAiCacheUsage,isFactoryOpenAiRequestRejected} from "./factory-api-cache-usage";
+import { isOpenAiRejectionCauseExhausted } from "./ai-provider-credit-cooldown";
 import { createHash } from "node:crypto";
 import { createOfficeOpenAI, type OfficeOpenAIResult } from "./office-openai";
 import type { createSharedOpenAiCreditLedger } from "./shared-openai-credit-ledger";
@@ -31,7 +32,7 @@ export function createCreditLimitedOfficeRun(options: {
     const key = `office:${createHash("sha256").update(executionId).digest("hex")}`;
     let captured: {model:string;responseId:string;inputTokens:number;outputTokens:number;totalTokens:number;
       cache:ReturnType<typeof readOpenAiCacheUsage>} | undefined;
-    let admitted = false, tokenReservation: string | undefined;
+    let admitted = false, tokenReservation: string | undefined, rejected: string | undefined;
     let monetary=options.factoryInvocation;
     const provider = createOfficeOpenAI({ env, now,
       authorize: async limits => {
@@ -54,8 +55,10 @@ export function createCreditLimitedOfficeRun(options: {
         const deadline = AbortSignal.timeout(Math.floor(Math.min(remaining, pricingRemaining)));
         const signal = init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
         signal.throwIfAborted();
-        const response = await guardFactoryOpenAiFetch(transport,{executionId,consumer:"office",env,
-          price:profile,invoke:monetary})(url, { ...init, signal });
+        let response: Response;
+        try { response = await guardFactoryOpenAiFetch(transport,{executionId,consumer:"office",env,
+          price:profile,invoke:monetary})(url, { ...init, signal }); }
+        catch (error) { if (isFactoryOpenAiRequestRejected(error)) rejected = error.message; throw error; }
         // The monetary guard has already bounded and validated this response. Cache details
         // stay private to this execution; the Office token/result protocol remains unchanged.
         const raw = await response.clone().json(), usage = raw?.usage;
@@ -77,6 +80,12 @@ export function createCreditLimitedOfficeRun(options: {
     });
     try { return await provider.runOfficeOpenAI(prompt); }
     catch {
+      // OpenAI answered with a not-billed HTTP rejection (e.g. 429
+      // insufficient_quota): nothing executed, so the hold settles at $0.
+      if (admitted && rejected) {
+        await ledger.settle({ key, actualMicroUsd: 0, evidenceId: `office-openai-rejected:${rejected.replace("FACTORY_OPENAI_REQUEST_REJECTED:", "").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80)}` });
+        throw Error(isOpenAiRejectionCauseExhausted(rejected) ? "OFFICE_OPENAI_CREDIT_EXHAUSTED" : "OFFICE_OPENAI_REQUEST_REJECTED");
+      }
       if (admitted) await ledger.markUnknown(key, `office-execution:${key.slice(7)}`).catch(() => undefined);
       throw Error("OFFICE_CREDIT_EXECUTION_UNCONFIRMED");
     }

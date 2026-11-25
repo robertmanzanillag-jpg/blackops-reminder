@@ -173,6 +173,10 @@ jobs:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL || secrets.OFFICE_DATABASE_URL }}
           SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
+          # Provider failover view: presence boolean only, the key never reaches this job.
+          ANTHROPIC_KEY_PRESENT: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          FACTORY_ANTHROPIC_FALLBACK_ENABLED: ${{ vars.FACTORY_ANTHROPIC_FALLBACK_ENABLED }}
+          OFFICE_ANTHROPIC_FALLBACK_ENABLED: ${{ vars.OFFICE_ANTHROPIC_FALLBACK_ENABLED }}
           ACTION: ${{ inputs.action }}
         run: |
           set -euo pipefail

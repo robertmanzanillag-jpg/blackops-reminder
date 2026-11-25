@@ -380,3 +380,105 @@ test("pacer + Claude ledger: monthly view (cap / current UTC month) admits a $1 
   const refused = await pacer().allow("standard", "self_heal_order", 1_000_000);
   assert.equal(refused.allowed, false);
 });
+
+// ---- automatic failover on provider credit exhaustion (OpenAI <-> Claude) ----
+import { FactoryOpenAiRequestRejectedError } from "../server/factory-api-cache-usage";
+import { isProviderCreditExhausted, isOpenAiRejectionCauseExhausted, markProviderCreditExhausted, readProviderCooldowns, clearProviderCooldown, describeActiveProvider, providerCooldownMs } from "../server/ai-provider-credit-cooldown";
+import { setFactoryProviderCreditHooks, factoryModelCreditExhausted } from "../server/software-factory-model-routes";
+import { createAnthropicFactoryLedger as officeLedgerFactory, loadAnthropicOfficeRuntime, officeAnthropicMonthlyBudgetMicroUsd, officeAnthropicFallbackEnabled } from "../server/software-factory-anthropic-ledger";
+import { createCreditLimitedOfficeClaudeRun } from "../server/office-anthropic-credits";
+import { runWithProviderFailover } from "../server/office-execution";
+
+test("credit exhaustion is recognised only from documented codes, never from a plain rate limit", () => {
+  assert.equal(isProviderCreditExhausted("openai", 429, "insufficient_quota"), true);
+  assert.equal(isProviderCreditExhausted("openai", 429, "credit_balance_exhausted"), true);
+  assert.equal(isProviderCreditExhausted("openai", 429, "rate_limit_exceeded"), false);
+  assert.equal(isProviderCreditExhausted("anthropic", 402, "billing_error"), true);
+  assert.equal(isProviderCreditExhausted("anthropic", 429, "rate_limit_error", "enforced_spend_limit_reached"), true);
+  assert.equal(isProviderCreditExhausted("anthropic", 429, "rate_limit_error", null), false);
+  assert.equal(isOpenAiRejectionCauseExhausted("FACTORY_OPENAI_REQUEST_REJECTED:429:insufficient_quota"), true);
+  assert.equal(isOpenAiRejectionCauseExhausted("FACTORY_OPENAI_REQUEST_REJECTED:400:invalid_value"), false);
+  assert.equal(factoryModelCreditExhausted("anthropic", { status: "blocked", reason: "FACTORY_ANTHROPIC_CREDIT_EXHAUSTED", costCents: 0 }), true);
+});
+
+test("cooldown flag persists, expires into a probe, and clears after a success", async () => {
+  const store = memoryStore(), t0 = new Date("2026-11-25T11:26:00.000Z");
+  await markProviderCreditExhausted(store, "openai", "OPENAI_INSUFFICIENT_QUOTA", t0, providerCooldownMs({}));
+  assert.equal((await readProviderCooldowns(store, t0)).active.openai?.reason, "OPENAI_INSUFFICIENT_QUOTA");
+  assert.equal((await readProviderCooldowns(store, new Date(t0.getTime() + 6 * 3600000 + 1))).active.openai, undefined);
+  const view = describeActiveProvider({ active: (await readProviderCooldowns(store, t0)).active, openAiConfigured: true, anthropicConfigured: true });
+  assert.equal(view.active, "anthropic"); assert.match(view.reason, /OpenAI sin crédito/);
+  await clearProviderCooldown(store, "openai");
+  assert.deepEqual((await readProviderCooldowns(store, t0)).active, {});
+  assert.equal(providerCooldownMs({ AI_PROVIDER_COOLDOWN_HOURS: "nonsense" }), 6 * 3600000);
+  assert.equal(describeActiveProvider({ active: { openai: { provider: "openai", reason: "X_Y", since: "", until: "" }, anthropic: { provider: "anthropic", reason: "X_Y", since: "", until: "" } }, openAiConfigured: true, anthropicConfigured: true }).active, null);
+});
+
+test("factory: OpenAI 429 insufficient_quota settles $0, runs once on Claude and records the cooldown", async () => {
+  const seen: string[] = [];
+  const quota = async (url: string) => { if (url.endsWith("/input_tokens")) return Response.json({ object: "response.input_tokens", input_tokens: 10 }); throw new FactoryOpenAiRequestRejectedError(429, "insufficient_quota"); };
+  const m = await matrix({ request: { request: quota, calls: 0 } as any });
+  setFactoryProviderCreditHooks({ onCreditExhausted: (p, r) => { seen.push(`${p}:${r}`); }, onProviderCompleted: p => { seen.push(`ok:${p}`); } });
+  try {
+    const out = await runFactoryModelCall(m.routes, callOptions("factory:quota"));
+    assert.equal(out.provider, "anthropic");
+    assert.deepEqual(seen, ["openai:OPENAI_INSUFFICIENT_QUOTA", "ok:anthropic"]);
+    const oaStatus = await m.oa.ledger.status();
+    assert.equal(oaStatus.reservedMicroUsd, 0);
+    assert.equal(m.claude.calls.filter(c => c.kind === "stream").length, 1);
+  } finally { setFactoryProviderCreditHooks({}); }
+});
+
+test("factory: Claude billing error is blocked as credit exhaustion and falls through to the next route", async () => {
+  const billing = mockClient({ streamError: new APIError(402, { type: "error", error: { type: "billing_error" } }, "billing", new Headers()) });
+  assert.deepEqual(await createAnthropicFactoryTextProvider(claudeConfig(billing.client))(input()), { status: "blocked", reason: "FACTORY_ANTHROPIC_CREDIT_EXHAUSTED", costCents: 0 });
+  const cap = mockClient({ streamError: new APIError(429, { type: "error", error: { type: "rate_limit_error", details: { error_code: "enforced_spend_limit_reached" } } }, "cap", new Headers()) });
+  assert.equal((await createAnthropicFactoryTextProvider(claudeConfig(cap.client))(input())).reason, "FACTORY_ANTHROPIC_CREDIT_EXHAUSTED");
+  const oa = openAiLedger(); await oa.ledger.initialize();
+  const claudeLedger = await createAnthropicFactoryLedger({ store: memoryStore(), now, capMicroUsd: 50_000_000 });
+  const routes: FactoryModelRoute[] = [{ provider: "anthropic", ledger: claudeLedger, model: claudeConfig(billing.client) }, { provider: "openai", ledger: oa.ledger, model: openAiModel(openAiRequest("complete").request) }];
+  assert.equal((await runFactoryModelCall(routes, callOptions("factory:reverse"))).provider, "openai");
+});
+
+test("startup: an active OpenAI cooldown goes straight to Claude; Claude cooldown keeps OpenAI alone; both fail closed", async () => {
+  const healthy = async () => { const oa = openAiLedger(); await oa.ledger.initialize(); return { credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } }, createRequest: () => async () => new Response() }; };
+  const claude = async () => { const r = await loadAnthropicFactoryRuntime({ ANTHROPIC_API_KEY: "sk-ant-x" }, now, memoryStore()); return { credits: r, modelRequest: async () => new Response() }; };
+  const env = { ANTHROPIC_API_KEY: "sk-ant-x" }, cd = { reason: "X_Y", until: "2026-11-20T00:00:00.000Z" };
+  assert.equal((await resolveFactoryModelCredits({ env, now, requiredMicroUsd: 1, loadOpenAi: healthy, loadAnthropic: claude, cooldowns: { openai: cd } })).provider, "anthropic");
+  const onlyOpenAi = await resolveFactoryModelCredits({ env, now, requiredMicroUsd: 1, loadOpenAi: healthy, loadAnthropic: claude, cooldowns: { anthropic: cd } });
+  assert.equal(onlyOpenAi.provider, "openai"); assert.equal("fallback" in onlyOpenAi, false);
+  await assert.rejects(resolveFactoryModelCredits({ env, now, requiredMicroUsd: 1, loadOpenAi: healthy, loadAnthropic: claude, cooldowns: { openai: cd, anthropic: cd } }), /FACTORY_ALL_PROVIDERS_CREDIT_EXHAUSTED/);
+});
+
+test("office: Claude API run reserves on its own ledger, settles measured usage, and settles $0 on billing errors", async () => {
+  assert.equal(officeAnthropicFallbackEnabled({ ANTHROPIC_API_KEY: "sk-ant-x" }), false);
+  assert.equal(officeAnthropicMonthlyBudgetMicroUsd({}), 0);
+  const store = memoryStore();
+  const runtime = await loadAnthropicOfficeRuntime({ ANTHROPIC_API_KEY: "sk-ant-x", OFFICE_ANTHROPIC_FALLBACK_ENABLED: "true", OFFICE_ANTHROPIC_MONTHLY_BUDGET_USD: "5" }, now, store);
+  const factoryRow = await officeLedgerFactory({ store, now, capMicroUsd: 1 });
+  assert.notEqual(factoryRow, runtime.ledger);
+  const ok = createCreditLimitedOfficeClaudeRun({ ...runtime, apiKey: "sk-ant-" + "a".repeat(30), now, fetch: (async () => Response.json({ id: "msg_1", model: "claude-opus-5-5", stop_reason: "end_turn", content: [{ type: "text", text: "hecho" }], usage: { input_tokens: 100, output_tokens: 50 } })) as typeof fetch });
+  const result = await ok("Revisa", "role-work:1");
+  assert.equal(result.provider, "anthropic"); assert.equal(result.text, "hecho");
+  assert.equal((await runtime.ledger.reservation(`office-claude:${(await import("node:crypto")).createHash("sha256").update("role-work:1").digest("hex")}`))?.actualMicroUsd, 1400);
+  const broke = createCreditLimitedOfficeClaudeRun({ ...runtime, apiKey: "sk-ant-" + "a".repeat(30), now, fetch: (async () => Response.json({ type: "error", error: { type: "billing_error" } }, { status: 402 })) as typeof fetch });
+  await assert.rejects(broke("Revisa", "role-work:2"), /OFFICE_ANTHROPIC_CREDIT_EXHAUSTED/);
+  assert.equal((await runtime.ledger.status()).reservedMicroUsd, 0);
+});
+
+test("office: OpenAI out of credit routes to Claude, records the cooldown, skips OpenAI next time, fails closed when both are out", async () => {
+  const store = memoryStore(), env = { OFFICE_ANTHROPIC_FALLBACK_ENABLED: "true", ANTHROPIC_API_KEY: "sk-ant-x" };
+  let openAiCalls = 0, claudeCalls = 0;
+  const openai = async () => { openAiCalls++; throw Error("OFFICE_OPENAI_CREDIT_EXHAUSTED"); };
+  const claude = async () => { claudeCalls++; return { text: "ok", sessionId: "msg_1", completedAt: NOW.toISOString(), provider: "anthropic" as const, model: "claude-opus-5-5", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }; };
+  const base = { env, now, store, prompt: "p", openai, claude };
+  assert.equal((await runWithProviderFailover({ ...base, assigned: "a1" })).provider, "anthropic");
+  assert.equal((await runWithProviderFailover({ ...base, assigned: "a2" })).provider, "anthropic");
+  assert.deepEqual([openAiCalls, claudeCalls], [1, 2]);
+  const other = async () => { throw Error("OFFICE_CREDIT_EXECUTION_UNCONFIRMED"); };
+  await assert.rejects(runWithProviderFailover({ ...base, store: memoryStore(), openai: other, assigned: "a3" }), /UNCONFIRMED/);
+  const broke = async () => { throw Error("OFFICE_ANTHROPIC_CREDIT_EXHAUSTED"); };
+  await assert.rejects(runWithProviderFailover({ ...base, claude: broke as any, assigned: "a4" }), /OFFICE_ALL_PROVIDERS_CREDIT_EXHAUSTED/);
+  await assert.rejects(runWithProviderFailover({ ...base, assigned: "a5" }), /OFFICE_ALL_PROVIDERS_CREDIT_EXHAUSTED/);
+  await assert.rejects(runWithProviderFailover({ env: {}, now, store: memoryStore(), prompt: "p", openai, assigned: "a6" }), /OFFICE_OPENAI_CREDIT_EXHAUSTED/);
+});

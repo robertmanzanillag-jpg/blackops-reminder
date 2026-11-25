@@ -173,6 +173,8 @@ export function admissionsToday(jobs: readonly FactoryAgentJob[], now: number): 
 export type FactoryAgentsView = {
   checkedAt: string; paused: boolean;
   api: { ready: boolean; text: string; code: string | null; remainingMicroUsd: number | null };
+  /** Which AI provider new factory work uses and why (persisted out-of-credit flags). */
+  provider?: { readable: boolean; active: "openai" | "anthropic" | null; reason: string; cooldowns: Array<{ provider: "openai" | "anthropic"; reason: string; since: string; until: string }> };
   budget: { month: string; limitCents: number; usedCents: number; remainingCents: number; configured: boolean };
   admissions: { today: number; cap: number | null };
   openOrders: { readable: boolean; total: number; reasons: Array<{ code: string; label: string; count: number }> };

@@ -59,7 +59,7 @@
     },
     {
       "path": "server/office-execution.ts",
-      "sha256": "9d5590522a50b148c42ca69ac717726b78ec69acb8a3151d942e31228a3161da"
+      "sha256": "cf9b88372b09f2a93fb7bab9b8b34f23189aef91c806f44196feebf62c9bbc57"
     },
     {
       "path": "server/office-openai.ts",
@@ -71,7 +71,7 @@
     },
     {
       "path": "server/office-shared-credits.ts",
-      "sha256": "63c8906c4e48fffd60a8d6987fb2c2e82da683997371387e6b0b00cd93a4887f"
+      "sha256": "a21bdf5f928c03fc5a88a04eac9bca6b3e0b88cb86fb27dff9118b2100e2955d"
     },
     {
       "path": "server/office-token-budget.ts",
@@ -95,7 +95,7 @@
     },
     {
       "path": "server/software-factory-anthropic.ts",
-      "sha256": "3b3940f65d8c38ab16f0cbdc87b1fd97acfa414ee377813c65aba49234fbbdc2"
+      "sha256": "ebbac1f02db3d905e23493194921a4d5381fe4c8251aa36fb6a87f890a6be97d"
     },
     {
       "path": "server/software-factory-api-budget.ts",
@@ -107,7 +107,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "3a6583c8a9b718277b5c7ef61d0913b0e87bf45c5a73bc83b82d9e7987a61a31"
+      "sha256": "181796cd9d8170618f7fabe559e168ed044eb18953b8e5edb035d14c882b3703"
     },
     {
       "path": "server/software-factory-asistente-review.ts",
@@ -119,7 +119,7 @@
     },
     {
       "path": "server/software-factory-model-routes.ts",
-      "sha256": "9b5bafdc70ec5a36f814fdd3e9cb39174e8a93cd249c7a013cc5ca56cee076de"
+      "sha256": "c90de530ca72a15d10bd92765eba4883a15de09eafe4ad9add6579ee802f644b"
     },
     {
       "path": "server/software-factory-object-store.ts",

@@ -84,6 +84,20 @@ async function main() {
           return { readable: false, code: safeErrorCode(error) };
         });
       }
+      if (has("agent_council_state")) {
+        // Which AI provider new factory/office work uses and why (persisted out-of-credit flags; codes and times only).
+        const inTransaction: CouncilClient = { query: (sql, values) => client.query(sql, values as unknown[]), release: () => undefined };
+        const { readProviderCooldowns, describeActiveProvider } = await import("../server/ai-provider-credit-cooldown");
+        // The key itself is never passed to ops: only a presence boolean and the two variables.
+        const keyPresent = process.env.ANTHROPIC_KEY_PRESENT === "true";
+        const factoryClaude = keyPresent && process.env.FACTORY_ANTHROPIC_FALLBACK_ENABLED?.trim().toLowerCase() !== "false";
+        const officeClaude = keyPresent && process.env.OFFICE_ANTHROPIC_FALLBACK_ENABLED?.trim().toLowerCase() === "true";
+        const read = await readProviderCooldowns(createCouncilStore({ connect: async () => inTransaction }), new Date());
+        report.aiProviders = { readable: read.readable,
+          factory: describeActiveProvider({ active: read.active, openAiConfigured: true, anthropicConfigured: factoryClaude }),
+          office: describeActiveProvider({ active: read.active, openAiConfigured: true, anthropicConfigured: officeClaude }),
+          flags: { anthropicKeyPresent: keyPresent, factoryFallbackVar: process.env.FACTORY_ANTHROPIC_FALLBACK_ENABLED ?? null, officeFallbackVar: process.env.OFFICE_ANTHROPIC_FALLBACK_ENABLED ?? null } };
+      }
       if (creditScope) {
         if (!has("agent_council_state")) report.credit = { provisioned: false, storageTableMissing: true };
         else {

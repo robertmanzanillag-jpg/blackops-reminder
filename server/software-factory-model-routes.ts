@@ -2,6 +2,7 @@ import { executeWithinSharedCredits } from "./shared-openai-credit-execution";
 import type { createSharedOpenAiCreditLedger } from "./shared-openai-credit-ledger";
 import { createOpenAiFactoryTextProvider, type FactoryTextResult } from "./software-factory-openai";
 import { createAnthropicFactoryTextProvider, type AnthropicFactoryModelConfig } from "./software-factory-anthropic";
+import { isOpenAiRejectionCauseExhausted } from "./ai-provider-credit-cooldown";
 
 type Ledger = ReturnType<typeof createSharedOpenAiCreditLedger>;
 type GenerateInput = Parameters<ReturnType<typeof createOpenAiFactoryTextProvider>>[0];
@@ -38,6 +39,15 @@ const FALLBACK_LEDGER_ERRORS = new Set([
  * the 120 s OpenAI bound; 300 s stays inside the 600 s factory job lease. */
 export const FACTORY_MODEL_EXECUTION_WINDOW_MS = { openai: 120000, anthropic: 300000 } as const;
 export const isFactoryModelFallbackResult = (result: FactoryTextResult) => result.status === "blocked" && FALLBACK_RESULT_REASONS.has(result.reason);
+/** The provider itself said its account is out of credit (OpenAI 429
+ * insufficient_quota/credit_balance_exhausted; Anthropic 402 billing_error or
+ * 429 enforced_spend_limit_reached). Not billed and not executed, so the next
+ * route may run the same call once on its own ledger. */
+export function factoryModelCreditExhausted(provider: FactoryModelRoute["provider"], result: FactoryTextResult) {
+  if (result.status !== "blocked" || result.costCents !== 0) return false;
+  if (provider === "openai") return result.reason === "FACTORY_OPENAI_REQUEST_REJECTED" && isOpenAiRejectionCauseExhausted((result as { cause?: unknown }).cause);
+  return result.reason === "FACTORY_ANTHROPIC_CREDIT_EXHAUSTED";
+}
 const messageOf = (error: unknown) => { try { const m = error instanceof Error ? Object.getOwnPropertyDescriptor(error, "message")?.value : undefined; return typeof m === "string" ? m : ""; } catch { return ""; } };
 export const isFactoryModelFallbackError = (error: unknown) => FALLBACK_LEDGER_ERRORS.has(messageOf(error));
 
@@ -66,6 +76,12 @@ export async function factoryModelKeyRows(routes: readonly FactoryModelRoute[], 
 }
 export const factoryModelProviderArtifact = (used: { provider: string; model: string }) => `factory-model-provider:${used.provider}:${used.model}`;
 
+type CreditHooks = { onCreditExhausted?: (provider: FactoryModelRoute["provider"], reason: string) => Promise<void> | void; onProviderCompleted?: (provider: FactoryModelRoute["provider"]) => Promise<void> | void };
+let processCreditHooks: CreditHooks = {};
+/** The operator installs the persisted cooldown hooks once per run, so every
+ * stage (build, review, auto-selection) records exhaustion the same way. */
+export function setFactoryProviderCreditHooks(hooks: CreditHooks) { processCreditHooks = { ...hooks }; }
+
 /** Runs one stage model call. With a single route this is exactly the earlier
  * executeWithinSharedCredits flow (same key, hash, evidence and errors). */
 export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], call: {
@@ -75,6 +91,10 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
   unknownError: string;
   /** Receives one safe code when the outcome becomes unconfirmed (never provider text). */
   onUnconfirmed?: (subCause: string) => void;
+  /** Persist the provider cooldown (best effort; never changes the outcome). */
+  onCreditExhausted?: (provider: FactoryModelRoute["provider"], reason: string) => Promise<void> | void;
+  /** A provider completed a call: its credit works (clears a stale cooldown). */
+  onProviderCompleted?: (provider: FactoryModelRoute["provider"]) => Promise<void> | void;
 }): Promise<{ result: FactoryTextResult; provider: FactoryModelRoute["provider"]; model: string; requestSha256: string }> {
   if (!routes.length) throw Error("FACTORY_MODEL_ROUTE_REQUIRED");
   // A key already present on any route's ledger is never executed again on
@@ -99,7 +119,10 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
         if ("servedModel" in generated && typeof generated.servedModel === "string") served = generated.servedModel;
         return { value: generated, actualMicroUsd: generated.costCents * 10000, evidenceId: call.evidenceId(requestSha256) };
       }, () => dispatched);
-      if (!last && route.provider === "openai" && isFactoryModelFallbackResult(result)) continue;
+      const exhausted = factoryModelCreditExhausted(route.provider, result);
+      if (exhausted) { try { await (call.onCreditExhausted ?? processCreditHooks.onCreditExhausted)?.(route.provider, route.provider === "openai" ? "OPENAI_INSUFFICIENT_QUOTA" : "ANTHROPIC_CREDIT_EXHAUSTED"); } catch { /* diagnostics only */ } }
+      else if (result.status === "completed") { try { await (call.onProviderCompleted ?? processCreditHooks.onProviderCompleted)?.(route.provider); } catch { /* diagnostics only */ } }
+      if (!last && (exhausted || (route.provider === "openai" && isFactoryModelFallbackResult(result)))) continue;
       const { servedModel: _served, ...plain } = result as FactoryTextResult & { servedModel?: string };
       return { result: plain as FactoryTextResult, provider: route.provider, model: served, requestSha256 };
     } catch (error) {
