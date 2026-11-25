@@ -501,7 +501,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           const metrics = await metricool.metrics(post.destination, publication, new Date(now));
           if (!metrics) continue;
           const ageHours = (Date.parse(metrics.observedAt) - Date.parse(publication.publishedAt)) / HOUR;
-          await update((s, c) => { const p = c.posts.find(x => x.id === post.id); if (p) p.observation = { views: metrics.views, completionRate: metrics.completionRate, observedAt: metrics.observedAt, publishedAt: publication.publishedAt, platformPostId: publication.id, ageHours: Math.round(ageHours * 100) / 100 }; });
+          await update((s, c) => { const p = c.posts.find(x => x.id === post.id); if (p) p.observation = { views: metrics.views, completionRate: metrics.completionRate, likes: metrics.likes ?? null, comments: metrics.comments ?? null, shares: metrics.shares ?? null, saves: metrics.saves ?? null, observedAt: metrics.observedAt, publishedAt: publication.publishedAt, platformPostId: publication.id, ageHours: Math.round(ageHours * 100) / 100 }; });
           report.counts.observed++;
         }
       } catch (e) { report.heldReasons.push(`metricool_read:${code(e)}`); }
@@ -1046,6 +1046,17 @@ async function main() {
   const outIndex = args.indexOf('--dry-run-output');
   const { report, skipped } = await runCloudPublisher({ env: process.env, owner, store, approvals: createApprovalLedger(query), metricool, stager,
     outputDir: outIndex >= 0 ? path.resolve(args[outIndex + 1] ?? 'clippers-dry-run') : null, minIntervalMs, growthOnly });
+  // Office evidence (Mac OFF): project the cloud ledger into clip_metrics + clip_report office source documents.
+  if (!config.dryRun && process.env.CLIPPERS_OFFICE_SOURCES_SYNC !== 'false') {
+    try {
+      const { syncClippersOfficeSources } = await import('./clippers-office-sources.mjs');
+      const { prepareOfficeSourceDocument, persistOfficeSourceDocument } = await import('../server/office-source-documents.ts');
+      const state = parseStreamerState(await store.read(STREAMER_STATE_NAMESPACE(owner)));
+      const office = await syncClippersOfficeSources({ cloudPublish: cloudPublishOf(state), owner, now: Date.now(), dailyTargetPosts: config.dailyCap * Math.max(1, (config.destinations ?? []).length),
+        db: { query }, prepare: prepareOfficeSourceDocument, persist: persistOfficeSourceDocument });
+      console.log(JSON.stringify({ officeSources: office }));
+    } catch (e) { console.log(`::warning::Clippers office source sync failed: ${code(e)}`); }
+  }
   if (!growthOnly) {
     const { runReviewedDerivatives } = await import('./clippers-reviewed-derivative-worker.mjs');
     const derivativeReport = await runReviewedDerivatives({owner,store,metricool,stager,config});
