@@ -1,6 +1,6 @@
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,FactoryTokenCostError} from './factory-api-token-cost';
 import {currentFactoryApiParent} from "./factory-api-context";
-import {factoryResponseModelMatches,factoryUnconfirmedSubCause,type FactoryUnconfirmedSubCause} from './factory-api-cache-usage';
+import {factoryResponseModelMatches,factoryUnconfirmedSubCause,logFactoryResponseShape,type FactoryUnconfirmedSubCause} from './factory-api-cache-usage';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import type {FactoryApiReservation} from './software-factory-api-budget';
@@ -33,7 +33,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    countedInput?:Readonly<{inputTokens:number;evidenceSha256:string;remainingMs:number}>;
    parent?:FactoryApiReservation['parent'];signal?:AbortSignal;
    call:(options:{signal:AbortSignal;maxRetries:0;timeout:number})=>Promise<T>;
-   usage:(result:T)=>FactoryApiUsage}):Promise<T>{
+   usage:(result:T)=>FactoryApiUsage;describe?:(result:T)=>unknown}):Promise<T>{
   if(input.executionId!==undefined&&!/^[A-Za-z0-9_.:-]{1,200}$/.test(input.executionId))throw new FactoryApiBudgetError("FACTORY_API_ASSIGNMENT_REQUIRED");
   const price=factoryApiPriceSchema.parse(input.price);if(price.cachedInputNanoUsdPerToken!==undefined&&price.cachedInputNanoUsdPerToken>price.inputNanoUsdPerToken)throw new FactoryApiBudgetError("FACTORY_API_PRICING_UNVERIFIED");sha.parse(input.requestSha256);
   if(!Number.isSafeInteger(input.promptBytes)||input.promptBytes<0||input.promptBytes>1_048_576||
@@ -59,7 +59,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
   const reservation=await options.store.reserveApi(owner,{key,consumer:input.consumer,requestSha256,
     maximumMicroUsd:maximumMicroUsd!,...(parent?{parent}:{})}).catch(error=>{throw factoryApiAdmissionError(error);});
   if(!reservation.admitted)throw new FactoryApiBudgetError('FACTORY_API_DISPATCH_ALREADY_RESERVED');
-  let dispatched=false;
+  let dispatched=false,received:{value:T}|undefined;
   try{
    const windowStartedAt=now().getTime();
    const executionWindow=await options.store.executionWindowApi(owner,key);
@@ -73,6 +73,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    let result:T;
    try{result=await input.call({signal,maxRetries:0,timeout});}catch(error){throw Error(factoryUnconfirmedSubCause(error)??(signal.aborted?'CANCELLED':'TRANSPORT'));}
    if(signal.aborted)throw Error('CANCELLED');if(now().getTime()>=Date.parse(price.validUntil))throw Error("PRICING_EXPIRED");
+   received={value:result};
    let usage:FactoryApiUsage;try{usage=input.usage(result);}catch(error){throw Error(factoryUnconfirmedSubCause(error)??'USAGE_INVALID');}
    if(!factoryResponseModelMatches(price.model,usage.model))throw Error('MODEL_MISMATCH');
    if((counted?usage.inputTokens!==maximumInputTokens:usage.inputTokens>maximumInputTokens)||usage.outputTokens>input.maxOutputTokens)throw Error('USAGE_BOUNDS');
@@ -91,7 +92,9 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
     throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',false);
    }
    await options.store.unknownApi(owner,key).catch(()=>undefined);
-   throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',dispatched,factoryUnconfirmedSubCause(error)??'UNKNOWN');
+   const subCause=factoryUnconfirmedSubCause(error)??'UNKNOWN';
+   if(received){let described:unknown;try{described=input.describe?input.describe(received.value):received.value;}catch{described=undefined;}logFactoryResponseShape('api-invocation',subCause,described);}
+   throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',dispatched,subCause);
   }
  };
  return Object.assign(invoke,{async preflight(){try{const owner=options.owner(),context=currentFactoryApiParent();if(context?.signal?.aborted)throw new FactoryApiBudgetError("FACTORY_API_EXECUTION_CANCELLED");if(context&&createHash("sha256").update(owner).digest("hex")!==context.ownerKey)throw new FactoryApiBudgetError("FACTORY_API_PARENT_OWNER_MISMATCH");const status=await options.store.apiBudgetStatus(owner);const withinParent=context&&status.configured&&!status.unknown&&status.fixedMicroUsd+status.spentMicroUsd+status.reservedMicroUsd<=status.limitMicroUsd;if(!status.paidAdmissionReady&&!withinParent)throw new FactoryApiBudgetError(status.reason);}catch(error){throw factoryApiAdmissionError(error);}}});

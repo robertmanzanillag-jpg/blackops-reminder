@@ -168,7 +168,9 @@ export function createOpenAiFactoryPatchGenerator(options: {
       return { patch: "", costCents: result.costCents, diagnostic, ...(cause ? { cause } : {}) };
     }
     const text = result.text;
-    const patch = patchMode === "exactSourceEdits" ? exactSourcePatch(contents,text,reason=>{diagnostic=reason;return "";},options.requireTestEdit===true) : patchMode === "plainTextEdits" ? plainTextPatch(contents[0].text, text, reason => { diagnostic = reason; return ""; }) : text && !text.endsWith("\n") ? `${text}\n` : text;
+    let patch: string;
+    try { patch = patchMode === "exactSourceEdits" ? exactSourcePatch(contents,text,reason=>{diagnostic=reason;return "";},options.requireTestEdit===true) : patchMode === "plainTextEdits" ? plainTextPatch(contents[0].text, text, reason => { diagnostic = reason; return ""; }) : text && !text.endsWith("\n") ? `${text}\n` : text; }
+    catch { throw new Error("FACTORY_MODEL_PATCH_PARSE_FAILED"); }
     return { patch, costCents: result.costCents, ...(!patch ? { diagnostic: diagnostic ?? "EMPTY_PATCH" as const } : {}) };
   };
 }

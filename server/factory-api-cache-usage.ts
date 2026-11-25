@@ -59,3 +59,22 @@ export type FactoryUnconfirmedSubCause=typeof factoryUnconfirmedSubCauses[number
 export const factoryUnconfirmedSubCause=(value:unknown):FactoryUnconfirmedSubCause|undefined=>{
  try{const m=value instanceof Error?Object.getOwnPropertyDescriptor(value,'message')?.value:value;return typeof m==='string'&&(factoryUnconfirmedSubCauses as readonly string[]).includes(m)?m as FactoryUnconfirmedSubCause:undefined;}catch{return undefined;}
 };
+
+/** ONE safe shape line for a post-dispatch failure: key names, model, status,
+ * incomplete reason, output item types and usage key names. Never content,
+ * ids, text or numbers (beyond structure). */
+export function factoryResponseShape(body:unknown){
+ const keys=(v:unknown)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).filter(k=>/^[a-z][a-z0-9_]{0,40}$/.test(k)).sort().slice(0,40):null;
+ const token=(v:unknown,re:RegExp)=>typeof v==='string'&&re.test(v)?v:v===undefined?undefined:v===null?null:'invalid';
+ const b=body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,any>:undefined;
+ const usage=b?.usage&&typeof b.usage==='object'?b.usage:undefined;
+ return {keys:keys(b),model:token(b?.model,/^[A-Za-z0-9._:-]{1,100}$/),status:token(b?.status,/^[a-z_]{1,30}$/),
+  incomplete_reason:token(b?.incomplete_details?.reason,/^[a-z_]{1,40}$/),
+  output_types:Array.isArray(b?.output)?b!.output.slice(0,20).map((i:any)=>token(i?.type,/^[a-z_]{1,40}$/)??'none'):null,
+  content_types:Array.isArray(b?.output)?b!.output.slice(0,20).flatMap((i:any)=>Array.isArray(i?.content)?i.content.slice(0,10).map((c:any)=>token(c?.type,/^[a-z_]{1,40}$/)??'none'):[]):null,
+  service_tier:token(b?.service_tier,/^[a-z_]{1,20}$/),
+  usage_keys:keys(usage),input_details_keys:keys(usage?.input_tokens_details),output_details_keys:keys(usage?.output_tokens_details)};
+}
+export function logFactoryResponseShape(stage:string,subCause:string,body:unknown){
+ try{console.warn(`[factory-openai-shape] ${JSON.stringify({stage,subCause,...factoryResponseShape(body)})}`);}catch{/* logging never changes the outcome */}
+}
