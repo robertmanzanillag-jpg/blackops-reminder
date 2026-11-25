@@ -38,4 +38,14 @@ no credentials, but treat it as private configuration.
 earlier charges; the tool does not read provider billing. Pricing must be the
 current per-token price of the configured model: the worker refuses calls when the
 model differs or the pricing has expired. A ledger with an `unknown` reservation
-blocks all new admissions until it is reconciled; `status` reports `uncertain`.
+blocks all new admissions (Office **and** factory) until it is reconciled; `status` reports `uncertain`.
+
+Reconcile with the `factory-ops` action `credit-reconcile`: without `confirm` it is a dry run that
+lists each `unknown` row (consumer, kind, amount, createdAt). With `confirm=APLICAR` it settles each
+one at its **full reserved amount** (conservative: assumed spent, never refunded), records one
+audit event (`shared-openai-credit-reconcile-audit-v1`) and touches no other row. CLI equivalent:
+`node --import tsx script/shared-credit-grant.ts reconcile --scope=<scope> --reason=<id> [--apply]`.
+
+Factory admission holds never call a provider, so a failed admission now settles (job queued) or
+releases (job absent) its hold instead of marking it `unknown`; model calls that fail before their
+execution window opens are released too. Only a possibly dispatched provider call becomes `unknown`.

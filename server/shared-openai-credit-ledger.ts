@@ -169,6 +169,21 @@ export function createSharedOpenAiCreditLedger(options: {
         return { admitted: true, reservation: row };
       });
     },
+    /** Drops a still-`reserved` hold whose caller PROVES no provider call was
+     * dispatched (admission holds, or a model call that failed before its
+     * execution window opened). Never touches `unknown` or `settled` rows, so it
+     * cannot refund spend or clear an uncertain outcome. A late executionWindow
+     * for the dropped key fails closed with RESERVATION_UNAVAILABLE. */
+    async releaseUndispatched(key: string) {
+      identifier.parse(key);
+      return transaction(state => {
+        const index = state.reservations.findIndex(item => item.key === key);
+        if (index < 0) return { released: false };
+        if (state.reservations[index].status !== "reserved") fail("RELEASE_NOT_ALLOWED");
+        state.reservations.splice(index, 1);
+        return { released: true };
+      });
+    },
     async markUnknown(key: string, evidenceId: string) {
       identifier.parse(key); identifier.parse(evidenceId);
       return transaction(state => {

@@ -13,6 +13,11 @@ name: Factory operations (manual)
 #                    grant ($200, scope openai-2026-11-19); requires confirm=APLICAR. Refuses
 #                    (CREDIT_STORAGE_ALREADY_EXISTS) when that scope already exists, so a repeat is a
 #                    no-op. Prints only the ledger status JSON, never the grant/CONFIG_JSON line.
+#   credit-reconcile dry run by default: lists `unknown` reservations of the shared ledger
+#                    (vars.OFFICE_SHARED_CREDIT_SCOPE, default openai-2026-11-19) as consumer/kind/
+#                    amount/createdAt only. With confirm=APLICAR it settles each one CONSERVATIVELY
+#                    at its full reserved amount (assumed spent, never refunded) and appends one
+#                    audit event. A repeat finds nothing and writes nothing.
 #
 # This repository is public, so job logs are public: the scripts print only static JSON
 # (table presence, pause flag, budget/job counts) and static error codes, never connection
@@ -23,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "status | migrate-dry-run | migrate-apply | office-status | office-credit-audit | sources-migrate-dry-run | sources-migrate-apply | credit-new"
+        description: "status | migrate-dry-run | migrate-apply | office-status | office-credit-audit | sources-migrate-dry-run | sources-migrate-apply | credit-new | credit-reconcile"
         required: true
         type: choice
         default: status
@@ -36,8 +41,9 @@ on:
           - sources-migrate-dry-run
           - sources-migrate-apply
           - credit-new
+          - credit-reconcile
       confirm:
-        description: "Type APLICAR to allow migrate-apply, sources-migrate-apply or credit-new"
+        description: "Type APLICAR to allow migrate-apply, sources-migrate-apply, credit-new or credit-reconcile apply (without it credit-reconcile is a dry run)"
         required: false
         type: string
         default: ""
@@ -79,7 +85,7 @@ jobs:
             office-status) test -f script/office-status.ts ;;
             office-credit-audit) test -f script/office-credit-audit.ts ;;
             sources-migrate-dry-run|sources-migrate-apply) test -f script/office-source-documents-migrate.ts ;;
-            credit-new) test -f script/shared-credit-grant.ts ;;
+            credit-new|credit-reconcile) test -f script/shared-credit-grant.ts ;;
             *) echo "unknown action" >&2; exit 1 ;;
           esac
 
@@ -167,3 +173,21 @@ jobs:
             }' "$out"
           rm -f "$out"
           exit "$status"
+
+      - name: Reconcile unknown shared credit reservations (credit-reconcile)
+        if: inputs.action == 'credit-reconcile'
+        env:
+          NODE_ENV: production
+          # Same database as the office worker and the factory (they share the one ledger).
+          DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
+          SCOPE: ${{ vars.OFFICE_SHARED_CREDIT_SCOPE || 'openai-2026-11-19' }}
+          CONFIRM: ${{ inputs.confirm }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Prints only consumer/kind/amount/createdAt and ledger totals; never keys or evidence ids.
+          if [ "$CONFIRM" = "APLICAR" ]; then
+            node --import tsx script/shared-credit-grant.ts reconcile --scope="$SCOPE" --reason="factory-ops-run-$RUN_ID" --apply
+          else
+            node --import tsx script/shared-credit-grant.ts reconcile --scope="$SCOPE" --reason="factory-ops-run-$RUN_ID"
+          fi

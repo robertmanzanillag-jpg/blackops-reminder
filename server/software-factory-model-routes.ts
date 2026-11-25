@@ -42,9 +42,11 @@ const messageOf = (error: unknown) => { try { const m = error instanceof Error ?
 export const isFactoryModelFallbackError = (error: unknown) => FALLBACK_LEDGER_ERRORS.has(messageOf(error));
 
 /** Every model call is bounded by its own ledger's execution window. */
-function routeGenerator(route: FactoryModelRoute, key: string) {
+function routeGenerator(route: FactoryModelRoute, key: string, onDispatch: () => void = () => undefined) {
   const request = async (url: string, init: RequestInit) => {
     const remaining = await route.ledger.executionWindow(key, FACTORY_MODEL_EXECUTION_WINDOW_MS[route.provider]);
+    // From here on a provider call may happen: any failure stays `unknown`.
+    onDispatch();
     const deadline = AbortSignal.timeout(Math.floor(remaining));
     const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
     signal.throwIfAborted(); return route.model.request(url, { ...init, signal });
@@ -83,7 +85,8 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
   }
   for (const [index, route] of routes.entries()) {
     const last = index === routes.length - 1, requestSha256 = call.requestSha256(route.model);
-    const generate = routeGenerator(route, call.key);
+    let dispatched = false;
+    const generate = routeGenerator(route, call.key, () => { dispatched = true; });
     let served = route.model.model;
     try {
       const result = await executeWithinSharedCredits(route.ledger, { key: call.key, consumer: "factory", requestSha256, maximumMicroUsd: call.input.maxCostCents * 10000 }, async () => {
@@ -91,7 +94,7 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
         if (generated.status === "unknown") throw Error(call.unknownError);
         if ("servedModel" in generated && typeof generated.servedModel === "string") served = generated.servedModel;
         return { value: generated, actualMicroUsd: generated.costCents * 10000, evidenceId: call.evidenceId(requestSha256) };
-      });
+      }, () => dispatched);
       if (!last && route.provider === "openai" && isFactoryModelFallbackResult(result)) continue;
       const { servedModel: _served, ...plain } = result as FactoryTextResult & { servedModel?: string };
       return { result: plain as FactoryTextResult, provider: route.provider, model: served, requestSha256 };

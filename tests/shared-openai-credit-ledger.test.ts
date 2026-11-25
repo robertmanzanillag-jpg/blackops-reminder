@@ -118,3 +118,20 @@ test("JSONB key reordering preserves immutable grant identity without accepting 
   f.corrupt(state => { state.grant!.verificationEvidenceId = "different-proof"; });
   await assert.rejects(reopened.status(), /GRANT_MISMATCH/);
 });
+
+test("releaseUndispatched drops only a reserved hold and never an unknown or settled row", async () => {
+  const { createSharedOpenAiCreditLedger } = await import("../server/shared-openai-credit-ledger");
+  const at = new Date("2026-11-25T03:00:00Z");
+  const grant = { id: "g", accountScope: "s", availableMicroUsd: 1_000_000, observedAt: at.toISOString(), expiresAt: "2026-12-19T00:00:00.000Z", verificationEvidenceId: "e" };
+  let state: any = { version: 1, grant: null, lastObservedAt: null, reservations: [] };
+  const transact = async (fn: (s: any) => any) => { const copy = structuredClone(state), result = fn(copy); state = copy; return result; };
+  const ledger = createSharedOpenAiCreditLedger({ grant, transact: transact as any, now: () => at, maximumGrantObservationAgeMs: 60_000 });
+  await ledger.initialize();
+  for (const key of ["a", "b"]) await ledger.reserve({ key, consumer: "factory", requestSha256: "a".repeat(64), maximumMicroUsd: 10 });
+  assert.deepEqual(await ledger.releaseUndispatched("a"), { released: true });
+  assert.deepEqual(await ledger.releaseUndispatched("a"), { released: false });
+  await assert.rejects(ledger.executionWindow("a"), /RESERVATION_UNAVAILABLE/);
+  await ledger.markUnknown("b", "lost");
+  await assert.rejects(ledger.releaseUndispatched("b"), /RELEASE_NOT_ALLOWED/);
+  assert.equal((await ledger.status()).uncertain, true);
+});
