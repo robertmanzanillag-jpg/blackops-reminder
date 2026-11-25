@@ -7,6 +7,7 @@ import {
 } from "./software-factory-db-cli";
 import { readFile } from "node:fs/promises";
 import { summarizeOwnerOrderAdmission } from "../server/software-factory-company";
+import { readApiAuthority } from "./factory-api-authority-read";
 
 // READ-ONLY preflight. Everything runs inside one READ ONLY transaction that is always rolled back,
 // so PostgreSQL itself rejects any write. Prints one JSON line without secrets or connection details.
@@ -74,6 +75,14 @@ async function main() {
         const state = await createCouncilStore({ connect: async () => inTransaction }).read(owner).then(raw => raw ? JSON.parse(raw) : undefined, () => undefined);
         report.ownerOrderAdmission = { configReadable, autoAdmitEnabled: autoAdmit?.enabled ?? null, autoAdmitSince: autoAdmit?.since ?? null,
           ...summarizeOwnerOrderAdmission(Array.isArray(state?.company?.orders) ? state.company.orders : undefined, configReadable ? autoAdmit : undefined, new Date()) };
+      }
+      if (owner && has("software_factory_budget") && has("software_factory_jobs")) {
+        // API monetary authority (current UTC month): booleans, counts and microUSD only.
+        await client.query("SAVEPOINT api_authority");
+        report.apiAuthority = await readApiAuthority(client, owner).then(r => r.authority, async error => {
+          await client.query("ROLLBACK TO SAVEPOINT api_authority");
+          return { readable: false, code: safeErrorCode(error) };
+        });
       }
       if (creditScope) {
         if (!has("agent_council_state")) report.credit = { provisioned: false, storageTableMissing: true };
