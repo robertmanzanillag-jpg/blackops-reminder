@@ -96,7 +96,8 @@ const selfHeal=selfHealConfig.enabled && roleWork && academy?selfHealModule.crea
   maxPerDay:pacerGate.governed?selfHealConfig.maxPerDay:Math.min(selfHealConfig.maxPerDay,selfHealModule.SELF_HEAL_UNPACED_ORDERS_PER_DAY),
   maxOpenOrders:selfHealConfig.maxOpenOrders,
   extraAudits:async()=>{const {readStreamerSelfHealAudits}=await import("./clippers-streamers-status");const {readCloudLanesSelfHealAudits}=await import("./clippers-cloud-lanes-status");
-    const owner=getSystemUserId();const [streamers,lanes]=await Promise.all([readStreamerSelfHealAudits(owner),readCloudLanesSelfHealAudits(owner).catch(()=>[])]);const gate=await (await import("./office-release-gate-backlog")).readReleaseGateSelfHealAudits({token:process.env.GITHUB_TOKEN||null}).catch(()=>[]);return [...streamers,...lanes,...gate];},
+    const owner=getSystemUserId();const [streamers,lanes]=await Promise.all([readStreamerSelfHealAudits(owner),readCloudLanesSelfHealAudits(owner).catch(()=>[])]);const gate=await (await import("./office-release-gate-backlog")).readReleaseGateSelfHealAudits({token:process.env.GITHUB_TOKEN||null}).catch(()=>[]);
+    const appQa=await (await import("./app-qa-self-heal")).readAppQaSelfHealAudits(owner).catch(()=>[]);return [...streamers,...lanes,...gate,...appQa];},
   ...(pacerGate.governed?{fundableOrders:()=>pacerGate.fundable("self_heal_order")}:{})}):undefined;
 const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"}):undefined;
 const roleAcademy=roleExecution && academy?(await import("./office-role-academy")).createRoleAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS),shouldStop,run:async(prompt,call)=>{
