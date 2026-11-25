@@ -75,7 +75,10 @@ export function createOpenAiFactoryTextProvider(config:{
    // previous response, tools, remote input or caller-supplied generation fields.
    const prompt={model:c.model,instructions:input.instructions,input:input.text,...(c.reasoningEffort?{reasoning:{effort:c.reasoningEffort}}:{}),...(format?{text:format}:{})};
    const counted=await post("/input_tokens",prompt,4096);
-   if(counted?.object!=="response.input_tokens"||!nonnegative(counted.input_tokens)||counted.input_tokens>c.maxInputTokens)return blocked("FACTORY_OPENAI_COUNT_INVALID");
+   // Documented body: {"object":"response.input_tokens","input_tokens":N}. A well-formed
+   // count above the operator cap is not "invalid": report it separately (no call, no spend).
+   if(counted?.object!=="response.input_tokens"||!nonnegative(counted.input_tokens))return blocked("FACTORY_OPENAI_COUNT_INVALID");
+   if(counted.input_tokens>c.maxInputTokens)return blocked("FACTORY_OPENAI_INPUT_TOO_LARGE");
    if(counted.input_tokens>apiPrice!.maxInputTokens!)return blocked("FACTORY_OPENAI_INPUT_TIER_UNVERIFIED");
    if(cents(factoryTextMaximumMicroUsd(apiPrice!,counted.input_tokens,input.maxOutputTokens,true))>input.maxCostCents)return blocked("FACTORY_OPENAI_BUDGET_UNAVAILABLE");
    if(!fresh()||controller.signal.aborted)return blocked("FACTORY_OPENAI_ADMISSION_EXPIRED");

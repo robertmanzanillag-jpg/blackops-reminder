@@ -17,7 +17,11 @@ export function readOpenAiCacheUsage(raw:unknown){
   const value=split as Record<string,unknown>;
   if(Object.keys(value).some(key=>!['ttl_30m_tokens','ttl_12h_tokens'].includes(key))||!count(value.ttl_30m_tokens)||!count(value.ttl_12h_tokens))return invalid();
   short=value.ttl_30m_tokens;long=value.ttl_12h_tokens;
- }else if(details.cache_write_tokens!==0)return invalid();
+ }else{
+  // OpenAI documents cache_write_tokens without a TTL split (prompt-caching guide).
+  // Unsplit writes are priced at the 12h (most expensive) rate: never under-count.
+  long=details.cache_write_tokens;
+ }
  if(BigInt(short)+BigInt(long)!==BigInt(details.cache_write_tokens))return invalid();
  const canonical={cached_tokens:details.cached_tokens,cache_write_tokens:details.cache_write_tokens,
   cache_write_tokens_details:split===undefined?null:{ttl_30m_tokens:short,ttl_12h_tokens:long},

@@ -96,3 +96,18 @@ test("explicit Astra low reasoning preserves exact count and 121-cent worst-cach
  assert.throws(()=>createOpenAiFactoryTextProvider({...settings,model,apiPrice:{...settings.apiPrice,model},request:async()=>count()}),/CONFIGURATION/);
  assert.throws(()=>createOpenAiFactoryTextProvider({...settings,reasoningEffort:"high" as any,request:async()=>count()}),/CONFIGURATION/);
 });
+// 2026-11-25 regressions (gpt-6.1-sol): documented count body above the operator cap was
+// reported as COUNT_INVALID; documented unsplit cache_write_tokens became EXECUTION_UNCONFIRMED.
+test("documented count above operator cap is INPUT_TOO_LARGE, not COUNT_INVALID, and never dispatches",async()=>{
+ let calls=0;const generate=createOpenAiFactoryTextProvider({...config,request:async()=>{calls++;return json({object:"response.input_tokens",input_tokens:10001});}});
+ assert.deepEqual(await generate(input()),{status:"blocked",reason:"FACTORY_OPENAI_INPUT_TOO_LARGE",costCents:0});assert.equal(calls,1);
+});
+test("documented Responses body with unsplit cache writes and reasoning tokens settles at the 12h upper bound",async()=>{
+ const body={id:"resp_fixture",object:"response",created_at:1764061127,status:"completed",background:false,error:null,incomplete_details:null,model,service_tier:"default",store:false,
+  output:[{id:"rs_1",type:"reasoning",summary:[]},{id:"msg_1",type:"message",role:"assistant",status:"completed",content:[{type:"output_text",text:"verified text",annotations:[]}]}],
+  usage:{input_tokens:100,input_tokens_details:{cached_tokens:0,cache_write_tokens:100},output_tokens:20,output_tokens_details:{reasoning_tokens:12},total_tokens:120}};
+ let calls=0;const generate=createOpenAiFactoryTextProvider({...config,maxInputTokens:10000,request:async()=>++calls===1?count():json(body)});
+ const outcome=await generate({...input(),maxCostCents:5});
+ // 100*2000 (12h write) + 20*4000 = 280000 nano = 280 micro -> 1 cent (rounded up); 30m rate would be lower.
+ assert.deepEqual(outcome,{status:"completed",text:"verified text",costCents:1,inputTokens:100,outputTokens:20});
+});
