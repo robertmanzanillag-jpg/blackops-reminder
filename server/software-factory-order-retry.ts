@@ -43,13 +43,20 @@ export function companyOrderRetryAttempt(jobs: readonly FactoryJob[], ownerKey: 
   if (!roots.length) return 0;
   const latest = roots.reduce((a, b) => companyOrderRetryOf(b) > companyOrderRetryOf(a) ? b : a), attempt = companyOrderRetryOf(latest);
   if (attempt >= FACTORY_ORDER_MAX_RETRIES) return attempt;
-  const chain = own.filter(j => j.id === latest.id || rootOf(j) === latest.id || j.key === `${latest.id}.next` || j.payload?.previousJobId === latest.id);
-  if (chain.some(j => j.status === "pending" || j.status === "running" || j.status === "unknown")) return attempt;
+  return isZeroCostInfrastructureChain(own, latest) ? attempt + 1 : attempt;
+}
+
+/** True when the chain rooted at this discover job finished, spent nothing,
+ * opened nothing and every stop was a zero-cost infrastructure stop. Such an
+ * attempt never reached a provider, so it must not consume daily admissions. */
+export function isZeroCostInfrastructureChain(jobs: readonly FactoryJob[], root: FactoryJob): boolean {
+  if (!root || root.kind !== "discover") return false;
+  const chain = jobs.filter(j => j?.ownerKey === root.ownerKey && (j.id === root.id || rootOf(j) === root.id || j.key === `${root.id}.next` || j.payload?.previousJobId === root.id));
+  if (chain.some(j => j.status === "pending" || j.status === "running" || j.status === "unknown")) return false;
   // Any recorded spend, or any stage past the root that completed (it may have
   // dispatched to a provider or opened a draft PR), keeps the order settled.
-  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0) || (j.id !== latest.id && j.status === "completed"); })) return attempt;
+  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0) || (j.id !== root.id && j.status === "completed"); })) return false;
   const stopped = chain.filter(j => j.status === "blocked" || j.status === "failed");
   // Any spend or non-infrastructure stop in the chain keeps the order settled.
-  if (!stopped.length || !stopped.every(isInfrastructureStop)) return attempt;
-  return attempt + 1;
+  return stopped.length > 0 && stopped.every(isInfrastructureStop);
 }
