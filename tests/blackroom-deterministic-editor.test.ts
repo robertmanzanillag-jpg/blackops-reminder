@@ -76,7 +76,7 @@ test("real planner rotates duration within DJ/set/daypart; delayed, cross-platfo
     observations: any[] = [];
   const inventory = Array.from({ length: 150 }, (_, i) => ({
     id: "set-" + i,
-    title: "DJ" + (i % 15) + " - DJ Set",
+    title: "DJ" + i + " - DJ Set", // unique DJs: the 15-day DJ cooldown needs a wide catalog
     duration: 5400,
   }));
   for (let day = 1; day <= 20; day++) {

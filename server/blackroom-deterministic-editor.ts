@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuration, BlackRoomTargetNetwork } from "./blackroom-daily-queue";
+import { BLACKROOM_DJ_COOLDOWN_DAYS } from "./blackroom-daily-queue";
 import { allocateBlackRoomCreativeArm, BLACKROOM_CEO_CREATIVE_MIN_SAMPLES, BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
 import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
@@ -294,7 +295,26 @@ export function planBlackRoomDeterministicEdit(input: {
       && Number.isFinite(entry.segmentEndSeconds)
       && Number(entry.segmentEndSeconds) > Number(entry.segmentStartSeconds));
   };
-  const selectable = eligible.filter((candidate) => !failedVideos.has(candidate.video.id));
+  // 15-day DJ cooldown across days (Robert, Nov 2026). Compare against the publication day of every other
+  // clip already planned or published, before and after this job, so a DJ never shows up twice in 15 days.
+  const targetDay = Date.parse(`${job.targetDate}T00:00:00Z`);
+  const dayOf = (value?: string | null): number => {
+    const m = /(\d{4}-\d{2}-\d{2})/.exec(String(value || ""));
+    return m ? Date.parse(`${m[1]}T00:00:00Z`) : NaN;
+  };
+  const djOnCooldown = new Set<string>();
+  const cooldownMs = BLACKROOM_DJ_COOLDOWN_DAYS * 86_400_000;
+  for (const entry of input.queue.sourceHistory) {
+    if (entry.jobId === job.id) continue;
+    const day = dayOf(entry.jobId) || dayOf(entry.recordedAt);
+    if (Number.isFinite(day) && Math.abs(day - targetDay) < cooldownMs) djOnCooldown.add(entry.dj);
+  }
+  for (const entry of activeLedgerEntries) {
+    if (entry.jobId === job.id) continue;
+    const day = dayOf(entry.publicationDateTime) || dayOf(entry.jobId);
+    if (Number.isFinite(day) && Math.abs(day - targetDay) < cooldownMs) djOnCooldown.add(entry.dj);
+  }
+  const notFailed = eligible.filter((candidate) => !failedVideos.has(candidate.video.id));
   // Complete declared cross-day blocks before opening more unrelated sources.
   // Segment availability, failed-source exclusion and the DJ quota still apply.
   const daypart = Math.floor(Number(slot.split(":")[0]) / 6);
@@ -306,9 +326,12 @@ export function planBlackRoomDeterministicEdit(input: {
     && Math.floor(Number(entry.slot.split(":")[0]) / 6) === daypart
     && targetNetworks.every((network) => entry.targetNetworks?.includes(network))
     && ["drop_first", "instant_drop"].includes(entry.creativeStrategy || ""));
-  const pairCandidates = selectable.filter((candidate) => sourceHasReusableHistory(candidate.video.id)
+  const pairCandidates = notFailed.filter((candidate) => sourceHasReusableHistory(candidate.video.id)
     && comparable.some((entry) => entry.videoId === candidate.video.id)
     && (!durationStudy || !comparable.some(entry=>entry.videoId===candidate.video.id && entry.durationSeconds===durationSeconds)));
+  // Only controlled learning pairs (same set, different arm) may bring a DJ back before the cooldown ends
+  // (Robert: "excepción solo para pruebas"). Everything else respects the 15-day DJ rule.
+  const selectable = notFailed.filter((candidate) => !djOnCooldown.has(candidate.dj) || pairCandidates.includes(candidate));
   const preferFreshSource = (candidates: typeof selectable): typeof selectable => {
     const pairs = candidates.filter((candidate) => pairCandidates.includes(candidate));
     if (pairs.length) return pairs;

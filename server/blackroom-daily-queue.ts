@@ -18,6 +18,10 @@ export const BLACKROOM_MIN_POSTS_PER_DAY = 5;
 export const BLACKROOM_MAX_POSTS_PER_DAY = 10;
 export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60, 120, 300, 600] as const;
 export type BlackRoomExperimentDuration = (typeof BLACKROOM_DURATION_VARIANTS)[number];
+// Robert (Nov 2026): Black Room clips are 20-60 s with the DJ drop; 15 s stays only as a test arm.
+export const BLACKROOM_ACTIVE_DURATIONS: BlackRoomExperimentDuration[] = [15, 30, 60];
+// Robert (Nov 2026): the same DJ may appear at most once every 15 days.
+export const BLACKROOM_DJ_COOLDOWN_DAYS = 15;
 export type BlackRoomTargetNetwork = "tiktok" | "facebook" | "youtube";
 
 export type BlackRoomDailyJobStatus = "queued" | "processing" | "retry" | "scheduled" | "completed" | "cancelled";
@@ -217,11 +221,11 @@ function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex
     }),
     requirements: {
       posts: state.postsPerDay,
-      djs: 5,
-      postsPerDj: 2,
+      djs: state.postsPerDay,
+      postsPerDj: 1,
       languages: ["en", "es"],
       formats: ["vertical", "horizontal"],
-      durationsSeconds: [...BLACKROOM_DURATION_VARIANTS],
+      durationsSeconds: [...BLACKROOM_ACTIVE_DURATIONS],
       minimumClipsPerDuration: 1,
       neverRepeatSourceVideo: false,
       allowDistinctNonOverlappingSegments: true,
@@ -631,7 +635,9 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
       requirements: ["queued", "retry"].includes(job.status)
         ? {
           ...job.requirements,
-          durationsSeconds: [...BLACKROOM_DURATION_VARIANTS],
+          djs: Math.max(1, Number(job.requirements?.posts || parsed.postsPerDay || BLACKROOM_DEFAULT_POSTS_PER_DAY)),
+          postsPerDj: 1,
+          durationsSeconds: [...BLACKROOM_ACTIVE_DURATIONS],
           minimumClipsPerDuration: 1,
           neverRepeatSourceVideo: false,
           allowDistinctNonOverlappingSegments: true,

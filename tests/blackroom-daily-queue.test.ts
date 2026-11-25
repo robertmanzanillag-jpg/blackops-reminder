@@ -58,7 +58,8 @@ test("keeps a two-week persistent scheduling buffer", () => {
   assert.ok(new Date(state.jobs[13].notBefore) > now);
   assert.equal(state.jobs[0].requirements.djs, 5);
   assert.equal(state.jobs[0].requirements.deleteOnlyAfterMetricoolConfirmation, true);
-  assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
+  assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60]);
+  assert.equal(state.jobs[0].requirements.postsPerDj, 1);
 });
 
 test("summarizes the exact pending post count and campaign finish estimate", () => {
@@ -359,11 +360,12 @@ test("repeated extra-today commands add only the new amount to an ad hoc batch",
   assert.deepEqual(today?.slots.map((slot) => slot.localTime), ["14:15", "15:45", "17:15", "18:45", "20:15"]);
 });
 
-test("migrates existing queued jobs into the long-form experiment", async () => {
+test("migrates existing queued jobs to 15-60 s clips and one clip per DJ", async () => {
   const now = new Date("2026-07-20T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
   ensureBlackRoomScheduleBuffer(state, now);
-  state.jobs[0].requirements.durationsSeconds = [15, 30, 60];
+  state.jobs[0].requirements.durationsSeconds = [15, 30, 60, 120, 300, 600];
+  state.jobs[0].requirements.postsPerDj = 2;
   state.jobs[0].requirements.minimumClipsPerDuration = 2;
   state.bufferDays = 7;
   const directory = await mkdtemp(path.join(tmpdir(), "blackroom-queue-"));
@@ -372,7 +374,8 @@ test("migrates existing queued jobs into the long-form experiment", async () => 
   const migrated = await readBlackRoomQueue(queuePath, now);
   assert.equal(migrated.version, 4);
   assert.equal(migrated.bufferDays, 14);
-  assert.deepEqual(migrated.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
+  assert.deepEqual(migrated.jobs[0].requirements.durationsSeconds, [15, 30, 60]);
+  assert.equal(migrated.jobs[0].requirements.postsPerDj, 1);
   assert.equal(migrated.jobs[0].requirements.minimumClipsPerDuration, 1);
 });
 
