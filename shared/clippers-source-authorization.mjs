@@ -2,7 +2,7 @@
 // Only the trusted owner/operator may populate this ledger; discovery never does.
 const nonempty = v => typeof v === 'string' && v.trim().length > 0;
 const instant = v => typeof v === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(v) ? Date.parse(v) : NaN;
-export function sourceRightsGate(state, candidate, { now = Date.now(), destinationKey = null, scheduledAt = null } = {}) {
+export function sourceRightsGate(state, candidate, { now = Date.now(), destinationKey = null, scheduledAt = null, ownerDestinations = null } = {}) {
   if (!candidate?.id || !candidate.sourceUrl || !candidate.creatorKey) return 'rights_source_missing';
   const current = state?.candidates?.find(c => c.id === candidate.id);
   if (!current || current.sourceUrl !== candidate.sourceUrl || current.creatorKey !== candidate.creatorKey) return 'rights_source_mismatch';
@@ -20,7 +20,22 @@ export function sourceRightsGate(state, candidate, { now = Date.now(), destinati
   const start = instant(grant.validFrom), end = instant(grant.validUntil);
   if (!Number.isFinite(now) || !Number.isFinite(start) || !Number.isFinite(end) || end <= start || now < start || now >= end) return 'rights_outside_validity';
   if (!Array.isArray(grant.destinations) || !grant.destinations.length || grant.destinations.some(k => !nonempty(k) || !/^\d+:(tiktok|facebook):[^:]+$/.test(k))) return 'rights_destination_missing';
-  if (destinationKey !== null && !grant.destinations.includes(destinationKey)) return 'rights_destination_mismatch';
+  if (destinationKey !== null && !grantCoversDestination(grant, destinationKey, ownerDestinations)) return 'rights_destination_mismatch';
   if (scheduledAt !== null) { const slot = instant(scheduledAt); if (!Number.isFinite(slot) || slot < Math.max(now, start) || slot >= end) return 'rights_publication_outside_validity'; }
   return null;
+}
+
+// Robert's standing policy is destination-agnostic across HIS configured accounts: an owner_default_policy grant
+// covers every owner-configured destination (CLIPPERS_STREAMER_CLOUD_DESTINATIONS) at publish time. Prohibitions and
+// takedowns are re-checked by publishGate before this gate. Real owned/licensed/permission grants keep strict scope.
+export function grantCoversDestination(grant, destinationKey, ownerDestinations = null) {
+  if (grant?.destinations?.includes(destinationKey)) return true;
+  return grant?.basis === 'owner_default_policy' && Array.isArray(ownerDestinations) && ownerDestinations.includes(destinationKey);
+}
+
+/** Held-reason detail: which destinations the grant expected vs the routed one. */
+export function rightsDestinationDetail(state, candidateId, routed) {
+  const g = state?.sourceAuthorizations && Object.hasOwn(state.sourceAuthorizations, candidateId) ? state.sourceAuthorizations[candidateId] : null;
+  const expected = Array.isArray(g?.destinations) && g.destinations.length ? g.destinations.join('|') : 'none';
+  return `rights_destination_mismatch:basis=${g?.basis ?? 'none'};expected=${expected};routed=${routed ?? 'none'}`;
 }
