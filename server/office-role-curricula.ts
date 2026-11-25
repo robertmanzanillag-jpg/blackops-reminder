@@ -48,7 +48,7 @@ const definitions = {
     { facts: { artifactId: "clip-B", rights: "missing", uploadReceipt: null }, classification: "rights_missing", decision: "hold_for_rights_review" },
     { facts: { artifactId: "clip-C", rights: "verified", uploadStatus: "timeout", uploadReceipt: null }, classification: "upload_unknown", decision: "reconcile_before_retry" },
   ] },
-  dropshipping: { scope: "Launch readiness and safety gate reconciliation", rules: "Profit Guard pause_spend overrides readiness. ready_for_test_order is readiness only, not an executed order. Missing supplier verification requires evidence. Never place orders or increase spend.", cases: [
+  dropshipping: { scope: "TikTok Shop product research, launch readiness and safety gate reconciliation", rules: "Primary research channel is TikTok Shop (US): trending listings, units sold, rating, affiliate commission, top shops/creators, category eligibility. Research only: never open a shop, contact sellers or creators, or spend. Profit Guard pause_spend overrides readiness. ready_for_test_order is readiness only, not an executed order. Missing supplier verification requires evidence. Never place orders or increase spend.", cases: [
     { facts: { readiness: "ready_for_test_order", profitGuard: "normal", orderReceipt: null }, classification: "ready_without_order", decision: "record_readiness_only" },
     { facts: { readiness: "ready_for_test_order", profitGuard: "pause_spend" }, classification: "spend_paused", decision: "preserve_spend_pause" },
     { facts: { readiness: "blocked_safety", profitGuard: "normal", supplierVerified: false }, classification: "supplier_unverified", decision: "request_supplier_evidence" },
