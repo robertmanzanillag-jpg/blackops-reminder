@@ -67,9 +67,11 @@ export function createAsistenteFactoryBuild(options: {
     let used: { provider: string; model: string } | undefined;
     const generatePatch = createOpenAiFactoryPatchGenerator({ patchMode:"exactSourceEdits", requireTestEdit: state.finding.kind === "bug" || !!state.finding.regressionScenarioId, sourcePaths: { [repository]: paths }, maxOutputTokens,
       generateText: async input => {
-        const call = await runFactoryModelCall(routes, { key, input, unknownError: "FACTORY_MODEL_OUTCOME_UNKNOWN",
+        let unconfirmed: string | undefined;
+        const call = await runFactoryModelCall(routes, { key, input, unknownError: "FACTORY_MODEL_OUTCOME_UNKNOWN", onUnconfirmed: sub => { unconfirmed = sub; },
           requestSha256: m => createHash("sha256").update(JSON.stringify([m.model, input.instructions, input.text, input.maxOutputTokens, ("reasoningEffort" in m ? m.reasoningEffort : undefined) ?? null])).digest("hex"),
-          evidenceId: requestSha256 => `factory-model:${requestSha256}:${createHash("sha256").update(key).digest("hex").slice(0, 16)}` });
+          evidenceId: requestSha256 => `factory-model:${requestSha256}:${createHash("sha256").update(key).digest("hex").slice(0, 16)}` })
+          .catch(error => { if (unconfirmed && /^[A-Z0-9_]{2,60}$/.test(unconfirmed)) throw new Error(`FACTORY_MODEL_EXECUTION_UNCONFIRMED:${unconfirmed}`); throw error; });
         used = { provider: call.provider, model: call.model };
         return call.result;
       },

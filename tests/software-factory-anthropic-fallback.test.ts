@@ -173,6 +173,13 @@ test("selection: an unknown OpenAI outcome is never retried on Claude", async ()
   await assert.rejects(runFactoryModelCall(routes, callOptions()), /CREDIT_EXECUTION_UNCONFIRMED/);
   assert.equal(claude.calls.length, 0); assert.equal(n, 2);
 });
+test("selection: an unconfirmed OpenAI outcome reports its code-owned sub-cause", async () => {
+  const oa = openAiLedger(); await oa.ledger.initialize();
+  const request = async (url: string) => url.endsWith("/input_tokens") ? Response.json({ object: "response.input_tokens", input_tokens: 10 }) : new Response("{not json");
+  const subs: string[] = [];
+  await assert.rejects(runFactoryModelCall([{ provider: "openai", ledger: oa.ledger, model: openAiModel(request) }], { ...callOptions("factory:sub"), onUnconfirmed: s => subs.push(s) }), /CREDIT_EXECUTION_UNCONFIRMED/);
+  assert.equal(subs.length, 1); assert.match(subs[0], /^[A-Z_]{2,60}$/); assert.notEqual(subs[0], "ROUTE_UNCONFIRMED");
+});
 
 // ---- Claude ledger ----
 test("Claude ledger fails closed over the monthly cap, settles real usage, and keeps spend when the cap changes", async () => {

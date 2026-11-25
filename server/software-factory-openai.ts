@@ -1,6 +1,6 @@
 import {FactoryApiBudgetError,factoryApiPriceSchema,type FactoryApiPrice} from "./factory-api-invocation";
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,requireFactoryCacheWritePrice} from "./factory-api-token-cost";
-import {readOpenAiCacheUsage,validateTextOutputTokenDetails,factoryResponseModelMatches,factoryUnconfirmedSubCause} from "./factory-api-cache-usage";
+import {readOpenAiCacheUsage,validateTextOutputTokenDetails,factoryResponseModelMatches,factoryUnconfirmedSubCause,logFactoryResponseShape} from "./factory-api-cache-usage";
 /** Stateless text only. Trusted request must authenticate, honor AbortSignal,
  * and perform zero retries. Caller must durably reserve maxCostCents first and
  * retain that reservation on unknown; credits never discount ledger charges. */
@@ -59,7 +59,7 @@ export function createOpenAiFactoryTextProvider(config:{
   const controller=new AbortController(),abort=()=>controller.abort();
   input.signal.addEventListener("abort",abort,{once:true});
   const timer=setTimeout(abort,timeout);
-  let submitted=false;
+  let submitted=false,received:unknown;
   async function post(endpoint:string,payload:unknown,limit:number){
    if(controller.signal.aborted)throw Error("cancelled");
    const response=await c.request("https://api.openai.com/v1/responses"+endpoint,{method:"POST",redirect:"error",signal:controller.signal,headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
@@ -86,6 +86,7 @@ export function createOpenAiFactoryTextProvider(config:{
    // background/truncation are omitted: the API defaults are false/"disabled",
    // and the Factory monetary gate prices only its reviewed field allow-list.
    const response=await post("",{...prompt,max_output_tokens:input.maxOutputTokens,store:false,tools:[],stream:false,service_tier:"default"},byteLimit);
+   received=response;
    const usage=response?.usage;
    if(response?.service_tier!==undefined&&response.service_tier!=="default")throw Error("SERVICE_TIER_UNPRICED");
    if(response?.object!=="response"||!usage||!nonnegative(usage.input_tokens)||!nonnegative(usage.output_tokens)||!nonnegative(usage.total_tokens)||usage.total_tokens!==usage.input_tokens+usage.output_tokens)throw Error("USAGE_INVALID");
@@ -124,6 +125,7 @@ export function createOpenAiFactoryTextProvider(config:{
    if(error instanceof FactoryApiBudgetError&&error.dispatched===false)return blocked("FACTORY_OPENAI_NOT_DISPATCHED");
    // Post-dispatch: append only a code-owned sub-cause so logs show why (never provider text).
    const sub=error instanceof FactoryApiBudgetError?error.subCause:factoryUnconfirmedSubCause(error);
+   if(submitted&&received!==undefined)logFactoryResponseShape("openai-provider",sub??"UNKNOWN",received);
    return submitted?{status:"unknown",reason:`FACTORY_OPENAI_EXECUTION_UNCONFIRMED:${sub??"UNKNOWN"}`,costCents:0}:held("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
   finally{clearTimeout(timer);input.signal.removeEventListener("abort",abort);}
  };

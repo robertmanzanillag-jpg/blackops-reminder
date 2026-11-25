@@ -35,7 +35,7 @@
     },
     {
       "path": "server/factory-api-cache-usage.ts",
-      "sha256": "3ac61069a18d3f48a1a86c432662256da0c0fad4de2ea62ddb0775729d8d9313"
+      "sha256": "0e8dd144bc944b6b118fbf9b833aa408a347a7645b9bdfe9a5e3c534fab73683"
     },
     {
       "path": "server/factory-api-context.ts",
@@ -43,11 +43,11 @@
     },
     {
       "path": "server/factory-api-invocation.ts",
-      "sha256": "9f94ce8cf3e7cac2875c3f29a271036cb6a80b3d387f7785d7cb7cc9be220453"
+      "sha256": "1db4cf87ceba41b61be43df8e8a042cfc0ec859cc1110a4036407c4bf7e1b609"
     },
     {
       "path": "server/factory-api-sdk.ts",
-      "sha256": "eed84a7e8deee5b5ac22d8406c0dca2d214d943b50cdae41e83b49c1d5990a5d"
+      "sha256": "6d7347665ddad812c92d17efb48142bcf0910d261c229264b8a32664deedc90f"
     },
     {
       "path": "server/factory-api-token-cost.ts",
@@ -103,7 +103,7 @@
     },
     {
       "path": "server/software-factory-asistente-build.ts",
-      "sha256": "9ee07da077c0ab557e8ead1a9bb3da175993e65ac4e5d1d51beaa78ae1ba6d3b"
+      "sha256": "8fc781309384bc4716a399301e242f25fffaa5cba62175d28265c8821587b896"
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
@@ -119,7 +119,7 @@
     },
     {
       "path": "server/software-factory-model-routes.ts",
-      "sha256": "3cffad5e95efadf5114525641d1c011da07ad94d4fdb3701e83061ba57e36821"
+      "sha256": "9b5bafdc70ec5a36f814fdd3e9cb39174e8a93cd249c7a013cc5ca56cee076de"
     },
     {
       "path": "server/software-factory-object-store.ts",
@@ -127,7 +127,7 @@
     },
     {
       "path": "server/software-factory-openai-builder.ts",
-      "sha256": "351db8f3205fc877f34e7d97ced1d19f791ff7f575d4a1837bf4d453c0e43601"
+      "sha256": "b17d123792745d3281a3142880d890e18000c770eab6dce18c2ce181265f6bb2"
     },
     {
       "path": "server/software-factory-openai-count.ts",
@@ -139,7 +139,7 @@
     },
     {
       "path": "server/software-factory-openai.ts",
-      "sha256": "7e7d39bb3365ab20fc44436dc6c8599878ef013fcc4c441569ef653b74c6c53f"
+      "sha256": "9d397bb0f9f3ac7c532abb3eb0382c6479e9626053507fdcd2b83422ec7d5784"
     },
     {
       "path": "server/software-factory-pilot-review.ts",

@@ -173,7 +173,7 @@ export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:i
     for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>2_097_152){await reader.cancel();throw Error('RESPONSE_TOO_LARGE');}chunks.push(part.value);}
     let parsed:unknown;try{parsed=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));}catch{throw Error('BODY_UNPARSEABLE');}
     return {response,body:parsed};
-   },usage:result=>usage('responses.create',result.body)});
+   },usage:result=>usage('responses.create',result.body),describe:result=>result.body});
   return output.response;
   }catch(error){
    // Inside invoke every post-reservation failure is already a FactoryApiBudgetError;

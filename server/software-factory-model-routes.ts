@@ -73,6 +73,8 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
   requestSha256: (model: FactoryModelRoute["model"]) => string;
   evidenceId: (requestSha256: string) => string;
   unknownError: string;
+  /** Receives one safe code when the outcome becomes unconfirmed (never provider text). */
+  onUnconfirmed?: (subCause: string) => void;
 }): Promise<{ result: FactoryTextResult; provider: FactoryModelRoute["provider"]; model: string; requestSha256: string }> {
   if (!routes.length) throw Error("FACTORY_MODEL_ROUTE_REQUIRED");
   // A key already present on any route's ledger is never executed again on
@@ -85,13 +87,15 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
   }
   for (const [index, route] of routes.entries()) {
     const last = index === routes.length - 1, requestSha256 = call.requestSha256(route.model);
-    let dispatched = false;
+    let dispatched = false, executed = false, sub: string | undefined;
     const generate = routeGenerator(route, call.key, () => { dispatched = true; });
     let served = route.model.model;
     try {
       const result = await executeWithinSharedCredits(route.ledger, { key: call.key, consumer: "factory", requestSha256, maximumMicroUsd: call.input.maxCostCents * 10000 }, async () => {
-        const generated = await generate(call.input);
-        if (generated.status === "unknown") throw Error(call.unknownError);
+        let generated: Awaited<ReturnType<typeof generate>>;
+        try { generated = await generate(call.input); } catch (error) { sub = /^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(messageOf(error)) ? "PROVIDER_" + messageOf(error).replace(/^(?:FACTORY|CREDIT)_/, "").slice(0, 60) : "PROVIDER_THREW"; throw error; }
+        if (generated.status === "unknown") { sub = /^FACTORY_[A-Z]+_EXECUTION_UNCONFIRMED:([A-Z_]{2,40})$/.exec(generated.reason)?.[1] ?? "PROVIDER_UNKNOWN"; throw Error(call.unknownError); }
+        executed = true;
         if ("servedModel" in generated && typeof generated.servedModel === "string") served = generated.servedModel;
         return { value: generated, actualMicroUsd: generated.costCents * 10000, evidenceId: call.evidenceId(requestSha256) };
       }, () => dispatched);
@@ -100,6 +104,7 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
       return { result: plain as FactoryTextResult, provider: route.provider, model: served, requestSha256 };
     } catch (error) {
       if (!last && route.provider === "openai" && isFactoryModelFallbackError(error)) continue;
+      if (messageOf(error) === "CREDIT_EXECUTION_UNCONFIRMED") { try { call.onUnconfirmed?.(sub ?? (executed ? "LEDGER_SETTLE_FAILED" : "ROUTE_UNCONFIRMED")); } catch { /* diagnostics only */ } }
       if (error && typeof error === "object") ledgerOfError.set(error, route.ledger);
       throw error;
     }

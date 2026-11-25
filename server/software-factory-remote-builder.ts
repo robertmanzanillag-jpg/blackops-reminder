@@ -67,6 +67,19 @@ async function inspect(root: string) {
 }
 /** No repository commands run in the credential-bearing worker. Candidate push
  * can launch remote work, so eligibility precedes model spend and publication. */
+/** Safe single-segment suffix for an unconfirmed outcome: the code-owned model
+ * sub-cause, else the code-shaped error name without prefix, else the phase. */
+export function factoryRemoteUnconfirmedSubCause(message: unknown, error: unknown, phase: string): string {
+    if (typeof message === "string") {
+        const model = /^FACTORY_MODEL_EXECUTION_UNCONFIRMED:([A-Z_]{2,40})$/.exec(message)?.[1];
+        if (model) return model;
+        if (/^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(message)) return `${phase}_${message.replace(/^(?:FACTORY_(?:MODEL_|REMOTE_)?|CREDIT_)/, "")}`.slice(0, 100);
+    }
+    let name: unknown; try { name = error instanceof Error ? error.name : undefined; } catch { name = undefined; }
+    if (name === "AbortError" || name === "TimeoutError") return `${phase}_CANCELLED`;
+    if (typeof name === "string" && /^[A-Za-z]{2,30}$/.test(name)) return `${phase}_THREW_${name.toUpperCase()}`;
+    return phase;
+}
 export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilderOptions): NonNullable<FactoryPipelineDependencies["build"]> {
     const o = { ...options };
     if (!Number.isSafeInteger(o.publicationCostCents) || o.publicationCostCents < 0 || o.publicationCostCents > 10000)
@@ -145,7 +158,7 @@ export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilder
         catch (error) {
             // One safe suffix: the model sub-cause when code-owned, otherwise the phase.
             let message: unknown; try { message = error instanceof Error ? Object.getOwnPropertyDescriptor(error, "message")?.value : undefined; } catch { message = undefined; }
-            const sub = typeof message === "string" ? /^FACTORY_MODEL_EXECUTION_UNCONFIRMED:([A-Z_]{2,40})$/.exec(message)?.[1] : undefined;
+            const sub = factoryRemoteUnconfirmedSubCause(message, error, phase);
             return result(uncertain ? "unknown" : "failed", uncertain ? `FACTORY_REMOTE_EXECUTION_UNCONFIRMED:${sub ?? phase}` : `FACTORY_REMOTE_BUILD_FAILED:${phase}`);
         }
         finally {
