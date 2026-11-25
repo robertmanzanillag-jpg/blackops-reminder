@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { apiRequest } from "@/lib/queryClient";
 import type { SoftwareFactoryView, FactoryOfficeReviewLink } from "@shared/software-factory-view";
 import { AgentVitalityRoster } from "@/components/agent-vitality-roster";
+import { SoftwareFactoryAgentsBoard } from "@/components/software-factory-agents-board";
 
 /** Read-only display of the office reviewer's verdict. Never implies merge or order completion. */
 function officeReviewLabel(review: FactoryOfficeReviewLink): string {
@@ -62,6 +63,7 @@ export function SoftwareFactoryPanel() {
       {query.isPending && <p role="status">Comprobando actividad y presupuesto…</p>}
       {query.isError && <div role="alert"><p>No se pudo comprobar la fábrica. La actividad anterior no confirma que siga trabajando.</p><Button variant="outline" onClick={() => void query.refetch()}>Reintentar</Button></div>}
       {mutation.isError && <p role="alert">No se confirmó el cambio. Actualiza el estado antes de reintentarlo.</p>}
+      {open && <SoftwareFactoryAgentsBoard />}
       {data && <div className="space-y-5">
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">Estado comprobado el <time dateTime={data.checkedAt}>{new Date(data.checkedAt).toLocaleString("es")}</time>. No se actualiza automáticamente; esta información no confirma la actividad actual.</p>

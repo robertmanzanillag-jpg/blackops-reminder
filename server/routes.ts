@@ -66,6 +66,7 @@ import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 import { registerOfficeRoutes } from "./office-routes";
 import { registerOfficeBusinessRoutes } from "./office-business-routes";
 import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
+import { registerSoftwareFactoryAgentsRoutes } from "./software-factory-agents-routes";
 import { registerKongRepairRoutes } from "./kong-repair-routes";
 import { registerKongMirrorRoutes, readKongMirrorSummarySpend } from "./kong-mirror-routes";
 import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
@@ -323,6 +324,7 @@ export async function registerRoutes(
   registerKongRepairRoutes(app);
   registerKongMirrorRoutes(app);
   registerOfficeBusinessRoutes(app);
+  registerSoftwareFactoryAgentsRoutes(app);
   registerSoftwareFactoryRoutes(app, {resolveCompanyAdmission:getFactoryOfficeAdmission});
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
   const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
