@@ -119,6 +119,10 @@ const PRICES: Record<string, { input: number; output: number }> = {
   "gpt-5-nano": { input: 0.05, output: 0.4 },
   "gpt-5-mini": { input: 0.25, output: 2 },
   "gpt-5": { input: 1.25, output: 10 },
+  // Central policy models (shared/ai-model-policy.ts), standard list prices verified 2026-11-25.
+  "gpt-6-luna": { input: 0.1, output: 0.5 },
+  "gpt-6.1-sol": { input: 2, output: 10 },
+  "gpt-6.2-sol": { input: 2, output: 10 },
   // DeepSeek list prices at PEAK rates (off-peak is half): conservative.
   "deepseek-flash": { input: 0.3, output: 1.2 },
   "deepseek-v4-flash": { input: 0.3, output: 1.2 },

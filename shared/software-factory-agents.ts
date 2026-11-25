@@ -175,6 +175,8 @@ export type FactoryAgentsView = {
   api: { ready: boolean; text: string; code: string | null; remainingMicroUsd: number | null };
   /** Which AI provider new factory work uses and why (persisted out-of-credit flags). */
   provider?: { readable: boolean; active: "openai" | "anthropic" | null; reason: string; cooldowns: Array<{ provider: "openai" | "anthropic"; reason: string; since: string; until: string }> };
+  /** Model per provider for factory code stages, from the central policy (shared/ai-model-policy.ts). */
+  models?: { openai: string; anthropic: string };
   budget: { month: string; limitCents: number; usedCents: number; remainingCents: number; configured: boolean };
   admissions: { today: number; cap: number | null };
   openOrders: { readable: boolean; total: number; reasons: Array<{ code: string; label: string; count: number }> };

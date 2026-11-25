@@ -1,5 +1,5 @@
 import {fixtureFactoryInvocation,fixtureFactoryPricing} from './fixtures/factory-api-budget';
-const createOfficeExecution:typeof actualCreateOfficeExecution=(council,env={},now=Date.now,deps={})=>actualCreateOfficeExecution(council,{...env,FACTORY_API_PRICING_CONFIG:fixtureFactoryPricing(env.OFFICE_OPENAI_MODEL??"test-model")},now,{factoryInvocation:fixtureFactoryInvocation(()=>new Date(now())),...deps});
+const createOfficeExecution:typeof actualCreateOfficeExecution=(council,env={},now=Date.now,deps={})=>actualCreateOfficeExecution(council,{AI_MODEL_TIERING:"off",...env,FACTORY_API_PRICING_CONFIG:fixtureFactoryPricing(env.OFFICE_OPENAI_MODEL??"test-model")},now,{factoryInvocation:fixtureFactoryInvocation(()=>new Date(now())),...deps});
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";

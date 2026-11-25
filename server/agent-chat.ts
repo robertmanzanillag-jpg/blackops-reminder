@@ -15,6 +15,7 @@ import { ceoFocusContext } from "./ceo-domain-policy";
 //   token budget; an answer with a number that is not in the injected data is discarded.
 // Nothing here publishes, deploys, contacts anyone or runs a worker: orders are records.
 
+import { agentModelView } from "../shared/ai-model-policy";
 import type { CouncilState } from "@shared/agent-council";
 import { isKongCompanyAgent, type CompanyOrder } from "@shared/agent-company";
 import { KONG_DESK_PROFILE, agentChatName, handoffLog, isExternalActionForKong, routeAgentMessage, scoreAgents, type AgentChatRoute } from "@shared/agent-chat-routing";
@@ -46,7 +47,8 @@ export class AgentChatNotFound extends Error {}
 export class AgentChatModelError extends Error {
   constructor(public readonly code: "disabled" | "budget_exhausted" | "unavailable") { super(code); }
 }
-export type AgentChatModel = { ask(prompt: string, requestId: string): Promise<string> };
+/** agentId lets the central model policy pick the tier (CEO strong, others small). */
+export type AgentChatModel = { ask(prompt: string, requestId: string, agentId?: string): Promise<string> };
 
 type Council = {
   load(): Promise<CouncilState>;
@@ -292,7 +294,7 @@ export function createAgentChatService(deps: {
       const slice = deps.contextSlice ? deps.contextSlice(text, tuning.contextSlices) : "";
       const facts = `${factsText(f).slice(0, 3000)}${slice ? `\n${slice}` : ""}`;
       const prompt = modelPrompt(f, facts, text, history, tuning.historyMessages);
-      const answer = (await deps.model.ask(prompt, requestId)).trim();
+      const answer = (await deps.model.ask(prompt, requestId, f.profile.id)).trim();
       if (!answer) throw new AgentChatModelError("unavailable");
       // Grounding guard: a figure the injected data does not contain is a fabrication, never shown.
       const invented = unsupportedNumbers(answer, facts);
@@ -442,7 +444,7 @@ export function createAgentChatService(deps: {
     return entries.map(entry => {
       const f = agentFacts(state, entry.id, now(), deps.env, entries);
       return { id: entry.id, name: entry.name, job: entry.job, group: entry.group, groupLabel: AGENT_CHAT_GROUP_LABELS[entry.group], legacyIds: entry.legacyIds || [],
-        status: f.status || null, fresh: f.fresh, mode: f.integration.mode, openOrders: f.openOrders.length };
+        status: f.status || null, fresh: f.fresh, mode: f.integration.mode, openOrders: f.openOrders.length, aiModel: agentModelView(entry.id, deps.env ?? process.env) };
     });
   }
 

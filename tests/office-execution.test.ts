@@ -1,5 +1,5 @@
 import {fixtureFactoryInvocation,fixtureFactoryPricing} from './fixtures/factory-api-budget';
-const createOfficeExecution:typeof actualCreateOfficeExecution=(council,env={},now=Date.now,deps={})=>actualCreateOfficeExecution(council,{...env,FACTORY_API_PRICING_CONFIG:fixtureFactoryPricing(env.OFFICE_OPENAI_MODEL??"test-model")},now,{factoryInvocation:fixtureFactoryInvocation(()=>new Date(now())),...deps});
+const createOfficeExecution:typeof actualCreateOfficeExecution=(council,env={},now=Date.now,deps={})=>actualCreateOfficeExecution(council,{AI_MODEL_TIERING:"off",...env,FACTORY_API_PRICING_CONFIG:fixtureFactoryPricing(env.OFFICE_OPENAI_MODEL??"test-model")},now,{factoryInvocation:fixtureFactoryInvocation(()=>new Date(now())),...deps});
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
@@ -138,4 +138,27 @@ test("academy runner passes distinct stable assignment phases to the credit-limi
   } });
   await runner(reserved.state, reserved.job!); await runner(reserved.state, reserved.job!);
   assert.deepEqual(ids, ["academy:stable-job:incumbent", "academy:stable-job:candidate", "academy:stable-job:incumbent", "academy:stable-job:candidate"]);
+});
+
+test("office run: AI_MODEL_TIERING switch picks CEO strong / others small, off keeps OFFICE_OPENAI_MODEL", async () => {
+  const models: string[] = [];
+  const fetchStub = (async (_url: any, options: any) => { const body = JSON.parse(String(options?.body)); models.push(body.model);
+    // Unique response ids: the token ledger rejects a reused provider response id as double-accounting.
+    return new Response(JSON.stringify({ id: `resp_tier_${models.length}`, model: body.model, status: "completed", usage: { input_tokens_details:{cached_tokens:0,cache_write_tokens:0}, input_tokens: 20, output_tokens: 10, total_tokens: 30 },
+      output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "ok" }] }] })); }) as typeof fetch;
+  const { aiModelPrice } = await import("../shared/ai-model-policy");
+  const on = createOfficeExecution(fixture().make(), { ...env, AI_MODEL_TIERING: "on" }, () => NOW, { fetch: fetchStub });
+  // Real path: both tiered (non-catalog, code-owned priced) calls must execute through the ledger.
+  const ceo = await on.run("hola", "agent-chat:tier-ceo", { agentId: "ceo", task: "chat" });
+  const clip = await on.run("hola", "agent-chat:tier-clip", { agentId: "clippers", task: "chat" });
+  assert.equal(ceo.model, "gpt-6.2-sol"); assert.equal(clip.model, "gpt-6-luna");
+  for (const r of [ceo, clip]) { assert.equal(r.text, "ok"); assert.ok(aiModelPrice("openai", r.model), `${r.model} recorded without a price`); }
+  const off = createOfficeExecution(fixture().make(), env, () => NOW, { fetch: fetchStub });
+  const legacy = await off.run("hola", "agent-chat:tier-off", { agentId: "ceo", task: "chat" });
+  assert.equal(legacy.model, "test-model");
+  assert.deepEqual(models, ["gpt-6.2-sol", "gpt-6-luna", "test-model"]);
+  // Unpriced override never goes out unpriced: it falls back to the configured, priced model.
+  const unpriced = createOfficeExecution(fixture().make(), { ...env, AI_MODEL_TIERING: "on", AI_MODEL_CEO_OPENAI: "gpt-unpriced-x" }, () => NOW, { fetch: fetchStub });
+  await unpriced.run("hola", "agent-chat:tier-unpriced", { agentId: "ceo", task: "chat" });
+  assert.notEqual(models.at(-1), "gpt-unpriced-x"); assert.ok(aiModelPrice("openai", models.at(-1)!) || models.at(-1) === "test-model");
 });

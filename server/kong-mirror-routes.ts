@@ -1,3 +1,4 @@
+import { catalogPricedPolicyModel } from "./ai-model-pricing";
 import type { Express, Request } from "express";
 import { createKongMirrorLab, createMirrorSummarizer, createMirrorAiBudget, MirrorError, KONG_MIRROR_ACTION_TYPE, type MirrorCards, type MirrorGithub, type MirrorStore, type MirrorCard, type MirrorAiCall } from "./kong-mirror-lab";
 import { createMirrorChat, type MirrorChatGithub, type MirrorChatProvider } from "./kong-mirror-chat";
@@ -230,7 +231,7 @@ async function recordSpend(usd: number, meta: Record<string, unknown>) {
 export async function createMirrorProviders(): Promise<MirrorChatProvider[]> {
   const { getGeminiChatModel } = await import("./gemini-client");
   const gemini = getGeminiChatModel({ hasImage: false });
-  const openaiModel = /^[A-Za-z0-9._-]{1,60}$/.test(process.env.BLACKOPS_MIRROR_OPENAI_MODEL || "") ? process.env.BLACKOPS_MIRROR_OPENAI_MODEL! : "gpt-5.4-mini";
+  const openaiModel = /^[A-Za-z0-9._-]{1,60}$/.test(process.env.BLACKOPS_MIRROR_OPENAI_MODEL || "") ? process.env.BLACKOPS_MIRROR_OPENAI_MODEL! : catalogPricedPolicyModel("learning", "gpt-5.4-mini");
   return [
     { name: "gemini", model: gemini, generate: async (prompt, maxOutputTokens): Promise<MirrorAiCall> => {
       const { getGeminiClient } = await import("./gemini-client");

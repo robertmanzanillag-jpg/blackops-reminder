@@ -1,5 +1,6 @@
 import { createSharedOpenAiCreditLedger, type CreditTransaction, type SharedCreditState, type VerifiedCreditGrant } from "./shared-openai-credit-ledger";
 import type { createCouncilStore } from "./agent-council-store";
+import { resolveAiModel } from "../shared/ai-model-policy";
 import { ANTHROPIC_FACTORY_MODEL, ANTHROPIC_FACTORY_PRICES, ANTHROPIC_FACTORY_PRICING_VALID_UNTIL } from "./software-factory-anthropic";
 
 type DurableStore = Pick<ReturnType<typeof createCouncilStore>, "transact" | "read">;
@@ -104,8 +105,13 @@ export async function readAnthropicFactoryReservation(store: Pick<DurableStore, 
   return state.reservations.find(row => row.key === key) ?? null;
 }
 
-export const anthropicFactoryPricing = () => ({ model: ANTHROPIC_FACTORY_MODEL, inputNanoUsdPerToken: ANTHROPIC_FACTORY_PRICES[ANTHROPIC_FACTORY_MODEL].input,
-  outputNanoUsdPerToken: ANTHROPIC_FACTORY_PRICES[ANTHROPIC_FACTORY_MODEL].output, validUntil: ANTHROPIC_FACTORY_PRICING_VALID_UNTIL });
+/** Factory code stages use the policy's "code" tier (shared/ai-model-policy.ts); a model without
+ * a factory price row falls back to ANTHROPIC_FACTORY_MODEL. */
+export const anthropicFactoryPricing = (env: NodeJS.ProcessEnv = {}) => {
+  const chosen = resolveAiModel({ provider: "anthropic", task: "code_build", env }).model;
+  const model = Object.hasOwn(ANTHROPIC_FACTORY_PRICES, chosen) ? chosen : ANTHROPIC_FACTORY_MODEL;
+  return { model, inputNanoUsdPerToken: ANTHROPIC_FACTORY_PRICES[model].input, outputNanoUsdPerToken: ANTHROPIC_FACTORY_PRICES[model].output, validUntil: ANTHROPIC_FACTORY_PRICING_VALID_UNTIL };
+};
 
 /** Same shape as loadSharedCreditRuntime: { ledger, pricing }. Requires the
  * same PostgreSQL council store; no in-memory fallback. */
@@ -115,7 +121,7 @@ export async function loadAnthropicFactoryRuntime(env: NodeJS.ProcessEnv, now: (
   const durable = store ?? await (await import("./agent-council-store")).getCouncilStore();
   const ledger = await createAnthropicFactoryLedger({ store: durable, now, capMicroUsd: factoryAnthropicMonthlyBudgetMicroUsd(env) });
   await ledger.status();
-  return { ledger, pricing: anthropicFactoryPricing() };
+  return { ledger, pricing: anthropicFactoryPricing(env) };
 }
 
 /** Office Claude API fallback: on only with an Anthropic key AND
@@ -130,10 +136,13 @@ export function officeAnthropicMonthlyBudgetMicroUsd(env: NodeJS.ProcessEnv) {
   if (!Number.isFinite(usd) || usd < 0 || usd > 10000) throw Error("OFFICE_ANTHROPIC_BUDGET_INVALID");
   return Math.floor(usd * 1000000);
 }
-export async function loadAnthropicOfficeRuntime(env: NodeJS.ProcessEnv, now: () => Date, store?: DurableStore) {
+/** model: the policy's Claude model for this office job (shared/ai-model-policy.ts); it must
+ * have a code-owned price, otherwise the factory's priced Opus model is used. */
+export async function loadAnthropicOfficeRuntime(env: NodeJS.ProcessEnv, now: () => Date, store?: DurableStore, model?: string) {
   if (!officeAnthropicFallbackEnabled(env)) throw Error("OFFICE_ANTHROPIC_FALLBACK_DISABLED");
   const durable = store ?? await (await import("./agent-council-store")).getCouncilStore();
   const ledger = await createAnthropicFactoryLedger({ store: durable, now, capMicroUsd: officeAnthropicMonthlyBudgetMicroUsd(env), scope: "office" });
   await ledger.status();
-  return { ledger, pricing: anthropicFactoryPricing() };
+  const { policyAnthropicPricing } = await import("./ai-model-pricing");
+  return { ledger, pricing: (model ? policyAnthropicPricing(model) : null) ?? anthropicFactoryPricing() };
 }

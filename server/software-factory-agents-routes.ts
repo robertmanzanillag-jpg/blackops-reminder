@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { readFile } from "node:fs/promises";
 import { getAuthenticatedCurrentUserId, getSystemUserId } from "./user-context";
+import { resolveAiModel } from "../shared/ai-model-policy";
 import { configuredSoftwareFactoryStore } from "./software-factory-store-provider";
 import { readFactoryOrderProposals, readFactoryRecoveredBuild } from "./software-factory-order-evidence";
 import { summarizeOwnerOrderAdmission } from "./software-factory-company";
@@ -53,6 +54,7 @@ export function registerSoftwareFactoryAgentsRoutes(app: Express, options: { sto
         checkedAt: at.toISOString(), paused: state.paused,
         api: { ...apiReadinessLabel(apiAny?.reason, apiAny?.paidAdmissionReady), remainingMicroUsd: typeof apiAny?.remainingMicroUsd === "number" ? apiAny.remainingMicroUsd : null },
         provider,
+        models: { openai: resolveAiModel({ provider: "openai", task: "code_build", env: process.env }).model, anthropic: resolveAiModel({ provider: "anthropic", task: "code_build", env: process.env }).model },
         budget: { month: state.month, limitCents: state.limitCents, usedCents, remainingCents: Math.max(0, state.limitCents - usedCents), configured: state.configured },
         admissions: { today: admissionsToday(jobs, at.getTime()), cap: config?.maxPerDay ?? null },
         openOrders: summary.ordersReadable ? { readable: true, total: summary.openOwnerOrders, reasons: Object.entries(summary.reasons).sort((a, b) => b[1] - a[1]).map(([code, count]) => ({ code, label: ORDER_REASON_LABEL[code] ?? code, count })) } : { readable: false, total: 0, reasons: [] },
