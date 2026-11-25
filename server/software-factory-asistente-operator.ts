@@ -464,7 +464,10 @@ async function installed(store: Store) {
     // each ledger still fails closed on its own).
     const cooldown = await import("./ai-provider-credit-cooldown");
     const cooldownStore = env.AGENT_COUNCIL_STORAGE === "postgres" ? await getCouncilStore() : undefined;
-    const cooldowns = cooldownStore ? (await cooldown.readProviderCooldowns(cooldownStore, now())).active : {};
+    const { factoryAnthropicFallbackEnabled: claudeOn } = await import("./software-factory-anthropic-ledger");
+    // Expired OpenAI cooldown: zero-cost probe first; still out of credit = renew and use Claude.
+    const cooldowns = cooldownStore ? await cooldown.refreshExpiredOpenAiCooldown({ store: cooldownStore, now, env, claudeEnabled: claudeOn(env),
+        active: (await cooldown.readProviderCooldowns(cooldownStore, now())).active, log: message => console.error(message) }) : {};
     if (cooldownStore) {
         const { setFactoryProviderCreditHooks } = await import("./software-factory-model-routes");
         setFactoryProviderCreditHooks({
