@@ -58,9 +58,15 @@ export function summarizeOwnerOrderAdmission(orders: readonly CompanyOrder[] | u
   if (!Array.isArray(orders)) return { ordersReadable: false as const };
   const open = orders.filter(o => o && typeof o === "object" && !o.doneAt && o.selfHeal === undefined && Array.isArray(o.assignees) && typeof o.text === "string");
   const reasons: Record<string, number> = {};
+  // Role ids (never order text) held by orders rejected for lacking an engineering assignee.
+  const rejectedAssigneeAgentIds: Record<string, number> = {};
+  for (const order of open) if (classifyCompanyOrderAdmission(order, auto) === "no_active_engineering_assignee") {
+    for (const id of new Set<string>((order.assignees as Array<{ agentId?: unknown }>).map((a): string => typeof a?.agentId === "string" ? (a.agentId.startsWith("specialist:") ? "specialist" : a.agentId) : "invalid"))) rejectedAssigneeAgentIds[id] = (rejectedAssigneeAgentIds[id] ?? 0) + 1;
+    if (!order.assignees.length) rejectedAssigneeAgentIds["(none)"] = (rejectedAssigneeAgentIds["(none)"] ?? 0) + 1;
+  }
   for (const order of open) { const classified = classifyCompanyOrderAdmission(order, auto), reason = !auto && classified === "auto_admit_disabled" ? "passes_code_filters_config_unknown" : classified; reasons[reason] = (reasons[reason] ?? 0) + 1; }
   const created = open.map(o => Date.parse(o.createdAt)).filter(Number.isFinite);
-  return { ordersReadable: true as const, openOwnerOrders: open.length, reasons,
+  return { ordersReadable: true as const, openOwnerOrders: open.length, reasons, rejectedAssigneeAgentIds,
     oldestOpenAgeDays: created.length ? Math.floor((now.getTime() - Math.min(...created)) / 86400000) : null };
 }
 

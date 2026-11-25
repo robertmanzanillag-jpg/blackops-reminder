@@ -389,3 +389,30 @@ test("stale-generation training cannot modify skills or graduate into the new ho
   assert.equal(state.trainees[0].graduatedAt,undefined);
   assert.match(state.trainees[0].executionBlocker!,/generation changed/);
 });
+
+test("CEO channel: app/website problems always get an engineering assignee (Spanish and English)", () => {
+  const all = ["assistant", "blackroom-videos", "kong-videos", "clippers", "radio", "news", "legal", "app-qa", "code", "mechanic", "marketing-cmo", "revenue", "dropshipping", "automations", "github", "claude-reviewer", "agent-factory"];
+  const engineering = ["code", "github", "app-qa", "mechanic", "agent-factory", "claude-reviewer"];
+  for (const text of [
+    "La página web no carga en el celular",
+    "El login de la aplicación da error",
+    "Hay una falla en la pantalla de pagos",
+    "El sitio no funciona",
+    "El botón de la tienda no sirve, revisa el producto y las ventas",
+    "Sube el video y el reel al tiktok, el clip da error",
+    "The website is broken on mobile",
+    "Login page shows an error after payment",
+    "The app crashes when I open the dashboard",
+  ]) {
+    const picked = routeOrder(text, all);
+    assert.ok(picked.some((id) => engineering.includes(id)), `${text} -> ${picked.join(",")}`);
+    assert.ok(picked.length <= 4);
+  }
+  // Business agents stay alongside the engineer.
+  const mixed = routeOrder("El botón de pago de la tienda da error", all);
+  assert.ok(mixed.includes("revenue") || mixed.includes("dropshipping"));
+  // No false positives for non-technical orders.
+  assert.deepEqual(routeOrder("Agenda una reunion con el abogado", all).filter((id) => engineering.includes(id)), []);
+  // Kong scope rule untouched: the CEO channel's kong word still routes to Kong video only, factory still rejects kong text.
+  assert.ok(routeOrder("revisa los terminos de Kong", all).includes("kong-videos"));
+});

@@ -61,7 +61,7 @@ test("admission diagnosis mirrors the admission filters and never exposes order 
   assert.equal(classifyCompanyOrderAdmission(order, { ...auto, since: "2026-11-01T00:00:00Z", mappedIds: [order.id] }), "explicitly_mapped");
   assert.equal(classifyCompanyOrderAdmission(order, { enabled: false }), "auto_admit_disabled");
   const summary = summarizeOwnerOrderAdmission([order, { ...order, id: "o2", text: "Kong" }, { ...order, id: "o3", doneAt: order.createdAt }], auto, new Date("2026-11-24T12:00:00Z"));
-  assert.deepEqual(summary, { ordersReadable: true, openOwnerOrders: 2, reasons: { before_since: 1, kong_text: 1 }, oldestOpenAgeDays: 18 });
+  assert.deepEqual(summary, { ordersReadable: true, openOwnerOrders: 2, reasons: { before_since: 1, kong_text: 1 }, rejectedAssigneeAgentIds: {}, oldestOpenAgeDays: 18 });
   assert.doesNotMatch(JSON.stringify(summary), /búsqueda|order-1/);
   assert.deepEqual(summarizeOwnerOrderAdmission([order], undefined, new Date()).reasons, { passes_code_filters_config_unknown: 1 });
 });
@@ -69,4 +69,11 @@ test("discovery request asks for a permanent regression test edit", async () => 
   const discover = createCompanyOrderDiscovery({ readMainOrder: async () => order, resolveHead: async () => "a".repeat(40), inspectOrder: async () => ({ kind: "bug", regressionScenarioId: "s" }) });
   const result = await discover(project, { signal: new AbortController().signal, maxCostCents: 1, source: companyOrderJob(order, project, 1).payload });
   assert.match(result.finding!.request, /MUST edit at least one of the provided test files/);
+});
+test("admission status counts role ids of orders rejected for no engineering assignee", () => {
+  const auto = { enabled: true, since: "2026-11-01T00:00:00Z", mappedIds: [] as string[] };
+  const biz = (id: string, agents: string[]) => ({ ...order, id, assignees: agents.map(agentId => ({ agentId, status: "en_curso" as const, note: "" })) });
+  const summary = summarizeOwnerOrderAdmission([biz("a", ["marketing-cmo", "specialist:web"]), biz("b", ["marketing-cmo"]), biz("c", []), biz("d", ["code"])], auto, new Date("2026-11-24T12:00:00Z"));
+  assert.deepEqual(summary.ordersReadable && summary.rejectedAssigneeAgentIds, { "marketing-cmo": 2, specialist: 1, "(none)": 1 });
+  assert.doesNotMatch(JSON.stringify(summary), /búsqueda/);
 });
