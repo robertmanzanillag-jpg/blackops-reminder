@@ -58,8 +58,8 @@ export async function readFactoryOrderProposals(options:{owner:string;jobs:Facto
     }
     if(kind!=="discover"){const previous:unknown=job?.payload.previousJobId;if(!safeId(previous))throw Error("missing predecessor");job=await read(()=>options.getCompletedJob(owner,previous));}
    }
-   const root=chain.at(-1)!,source=root.payload.companyOrder as {version?:number;company?:string;orderId?:string;revision?:string}|undefined;
-   if(root.id!==state.rootJobId||!source||source.version!==1||source.company!=="main"||!safeId(source.orderId)||!source.revision||!/^[a-f0-9]{64}$/.test(source.revision)||root.key!==`company-order:${hash([project.id,source.orderId,source.revision])}`||state.finding.id!==root.key||!state.finding.artifactIds.includes(`company-order-sha256:${source.revision}`)||state.finding.baseSha!==state.candidate.baseSha)continue;
+   const root=chain.at(-1)!,source=root.payload.companyOrder as {version?:number;company?:string;orderId?:string;revision?:string;retry?:number}|undefined;
+   if(root.id!==state.rootJobId||!source||source.version!==1||source.company!=="main"||!safeId(source.orderId)||!source.revision||!/^[a-f0-9]{64}$/.test(source.revision)||(source.retry!==undefined&&![1,2].includes(source.retry))||root.key!==`company-order:${hash([project.id,source.orderId,source.revision])}${source.retry?`:retry:${source.retry}`:""}`||state.finding.id!==root.key||!state.finding.artifactIds.includes(`company-order-sha256:${source.revision}`)||state.finding.baseSha!==state.candidate.baseSha)continue;
    // Metadata is evidence registered by the trusted factory, not independent
    // verification of artifact bytes or of the current/deleted/edited office order.
    out.push({orderId:source.orderId,orderRevision:source.revision,reviewJobId:terminal.id,projectId:project.id,prUrl:state.candidate.prUrl,baseSha:state.candidate.baseSha,headSha:state.candidate.headSha,completedAt:terminal.completedAt!,evidenceCount:state.evidence.length,scope:"reviewed_proposal",orderLink:"historical_unverified",published:false,careerCredit:false});

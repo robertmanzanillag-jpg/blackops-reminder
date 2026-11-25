@@ -108,7 +108,9 @@ export const selfHealSeverity = (code: string) => SELF_HEAL_DATA_ABSENCE_CODES.h
 /** Fix-PR findings that fail the pre-merge re-audit regardless of severity. */
 const FIX_PR_BLOCKING = new Set(["PR_FAILING_CHECKS", "PR_CONFLICTED", "CHECKS_UNREADABLE"]);
 /** Factory outcomes that are infrastructure (budget, caps, pause, uncertainty), not a failed fix. */
-const INFRASTRUCTURE = /CREDIT|BUDGET|DAILY|LIMIT|PAUSED|UNKNOWN|UNCONFIRMED|UNAVAILABLE|RECONCILIATION|DEADLINE|TIMEOUT/;
+// Zero-cost infrastructure stops the factory itself retries (software-factory-order-retry.ts)
+// wait on the owner/infra instead of consuming a self-heal attempt.
+const INFRASTRUCTURE = /CREDIT|BUDGET|DAILY|LIMIT|PAUSED|UNKNOWN|UNCONFIRMED|UNAVAILABLE|RECONCILIATION|DEADLINE|TIMEOUT|PROVIDER_BLOCKED|PRICING_UNVERIFIED|MONTH_UNINITIALIZED|SELECTION_NOT_COMPLETED/;
 
 // ---------- normalized audits (built from the role-work journal) ----------
 

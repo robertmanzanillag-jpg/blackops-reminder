@@ -15,6 +15,8 @@ export function createFactoryCompanyOrderScheduler(options:{
  /** "as-read" keeps the caller's priority (explicit mappings first, then
   * automatic orders oldest-first). Default remains newest-first. */
  ordering?:"newest-first"|"as-read";
+ /** Bounded infrastructure retry index per order (default: none). */
+ retryFor?:(order:CompanyOrder)=>number;
 }){
  const {owner,project,readOrders,ledger,reservationCents,admit}=options,ordering=options.ordering??"newest-first";
  if(!["newest-first","as-read"].includes(ordering))throw Error("FACTORY_COMPANY_SCHEDULE_INVALID");
@@ -31,7 +33,7 @@ export function createFactoryCompanyOrderScheduler(options:{
   if(ordering==="newest-first")orders.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||a.id.localeCompare(b.id));
   for(const order of orders){
    let input:FactoryJobInput;
-   try{input=companyOrderJob(order,target,reservationCents);}catch{continue;}
+   try{input=companyOrderJob(order,target,reservationCents,options.retryFor?.(order)??0);}catch{continue;}
    const admitted=await admit(owner,input);
    if(admitted.ownerKey!==ownerKey||admitted.key!==input.key||admitted.projectId!==target.id||admitted.kind!=="discover")throw Error("FACTORY_COMPANY_ADMISSION_UNVERIFIED");
    if(["pending","running"].includes(admitted.status))return;
