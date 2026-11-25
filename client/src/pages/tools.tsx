@@ -96,6 +96,13 @@ const tools = [
     primary: true,
   },
   {
+    title: "Social Hub",
+    description: "Programa y publica en Facebook, Instagram, TikTok y más. Aprobaciones y analíticas.",
+    href: "/social-hub",
+    icon: Megaphone,
+    primary: true,
+  },
+  {
     title: "Legal / Compliance",
     description: "Reportes legales por app, scouts y escalacion al Legal Main.",
     href: "/legal-compliance",
