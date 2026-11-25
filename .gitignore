@@ -37,3 +37,4 @@ data_export*.sql
 data_export*.csv
 *.b64.txt
 replit-*.tar.gz
+data/social-hub/

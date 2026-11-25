@@ -123,7 +123,8 @@
     "start:replit": "NODE_ENV=production node script/replit-fast-start.mjs",
     "test:replit-fast-start": "node --test tests/replit-fast-start.test.mjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test:social-hub": "node --import tsx --test tests/social-hub.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.6.0",
