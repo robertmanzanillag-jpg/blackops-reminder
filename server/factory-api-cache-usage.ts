@@ -42,3 +42,20 @@ export function validateTextOutputTokenDetails(raw:unknown,outputTokens:unknown)
  if(value.reasoning_tokens!==undefined&&(!count(value.reasoning_tokens)||value.reasoning_tokens>outputTokens))return invalid();
  for(const key of ['audio_tokens','image_tokens','accepted_prediction_tokens','rejected_prediction_tokens'])if(value[key]!==undefined&&value[key]!==0)return invalid();
 }
+
+/** OpenAI may echo a dated snapshot of the requested alias (e.g. gpt-6.1-sol ->
+ * gpt-6.1-sol-2026-09-29). Only that exact alias plus a "-YYYY-MM-DD" suffix is
+ * accepted; any other returned model stays unconfirmed (never re-priced). */
+export function factoryResponseModelMatches(configured:unknown,returned:unknown):boolean{
+ if(typeof configured!=='string'||typeof returned!=='string'||!configured||returned.length>200)return false;
+ if(returned===configured)return true;
+ if(/-\d{4}-\d{2}-\d{2}$/.test(configured)||!returned.startsWith(configured+'-'))return false;
+ const suffix=returned.slice(configured.length+1);
+ return /^\d{4}-\d{2}-\d{2}$/.test(suffix)&&Number.isFinite(Date.parse(suffix+'T00:00:00Z'))&&new Date(suffix+'T00:00:00Z').toISOString().slice(0,10)===suffix;
+}
+/** Safe, code-owned sub-causes for post-dispatch unconfirmed outcomes. */
+export const factoryUnconfirmedSubCauses=['MODEL_MISMATCH','USAGE_INVALID','USAGE_BOUNDS','SERVICE_TIER_UNPRICED','STATUS_ACTIVE','OUTPUT_UNPARSEABLE','RESPONSE_ID_INVALID','HTTP_ERROR','BODY_UNPARSEABLE','RESPONSE_TOO_LARGE','TRANSPORT','CANCELLED','PRICING_EXPIRED','COST_INVALID','SETTLE_FAILED','UNKNOWN'] as const;
+export type FactoryUnconfirmedSubCause=typeof factoryUnconfirmedSubCauses[number];
+export const factoryUnconfirmedSubCause=(value:unknown):FactoryUnconfirmedSubCause|undefined=>{
+ try{const m=value instanceof Error?Object.getOwnPropertyDescriptor(value,'message')?.value:value;return typeof m==='string'&&(factoryUnconfirmedSubCauses as readonly string[]).includes(m)?m as FactoryUnconfirmedSubCause:undefined;}catch{return undefined;}
+};

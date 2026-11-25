@@ -145,7 +145,7 @@ export function createOpenAiFactoryPatchGenerator(options: {
     });
     // The existing builder checks/apply/tests the exact returned diff. Failed
     // terminal calls settle known usage; ambiguous calls keep its reservation.
-    if (result.status === "unknown") throw new Error("FACTORY_MODEL_EXECUTION_UNCONFIRMED");
+    if (result.status === "unknown") { const sub = /^FACTORY_[A-Z]+_EXECUTION_UNCONFIRMED:([A-Z_]{2,40})$/.exec(result.reason)?.[1]; throw new Error(`FACTORY_MODEL_EXECUTION_UNCONFIRMED${sub ? `:${sub}` : ""}`); }
     // Model text may omit its final line delimiter. Add only that delimiter;
     // never trim hunk whitespace, unwrap commentary, or repair truncated hunks.
     // The strict downstream parser still validates the entire resulting patch.

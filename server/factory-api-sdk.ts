@@ -84,13 +84,13 @@ export function snapshotFactoryApiRequest(path:string,value:unknown){
  const body=snapshotBody(value);return {body,bounds:boundedRequest(path,body)};
 }
 function usage(path:string,result:any,provider="openai"):FactoryApiUsage{
- if(provider!=="deepseek"&&result?.service_tier!==undefined&&result.service_tier!=="default")throw Error("unpriced returned service tier");
+ if(provider!=="deepseek"&&result?.service_tier!==undefined&&result.service_tier!=="default")throw Error("SERVICE_TIER_UNPRICED");
  if(path==="responses.create"){
-  if(Array.isArray(result?.output)&&result.output.some((item:any)=>!["message","reasoning"].includes(item?.type)))throw Error("unpriced output operation");
-  if(!["completed","incomplete","failed","cancelled"].includes(result?.status))throw Error("unconfirmed terminal response");
- }else if(!Array.isArray(result?.choices)||result.choices.length!==1||!["stop","length","content_filter","tool_calls","function_call"].includes(result.choices[0]?.finish_reason))throw Error("unconfirmed terminal completion");
+  if(Array.isArray(result?.output)&&result.output.some((item:any)=>!["message","reasoning"].includes(item?.type)))throw Error("OUTPUT_UNPARSEABLE");
+  if(!["completed","incomplete","failed","cancelled"].includes(result?.status))throw Error("STATUS_ACTIVE");
+ }else if(!Array.isArray(result?.choices)||result.choices.length!==1||!["stop","length","content_filter","tool_calls","function_call"].includes(result.choices[0]?.finish_reason))throw Error("STATUS_ACTIVE");
  const values=path==='responses.create'?{input:result?.usage?.input_tokens,output:result?.usage?.output_tokens}:{input:result?.usage?.prompt_tokens,output:result?.usage?.completion_tokens};
- if(result?.usage?.total_tokens!==undefined&&(!Number.isSafeInteger(result.usage.total_tokens)||result.usage.total_tokens!==values.input+values.output))throw Error('inconsistent total usage');
+ if(result?.usage?.total_tokens!==undefined&&(!Number.isSafeInteger(result.usage.total_tokens)||result.usage.total_tokens!==values.input+values.output))throw Error('USAGE_INVALID');
  validateTextOutputTokenDetails(path==='responses.create'?result?.usage?.output_tokens_details:result?.usage?.completion_tokens_details,values.output);
  const details=path==='responses.create'?result?.usage?.input_tokens_details:result?.usage?.prompt_tokens_details;
  const cache=provider==='deepseek'?{cachedInputTokens:result?.usage?.prompt_cache_hit_tokens,
@@ -167,11 +167,12 @@ export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:i
   const output=await invoke({...(countedInput?{countedInput}:{}),executionId:options.executionId,consumer:options.consumer??'office',requestSha256:apiEvidenceHash(body),price,...bounded,cacheWriteCoverage:true,signal,
    call:async limits=>{
     const response=await transport(url,{...request,redirect:'error',signal:limits.signal});
-    if(!response.ok){await response.body?.cancel();throw Error('http');}
+    if(!response.ok){await response.body?.cancel();throw Error('HTTP_ERROR');}
     const clone=response.clone(),reader=clone.body?.getReader();if(!reader)throw Error('empty');
     const chunks:Uint8Array[]=[];let bytes=0;
-    for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>2_097_152){await reader.cancel();throw Error('size');}chunks.push(part.value);}
-    return {response,body:JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)))};
+    for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>2_097_152){await reader.cancel();throw Error('RESPONSE_TOO_LARGE');}chunks.push(part.value);}
+    let parsed:unknown;try{parsed=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));}catch{throw Error('BODY_UNPARSEABLE');}
+    return {response,body:parsed};
    },usage:result=>usage('responses.create',result.body)});
   return output.response;
   }catch(error){

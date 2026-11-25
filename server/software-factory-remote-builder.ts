@@ -142,8 +142,11 @@ export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilder
             } catch { /* Preserve the verified PR while leaving release blocked. */ }
             return { costCents, candidate: { projectId: project.id, baseSha, headSha: candidate.headSha, prUrl: published.prUrl, builderId: "factory-remote-builder", risk: classification.risk, reversible: classification.reversible, affectsContracts: classification.affectsContracts, affectsData: classification.affectsData, changedFiles, repairAttempts: state.repairAttempts }, tests: { projectId: project.id, baseSha, headSha: candidate.headSha, kind: "tests", passed: true, warnings: [], actorId: checked.actorId, createdAt: checked.createdAt, artifactIds: checked.artifactIds, journeyIds: checked.regressionScenarioIds } };
         }
-        catch {
-            return result(uncertain ? "unknown" : "failed", uncertain ? "FACTORY_REMOTE_EXECUTION_UNCONFIRMED" : `FACTORY_REMOTE_BUILD_FAILED:${phase}`);
+        catch (error) {
+            // One safe suffix: the model sub-cause when code-owned, otherwise the phase.
+            let message: unknown; try { message = error instanceof Error ? Object.getOwnPropertyDescriptor(error, "message")?.value : undefined; } catch { message = undefined; }
+            const sub = typeof message === "string" ? /^FACTORY_MODEL_EXECUTION_UNCONFIRMED:([A-Z_]{2,40})$/.exec(message)?.[1] : undefined;
+            return result(uncertain ? "unknown" : "failed", uncertain ? `FACTORY_REMOTE_EXECUTION_UNCONFIRMED:${sub ?? phase}` : `FACTORY_REMOTE_BUILD_FAILED:${phase}`);
         }
         finally {
             if (workspace) {

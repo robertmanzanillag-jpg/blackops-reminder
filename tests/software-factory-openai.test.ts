@@ -48,7 +48,7 @@ test("documented undated snapshots retain exact identity and all budget gates",a
 test("missing usage, changed model, exceeded cap and ambiguous HTTP never become success or retry",async()=>{
  for(const response of [()=>json({...result(),status:"in_progress"}),()=>json({...result(),usage:null}),()=>json({...result(),model:"other"}),()=>json({...result(),usage:{input_tokens:101,output_tokens:20,total_tokens:121,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}}),()=>json({...result(),usage:{input_tokens:100,output_tokens:101,total_tokens:201,input_tokens_details:{cached_tokens:0,cache_write_tokens:0}}}),()=>new Response("private provider error",{status:503}),()=>{throw Error("lost acknowledgment");}]){
   let calls=0;const generate=createOpenAiFactoryTextProvider({...config,request:async()=>++calls===1?count():response()});
-  const outcome=await generate(input());assert.deepEqual(outcome,{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0});assert.equal(calls,2);
+  const outcome=await generate(input());assert.equal(outcome.status,"unknown");assert.equal(outcome.costCents,0);assert.match(outcome.reason,/^FACTORY_OPENAI_EXECUTION_UNCONFIRMED:(STATUS_ACTIVE|USAGE_INVALID|MODEL_MISMATCH|USAGE_BOUNDS|HTTP_ERROR|BODY_UNPARSEABLE|OUTPUT_UNPARSEABLE|SERVICE_TIER_UNPRICED|RESPONSE_TOO_LARGE|UNKNOWN)$/);assert.equal(calls,2);
  }
 });
 test("known incomplete and refusal outcomes preserve nonzero cost",async()=>{
