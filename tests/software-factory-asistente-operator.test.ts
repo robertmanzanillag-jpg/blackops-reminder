@@ -75,10 +75,10 @@ test("concurrent identical admissions enqueue at most once across separate opera
 
 test("operator permits bounded build output while preserving review ceiling and rejects invalid profiles",async()=>{
  const f=await fixture();
- const increased={...f.config,maxOutputTokens:8192};
- assert.equal(validateAsistenteOperatorConfig(increased).maxOutputTokens,8192);
+ const increased={...f.config,maxOutputTokens:32000};
+ assert.equal(validateAsistenteOperatorConfig(increased).maxOutputTokens,32000);
  assert.doesNotThrow(()=>createAsistenteOperatorComposition(increased,f.deps));
- for(const config of [{...f.config,maxOutputTokens:8193},{...f.config,maxFilesPerOrder:9},{...f.config,ui:{...f.config.ui,workflowId:2}},{...f.config,ui:{...f.config.ui,workflowSha256:"d".repeat(64)}}])assert.throws(()=>createAsistenteOperatorComposition(config as AsistenteOperatorConfig,f.deps));
+ for(const config of [{...f.config,maxOutputTokens:32001},{...f.config,maxFilesPerOrder:9},{...f.config,ui:{...f.config.ui,workflowId:2}},{...f.config,ui:{...f.config.ui,workflowSha256:"d".repeat(64)}}])assert.throws(()=>createAsistenteOperatorComposition(config as AsistenteOperatorConfig,f.deps));
  assert.equal(f.calls(),0);
 });
 

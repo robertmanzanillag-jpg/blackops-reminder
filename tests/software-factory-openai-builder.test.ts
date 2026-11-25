@@ -177,3 +177,15 @@ test("immutable 9895bb1 allowed files pass preflight and generated multi-file pa
   });
  }finally{await rm(workspace,{recursive:true,force:true});}
 });
+
+test("required regression test edit fails fast before publication when no test file changes",async()=>{
+ const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-exact-test-required-"));
+ try{
+  await mkdir(path.join(workspace,"tests"));
+  await writeFile(path.join(workspace,"app.ts"),"const first = 1;\n");await writeFile(path.join(workspace,"tests/app.test.ts"),"assert.equal(first, 1);\n");
+  const make=(edits:unknown[])=>createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts","tests/app.test.ts"]},maxOutputTokens:16000,patchMode:"exactSourceEdits",requireTestEdit:true,generateText:async request=>{assert.match(request.instructions,/editing a provided test file/);return {status:"completed",text:JSON.stringify({edits}),costCents:3,inputTokens:20,outputTokens:30};}});
+  assert.deepEqual(await make([{path:"app.ts",before:"first",after:"second"}])(input,{workspace,maxCostCents:10}),{patch:"",costCents:3,diagnostic:"TEST_EDIT_REQUIRED"});
+  const ok=await make([{path:"app.ts",before:"first = 1",after:"first = 2"},{path:"tests/app.test.ts",before:"first, 1",after:"first, 2"}])(input,{workspace,maxCostCents:10});
+  assert.equal(ok.diagnostic,undefined);assert.deepEqual(validateFactoryPublicationPatch(ok.patch),["app.ts","tests/app.test.ts"]);
+ }finally{await rm(workspace,{recursive:true,force:true});}
+});

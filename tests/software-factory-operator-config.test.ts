@@ -23,7 +23,7 @@ test("generator emits a strict, deterministic operator config with the documente
   assert.deepEqual(config.writeRoots, ["server/", "client/", "shared/", "tests/"]);
   assert.equal(config.maxFilesPerOrder, 6); assert.equal(config.maxDraftPullRequestsPerDay, 5);
   assert.deepEqual(config.reservations, { discover: 10, build: 100, simulate: 1, review: 50 });
-  assert.equal(config.maxInputTokens, 32000); assert.equal(config.maxOutputTokens, 8192);
+  assert.equal(config.maxInputTokens, 32000); assert.equal(config.maxOutputTokens, 16000);
   assert.deepEqual(config.orders, []);
   assert.deepEqual(config.archiveHosts, ["a.blob.core.windows.net", "b.blob.core.windows.net"]);
   assert.equal(config.allowGitHubResultsAzureHosts, false);

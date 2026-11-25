@@ -65,7 +65,7 @@ export function createAsistenteFactoryBuild(options: {
     };
     const key = `factory:${createHash("sha256").update(JSON.stringify([project.id, state.rootJobId, state.repairAttempts])).digest("hex")}`;
     let used: { provider: string; model: string } | undefined;
-    const generatePatch = createOpenAiFactoryPatchGenerator({ patchMode:"exactSourceEdits", sourcePaths: { [repository]: paths }, maxOutputTokens,
+    const generatePatch = createOpenAiFactoryPatchGenerator({ patchMode:"exactSourceEdits", requireTestEdit: state.finding.kind === "bug" || !!state.finding.regressionScenarioId, sourcePaths: { [repository]: paths }, maxOutputTokens,
       generateText: async input => {
         const call = await runFactoryModelCall(routes, { key, input, unknownError: "FACTORY_MODEL_OUTCOME_UNKNOWN",
           requestSha256: m => createHash("sha256").update(JSON.stringify([m.model, input.instructions, input.text, input.maxOutputTokens, ("reasoningEffort" in m ? m.reasoningEffort : undefined) ?? null])).digest("hex"),

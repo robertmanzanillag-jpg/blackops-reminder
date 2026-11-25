@@ -5,6 +5,8 @@ import {
   creditLedgerOwner, currentMonth, factoryTableNames, ownerKeyFor, parseStatusArgs, safeErrorCode,
   shapeCreditSummary, shapeJobCounts, shapeProjects, shapeStoppedJobs,
 } from "./software-factory-db-cli";
+import { readFile } from "node:fs/promises";
+import { summarizeOwnerOrderAdmission } from "../server/software-factory-company";
 
 // READ-ONLY preflight. Everything runs inside one READ ONLY transaction that is always rolled back,
 // so PostgreSQL itself rejects any write. Prints one JSON line without secrets or connection details.
@@ -58,6 +60,20 @@ async function main() {
         // Why the factory stopped: newest blocked/failed jobs of this owner, reason codes only.
         const stopped = await client.query("SELECT status, input->>'kind' AS kind, result->>'reason' AS reason, input->'payload'->'companyOrder'->>'orderId' AS order_id, created_at, completed_at FROM software_factory_jobs WHERE owner_key=$1 AND status IN ('blocked','failed') ORDER BY created_at DESC LIMIT 20", [key]);
         report.stoppedJobs = shapeStoppedJobs(stopped.rows as Parameters<typeof shapeStoppedJobs>[0]);
+      }
+      if (owner && has("agent_council_state")) {
+        // Why open owner orders are (not) auto-admitted: counts per rejection code only, never order text.
+        let autoAdmit: { enabled: boolean; since?: string; mappedIds?: string[] } | undefined, configReadable = false;
+        try {
+          const raw = JSON.parse(await readFile(String(process.env.SOFTWARE_FACTORY_OPERATOR_CONFIG || ""), "utf8"));
+          configReadable = true;
+          autoAdmit = { enabled: raw?.autoAdmit?.enabled === true, since: typeof raw?.autoAdmit?.since === "string" ? raw.autoAdmit.since : undefined,
+            mappedIds: Array.isArray(raw?.orders) ? raw.orders.map((o: { id?: unknown }) => String(o?.id)) : [] };
+        } catch { autoAdmit = undefined; }
+        const inTransaction: CouncilClient = { query: (sql, values) => client.query(sql, values as unknown[]), release: () => undefined };
+        const state = await createCouncilStore({ connect: async () => inTransaction }).read(owner).then(raw => raw ? JSON.parse(raw) : undefined, () => undefined);
+        report.ownerOrderAdmission = { configReadable, autoAdmitEnabled: autoAdmit?.enabled ?? null, autoAdmitSince: autoAdmit?.since ?? null,
+          ...summarizeOwnerOrderAdmission(Array.isArray(state?.company?.orders) ? state.company.orders : undefined, configReadable ? autoAdmit : undefined, new Date()) };
       }
       if (creditScope) {
         if (!has("agent_council_state")) report.credit = { provisioned: false, storageTableMissing: true };
