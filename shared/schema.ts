@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, jsonb, serial, integer, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, jsonb, serial, integer, primaryKey, uniqueIndex, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1101,4 +1101,16 @@ export const socialHubKv = pgTable("social_hub_kv", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({ dataType: () => "bytea" });
+
+// Social Hub uploaded media (images/videos pulled by Meta/TikTok). Created at runtime by server/social-hub/media.ts.
+export const socialHubMedia = pgTable("social_hub_media", {
+  id: text("id").primaryKey(),
+  contentType: text("content_type").notNull(),
+  filename: text("filename").notNull(),
+  bytes: integer("bytes").notNull(),
+  data: bytea("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

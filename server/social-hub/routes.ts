@@ -1,9 +1,10 @@
 // Owner-only HTTP API for the Social Hub. Factory/office agents call getSocialHub() in-process.
-import type { Express, Request, Response } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { NETWORK_CAPABILITIES, SOCIAL_NETWORKS, type SocialNetwork, type SocialPostInput, type SocialPostStatus } from "@shared/social-hub";
 import { getCurrentUserId, getSystemUserId } from "../user-context";
 import { envCredentialStore, listEnvAccounts } from "./providers";
 import { buildAuthUrl, completeOAuth, loadTokens, oauthConfigured, oauthCredentialStore, OAUTH_APPS, removeToken, tokenStoreStatus } from "./oauth";
+import { MEDIA_MAX_BYTES, MediaRejected, postgresMediaStore, saveUpload, serveMedia, type MediaStore } from "./media";
 import { hydrateSocialHub, kvFlush, kvFlushOrThrow, kvStatus } from "./persist";
 import { persistentSocialHubStore, SocialHub, SocialHubValidationError } from "./scheduler";
 
@@ -43,7 +44,8 @@ export function startSocialHubScheduler(intervalMs = 60_000) {
   timer.unref?.();
 }
 
-export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps: { hub?: () => SocialHub; isOwner?: (req: Request) => boolean } = {}) {
+export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps: { hub?: () => SocialHub; isOwner?: (req: Request) => boolean; media?: MediaStore } = {}) {
+  const media = deps.media ?? postgresMediaStore();
   const getHub = deps.hub ?? getSocialHub;
   const isOwner = deps.isOwner ?? ((req: Request) => { try { return getCurrentUserId(req) === getSystemUserId(); } catch { return false; } });
   const h = (work: (req: Request) => unknown | Promise<unknown>) => async (req: Request, res: Response) => {
@@ -99,5 +101,28 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
     }
   });
   app.post("/api/social-hub/connections/:network/:accountId/disconnect", h((req) => { removeToken(asNetwork(req.params.network), String(req.params.accountId)); return { ok: true }; }));
+  // ---- Archivos (subir desde el panel) ----
+  app.post("/api/social-hub/media", express.raw({ type: () => true, limit: MEDIA_MAX_BYTES }), async (req, res) => {
+    if (!isOwner(req)) return res.status(403).json({ error: "Solo el propietario puede subir archivos." });
+    try {
+      const name = decodeURIComponent(String(req.headers["x-filename"] ?? "archivo"));
+      const out = await saveUpload(media, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), String(req.headers["content-type"] ?? ""), name);
+      const base = (process.env.SOCIAL_HUB_PUBLIC_URL ?? `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+      res.json({ url: `${base}/social-hub-media/${out.id}`, kind: out.kind });
+    } catch (e) {
+      res.status(e instanceof MediaRejected ? 400 : 500).json({ error: e instanceof Error ? e.message : "No se pudo subir" });
+    }
+  });
+  // Public on purpose (outside /api): networks download from here. IDs are 144-bit random.
+  app.get("/social-hub-media/:id", async (req, res) => {
+    const id = String(req.params.id);
+    if (!/^[A-Za-z0-9_-]{24}\.[a-z0-9]{2,4}$/.test(id)) return res.status(404).end();
+    try {
+      const row = await media.get(id);
+      if (!row) return res.status(404).end();
+      const out = serveMedia(row, req.headers.range);
+      res.status(out.status).set(out.headers).end(out.body);
+    } catch { res.status(500).end(); }
+  });
   app.get("/api/social-hub/best-time", h((req) => ({ at: getHub().bestTime(String(req.query.networks ?? "instagram").split(",") as any).toISOString() })));
 }
