@@ -183,6 +183,8 @@ export type CompanyOrder = {
 export type SelfHealOrderMarker = {
   origin: "office-self-heal"; version: 1; entryId: string; key: string; attempt: 1 | 2;
   role: string; code: string; recordId: string; prNumber?: number;
+  /** KNOWN_TEST_FAILURE only: the allowlisted test file; must hash to recordId. */
+  testPath?: string;
   chain?: { status: string; readyToMerge: boolean; updatedAt: string; finding: Record<string, string>; failedReason?: string; prClosedAt?: string;
     factory?: Record<string, unknown>; preMerge?: Record<string, unknown>; postMerge?: Record<string, unknown> };
 };

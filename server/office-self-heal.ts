@@ -61,7 +61,10 @@ const ROLE = /^[a-z][a-z0-9:-]{1,63}$/;
 /** Allowlisted (role, code) pairs. Everything else is only counted as detected. */
 export const SELF_HEAL_ALLOWLIST = {
   "github:FAILING_DEFAULT_BRANCH": { assignee: "github" },
+  // Draft PRs, or non-draft PRs whose head branch is an agent branch (claude/, codex/) in this repo.
   "code:PR_FAILING_CHECKS": { assignee: "code" },
+  // One finding per release-gate allowlisted failing test file on main (server/office-release-gate-backlog.ts).
+  "release-gate:KNOWN_TEST_FAILURE": { assignee: "code" },
   // Cloud streamer discovery failing on code (3+ consecutive runs). Missing keys are data absence, never an order.
   "clippers-streamers:STREAMER_DISCOVERY_FAILING": { assignee: "code" },
   // Clippers cloud lanes (former Mac LaunchAgents) failing on code 3+ consecutive runs. Missing secrets are data absence.
@@ -98,7 +101,7 @@ export function selfHealStall(input: { now: number; intervalMs: number; lastRunA
 const SEVERITY: Record<string, number> = {
   HIGH_RISK_AUTONOMY: 4,
   FAILING_DEFAULT_BRANCH: 3, PR_FAILING_CHECKS: 3, STREAMER_DISCOVERY_FAILING: 3, CLOUD_LANE_FAILING: 3, PR_CONFLICTED: 3, RECORDED_FAILURE: 3, COLLECTION_EXCEEDS_BOOKED: 3, REPOSITORIES_UNREADABLE: 3, INVALID_SOURCE_VALUES: 3,
-  STREAMER_PUBLISH_FAILING: 3, STREAMER_DISCOVERY_STALLED: 2, STREAMER_PUBLISH_STALLED: 2, CLOUD_LANE_STALLED: 2,
+  STREAMER_PUBLISH_FAILING: 3, KNOWN_TEST_FAILURE: 2, STREAMER_DISCOVERY_STALLED: 2, STREAMER_PUBLISH_STALLED: 2, CLOUD_LANE_STALLED: 2,
   PR_NEEDS_REVIEW: 2, CHECKS_UNREADABLE: 2, WORKFLOW_UNREADABLE: 2, REPOSITORY_UNREADABLE: 2, REPOSITORY_ARCHIVED: 2, SCHEDULE_UNVERIFIED: 2, SAVED_RUN_TIME_PASSED: 2, DUPLICATE_SCOPE: 2,
 };
 export const selfHealSeverity = (code: string) => SELF_HEAL_DATA_ABSENCE_CODES.has(code) ? 0 : SEVERITY[code] ?? 1;
@@ -109,7 +112,13 @@ const INFRASTRUCTURE = /CREDIT|BUDGET|DAILY|LIMIT|PAUSED|UNKNOWN|UNCONFIRMED|UNA
 
 // ---------- normalized audits (built from the role-work journal) ----------
 
-export type SelfHealAuditRecord = { repo: string; number?: number; draft?: boolean };
+export type SelfHealAuditRecord = { repo: string; number?: number; draft?: boolean; headRef?: string; testPath?: string };
+/** Agent head branches whose non-draft PRs may receive a PR_FAILING_CHECKS order. */
+export const SELF_HEAL_AGENT_HEAD = /^(?:claude|codex)\/[A-Za-z0-9._\/-]{1,180}$/;
+/** A release-gate test file the factory may be asked to fix (inside the tests/ write root). */
+export const SELF_HEAL_TEST_PATH = /^tests\/[A-Za-z0-9._-]{1,120}\.test\.(?:ts|mjs)$/;
+/** Record id of a known failing test file; the order marker carries the path and must hash to it. */
+export const selfHealTestRecordId = (testPath: string) => digest(["release-gate-known-failure", SELF_HEAL_REPOSITORY, testPath]);
 export type SelfHealObservedAudit = {
   role: string; jobId: string; completedAt: string; status: "completed" | "blocked"; completeCoverage: boolean; artifactId: string;
   findings: Array<{ code: string; recordId: string | null }>;
@@ -137,7 +146,8 @@ export function observeRoleAudits(journal: unknown): SelfHealObservedAudit[] {
       }
       for (const row of Array.isArray(job.source?.rows) ? job.source.rows : []) {
         if (!row || typeof row.id !== "string" || !RECORD.test(row.id) || typeof row.repo !== "string" || !/^[a-z0-9-]{1,39}\/[a-z0-9_.-]{1,100}$/.test(row.repo)) continue;
-        records[row.id] = { repo: row.repo, ...(Number.isSafeInteger(row.number) && row.number > 0 ? { number: row.number } : {}), ...(typeof row.draft === "boolean" ? { draft: row.draft } : {}) };
+        records[row.id] = { repo: row.repo, ...(Number.isSafeInteger(row.number) && row.number > 0 ? { number: row.number } : {}), ...(typeof row.draft === "boolean" ? { draft: row.draft } : {}),
+          ...(typeof row.headRef === "string" && SELF_HEAL_AGENT_HEAD.test(row.headRef) ? { headRef: row.headRef } : {}) };
       }
     } else if (job.webAudit && Array.isArray(job.webAudit.diagnostics)) {
       completeCoverage = job.webAudit.completeCoverage === true;
@@ -149,7 +159,7 @@ export function observeRoleAudits(journal: unknown): SelfHealObservedAudit[] {
 }
 
 /** Only the cloud streamer role may be injected, with well-formed codes/records; sorted like the journal. */
-const EXTRA_ROLES = new Set(["clippers-streamers", "clippers-cloud-lanes"]);
+const EXTRA_ROLES = new Set(["clippers-streamers", "clippers-cloud-lanes", "release-gate"]);
 function mergeAudits(base: SelfHealObservedAudit[], extra: readonly SelfHealObservedAudit[] = []): SelfHealObservedAudit[] {
   const ok = extra.filter(a => a && EXTRA_ROLES.has(a.role) && (a.status === "completed" || a.status === "blocked") && typeof a.jobId === "string" && Number.isFinite(Date.parse(a.completedAt)) &&
     Array.isArray(a.findings) && a.findings.every(f => CODE.test(f.code) && (f.recordId === null || RECORD.test(f.recordId))));
@@ -186,7 +196,7 @@ const TERMINAL: readonly SelfHealStatus[] = ["verified", "cleared", "escalated"]
 const entrySchema = z.object({
   id: z.string().regex(/^[a-f0-9]{24}$/), key: z.string().regex(/^[a-f0-9]{64}$/), episode: z.number().int().min(1).max(1000),
   role: z.string().regex(ROLE), code: z.string().regex(CODE), recordId: z.string().regex(RECORD), severity: z.number().int().min(0).max(4),
-  prNumber: z.number().int().positive().max(999999999).optional(),
+  prNumber: z.number().int().positive().max(999999999).optional(), testPath: z.string().regex(SELF_HEAL_TEST_PATH).optional(),
   detectedAt: stamp, baseline: z.object({ jobId: z.string().max(200), artifactId: z.string().max(64), completedAt: stamp, findings: z.array(z.string().max(140)).max(MAX_BASELINE) }).strict(),
   status: z.enum(SELF_HEAL_STATUSES), reason: z.string().regex(/^[A-Z0-9_:]{1,120}$/).optional(), readyToMerge: z.boolean(),
   attempts: z.array(attemptSchema).min(1).max(SELF_HEAL_MAX_ATTEMPTS), updatedAt: stamp,
@@ -216,7 +226,7 @@ export type SelfHealOrderMarker = NonNullable<CompanyOrder["selfHeal"]>;
 
 /** Fixed template: only codes, the record id prefix, a validated PR number and
  * constants. Re-derived by the factory to verify integrity before admission. */
-export function selfHealOrderText(marker: Pick<SelfHealOrderMarker, "role" | "code" | "recordId" | "attempt" | "prNumber">): string {
+export function selfHealOrderText(marker: Pick<SelfHealOrderMarker, "role" | "code" | "recordId" | "attempt" | "prNumber" | "testPath">): string {
   const head = `[Auto-reparación de la oficina · intento ${marker.attempt}/${SELF_HEAL_MAX_ATTEMPTS}] Hallazgo ${marker.role}:${marker.code} (registro ${marker.recordId.slice(0, 16)}).`;
   const what = marker.code === "FAILING_DEFAULT_BRANCH"
     ? ` La última ejecución de Actions en la rama por defecto de ${SELF_HEAL_REPOSITORY} terminó en fallo.`
@@ -226,7 +236,9 @@ export function selfHealOrderText(marker: Pick<SelfHealOrderMarker, "role" | "co
     ? ` Falla script/clippers-cloud-lanes.mjs (carril de Clippers en la nube, 3+ ejecuciones).`
     : marker.code === "STREAMER_PUBLISH_FAILING"
     ? ` Falla script/clippers-streamer-cloud-worker.mjs (publicación, 3+ ejecuciones).`
-    : ` Checks fallidos en el PR borrador #${marker.prNumber} de ${SELF_HEAL_REPOSITORY}.`;
+    : marker.code === "KNOWN_TEST_FAILURE"
+    ? ` En main falla ${marker.testPath} (allowlist del release gate). Haz que pase y quita su entrada de script/release-gate/known-failures.json en el mismo PR.`
+    : ` Checks fallidos en el PR #${marker.prNumber} de ${SELF_HEAL_REPOSITORY}.`;
   return `${head}${what} Reproduce el fallo con las pruebas existentes, corrige la causa mínima dentro del alcance de escritura y añade una prueba de regresión. No cambies workflows, dependencias, secretos, permisos ni presupuestos. Termina en PR borrador; fusionar es decisión del dueño.`;
 }
 
@@ -236,6 +248,8 @@ export function isValidSelfHealOrder(order: CompanyOrder): boolean {
   if (!m || m.origin !== SELF_HEAL_ORIGIN || m.version !== 1) return false;
   const allow = SELF_HEAL_ALLOWLIST[`${m.role}:${m.code}` as AllowKey];
   if (!allow || !RECORD.test(m.recordId) || ![1, 2].includes(m.attempt) || (m.code === "PR_FAILING_CHECKS") !== (Number.isSafeInteger(m.prNumber) && m.prNumber! > 0)) return false;
+  if ((m.code === "KNOWN_TEST_FAILURE") !== (m.testPath !== undefined)) return false;
+  if (m.testPath !== undefined && (typeof m.testPath !== "string" || !SELF_HEAL_TEST_PATH.test(m.testPath) || selfHealTestRecordId(m.testPath) !== m.recordId)) return false;
   if (order.assignees.length !== 1 || order.assignees[0].agentId !== allow.assignee || order.assignees.some(a => isKongCompanyAgent(a.agentId))) return false;
   const text = selfHealOrderText(m);
   return order.text === text && text.length <= 500 && !/kong/i.test(text);
@@ -322,7 +336,7 @@ function advance(entry: SelfHealEntry, audits: readonly SelfHealObservedAudit[],
 
 function buildOrder(entry: SelfHealEntry, n: 1 | 2, iso: string): CompanyOrder {
   const allow = SELF_HEAL_ALLOWLIST[`${entry.role}:${entry.code}` as AllowKey];
-  const marker: SelfHealOrderMarker = { origin: SELF_HEAL_ORIGIN, version: 1, entryId: entry.id, key: entry.key, attempt: n, role: entry.role, code: entry.code, recordId: entry.recordId, ...(entry.prNumber ? { prNumber: entry.prNumber } : {}) };
+  const marker: SelfHealOrderMarker = { origin: SELF_HEAL_ORIGIN, version: 1, entryId: entry.id, key: entry.key, attempt: n, role: entry.role, code: entry.code, recordId: entry.recordId, ...(entry.prNumber ? { prNumber: entry.prNumber } : {}), ...(entry.testPath ? { testPath: entry.testPath } : {}) };
   const text = selfHealOrderText(marker);
   if (text.length > 500 || /kong/i.test(text)) throw Error("SELF_HEAL_ORDER_TEMPLATE_INVALID");
   return {
@@ -409,15 +423,17 @@ export function planSelfHeal(input: { state: unknown; company: CompanyState; jou
     const { reason: _previous, ...rest } = entry;
     return { ...rest, status: "ordered" as const, readyToMerge: false, attempts: [...entry.attempts, { n: 2, orderId: order.id, orderRevision: orderRevision(order), createdAt: iso }], updatedAt: iso };
   });
-  const candidates: Array<{ audit: SelfHealObservedAudit; code: string; recordId: string; prNumber?: number }> = [];
+  const candidates: Array<{ audit: SelfHealObservedAudit; code: string; recordId: string; prNumber?: number; testPath?: string }> = [];
   for (const [role, audit] of latest) {
     if (audit.status !== "completed") continue;
     for (const f of audit.findings) {
       if (!f.recordId || !SELF_HEAL_ALLOWLIST[`${role}:${f.code}` as AllowKey] || SELF_HEAL_DATA_ABSENCE_CODES.has(f.code)) continue;
       const record = audit.records[f.recordId];
       if (!record || record.repo !== SELF_HEAL_REPOSITORY || /kong/i.test(record.repo)) continue;
-      if (f.code === "PR_FAILING_CHECKS" && (record.draft !== true || !record.number || fixPrs.has(f.recordId))) continue;
-      candidates.push({ audit, code: f.code, recordId: f.recordId, ...(f.code === "PR_FAILING_CHECKS" ? { prNumber: record.number } : {}) });
+      // Drafts, or non-draft PRs on an agent head branch (claude/, codex/); never a fix PR of our own.
+      if (f.code === "PR_FAILING_CHECKS" && (!(record.draft === true || (record.draft === false && typeof record.headRef === "string" && SELF_HEAL_AGENT_HEAD.test(record.headRef))) || !record.number || fixPrs.has(f.recordId))) continue;
+      if (f.code === "KNOWN_TEST_FAILURE" && (typeof record.testPath !== "string" || !SELF_HEAL_TEST_PATH.test(record.testPath) || selfHealTestRecordId(record.testPath) !== f.recordId)) continue;
+      candidates.push({ audit, code: f.code, recordId: f.recordId, ...(f.code === "PR_FAILING_CHECKS" ? { prNumber: record.number } : {}), ...(f.code === "KNOWN_TEST_FAILURE" ? { testPath: record.testPath } : {}) });
     }
   }
   candidates.sort((a, b) => selfHealSeverity(b.code) - selfHealSeverity(a.code) || `${a.audit.role}:${a.code}:${a.recordId}`.localeCompare(`${b.audit.role}:${b.code}:${b.recordId}`));
@@ -428,7 +444,7 @@ export function planSelfHeal(input: { state: unknown; company: CompanyState; jou
     if (same.some(e => e.status !== "verified" && e.status !== "cleared")) continue; // Idempotent: open or escalated.
     const episode = same.reduce((n, e) => Math.max(n, e.episode), 0) + 1;
     const id = digest([key, episode]).slice(0, 24);
-    const entry: SelfHealEntry = { id, key, episode, role: c.audit.role, code: c.code, recordId: c.recordId, severity: selfHealSeverity(c.code), ...(c.prNumber ? { prNumber: c.prNumber } : {}),
+    const entry: SelfHealEntry = { id, key, episode, role: c.audit.role, code: c.code, recordId: c.recordId, severity: selfHealSeverity(c.code), ...(c.prNumber ? { prNumber: c.prNumber } : {}), ...(c.testPath ? { testPath: c.testPath } : {}),
       detectedAt: iso, baseline: { jobId: c.audit.jobId, artifactId: c.audit.artifactId, completedAt: c.audit.completedAt, findings: [...new Set(c.audit.findings.map(findingKey))].slice(0, MAX_BASELINE) },
       status: "ordered", readyToMerge: false, attempts: [], updatedAt: iso } as unknown as SelfHealEntry;
     const order = buildOrder(entry, 1, iso); created.push(order);

@@ -178,7 +178,9 @@ async function readPullRequests(get: (path: string) => Promise<Got>, repos: stri
       }
     }
     const requestedReviewers = pr.requested_reviewers.length + (Array.isArray(pr.requested_teams) ? pr.requested_teams.length : 0);
-    return { id: githubRecordId("pull_request", repo, number), kind: "pull_request", repo, number, draft: pr.draft, createdAt, updatedAt, mergeableState, requestedReviewers, checks };
+    // Head branch name only when it is a plain, bounded ref (used to recognise agent branches claude/, codex/).
+    const headRef = typeof pr.head?.ref === "string" && /^[A-Za-z0-9._\/-]{1,200}$/.test(pr.head.ref) ? pr.head.ref : null;
+    return { id: githubRecordId("pull_request", repo, number), kind: "pull_request", repo, number, draft: pr.draft, headRef, createdAt, updatedAt, mergeableState, requestedReviewers, checks };
   });
   for (const pr of prs) { if (seen.has(pr.id)) invalid(); seen.add(pr.id); rows.push(pr); }
   return { rows, truncated };
