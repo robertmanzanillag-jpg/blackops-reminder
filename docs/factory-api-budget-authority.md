@@ -87,3 +87,15 @@ Roll back code before activating paid transports; preserve any existing authorit
 rows/objects and receipts. Never delete authority history or restore an old object
 snapshot over newer financial records. An older external object adapter lacking the
 new methods must fail selection rather than silently use a different budget.
+
+## Operator actions (factory-ops)
+
+- `status` now includes `apiAuthority`: month initialized, checkpoint present, fixed/spent/reserved
+  microUSD, unknown-hold counts and `newsExecutionHold` (booleans/counts only; ids stay in code).
+- `api-month-init` (dry run; `confirm=APLICAR` applies) calls the explicit immutable `initializeMonth`.
+- `api-checkpoint` (dry run; `confirm=APLICAR` applies) builds the `checkpointApiMonth` input from
+  `api_month`, `api_external_spent_usd`, `api_external_reserved_usd`, `api_external_unknown_count`
+  and `api_evidence` (only its SHA-256 is stored or printed). It refuses while the News hold is
+  still unknown unless that hold is recorded with a nonzero external unknown count and reserved amount.
+  A checkpoint with a nonzero unknown count keeps paid admission blocked (`FACTORY_API_UNKNOWN_HOLD`)
+  until a separate reviewed exact-receipt recovery exists.

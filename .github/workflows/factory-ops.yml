@@ -18,6 +18,13 @@ name: Factory operations (manual)
 #                    amount/createdAt only. With confirm=APLICAR it settles each one CONSERVATIVELY
 #                    at its full reserved amount (assumed spent, never refunded) and appends one
 #                    audit event. A repeat finds nothing and writes nothing.
+#   api-month-init   dry run by default: shows whether the current UTC month of the Factory API
+#                    authority is initialized; with confirm=APLICAR calls the explicit, immutable
+#                    initializeMonth(owner, api_month, api_fixed_usd).
+#   api-checkpoint   dry run by default: prints the exact checkpointApiMonth input (microUSD, counts,
+#                    evidence SHA-256 only, never the evidence text) and any refusal; with
+#                    confirm=APLICAR writes it. Refuses if the quarantined News hold is still unknown
+#                    and not recorded as an external unknown. See docs/factory-api-budget-authority.md.
 #
 # This repository is public, so job logs are public: the scripts print only static JSON
 # (table presence, pause flag, budget/job counts) and static error codes, never connection
@@ -28,7 +35,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "status | migrate-dry-run | migrate-apply | office-status | office-credit-audit | sources-migrate-dry-run | sources-migrate-apply | credit-new | credit-reconcile"
+        description: "status | migrate-dry-run | migrate-apply | office-status | office-credit-audit | sources-migrate-dry-run | sources-migrate-apply | credit-new | credit-reconcile | api-month-init | api-checkpoint"
         required: true
         type: choice
         default: status
@@ -42,8 +49,40 @@ on:
           - sources-migrate-apply
           - credit-new
           - credit-reconcile
+          - api-month-init
+          - api-checkpoint
       confirm:
         description: "Type APLICAR to allow migrate-apply, sources-migrate-apply, credit-new or credit-reconcile apply (without it credit-reconcile is a dry run)"
+        required: false
+        type: string
+        default: ""
+      api_month:
+        description: "api-month-init/api-checkpoint: current UTC month YYYY-MM"
+        required: false
+        type: string
+        default: ""
+      api_fixed_usd:
+        description: "api-month-init: fixed monthly cost in USD (whole cents, 0-100)"
+        required: false
+        type: string
+        default: ""
+      api_external_spent_usd:
+        description: "api-checkpoint: external spent USD this month outside the Factory/API ledger"
+        required: false
+        type: string
+        default: ""
+      api_external_reserved_usd:
+        description: "api-checkpoint: external open/unknown holds USD"
+        required: false
+        type: string
+        default: ""
+      api_external_unknown_count:
+        description: "api-checkpoint: number of external unknown reservations"
+        required: false
+        type: string
+        default: ""
+      api_evidence:
+        description: "api-checkpoint: evidence note (only its SHA-256 is stored/printed)"
         required: false
         type: string
         default: ""
@@ -61,6 +100,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - name: Mask the API evidence note
+        # Public logs echo each step's env; mask the evidence text before any step receives it.
+        # Read from the event payload (never inlined into the script) so the note cannot inject shell.
+        if: inputs.action == 'api-checkpoint'
+        run: |
+          evidence="$(jq -r '.inputs.api_evidence // ""' "$GITHUB_EVENT_PATH")"
+          if [ -n "${evidence//[[:space:]]/}" ]; then echo "::add-mask::$evidence"; fi
       - name: Refuse an unconfirmed apply
         if: (inputs.action == 'migrate-apply' || inputs.action == 'sources-migrate-apply' || inputs.action == 'credit-new') && inputs.confirm != 'APLICAR'
         run: |
@@ -86,6 +132,7 @@ jobs:
             office-credit-audit) test -f script/office-credit-audit.ts ;;
             sources-migrate-dry-run|sources-migrate-apply) test -f script/office-source-documents-migrate.ts ;;
             credit-new|credit-reconcile) test -f script/shared-credit-grant.ts ;;
+            api-month-init|api-checkpoint) test -f script/factory-api-authority.ts && test -f script/factory-api-authority-cli.ts ;;
             *) echo "unknown action" >&2; exit 1 ;;
           esac
 
@@ -190,4 +237,29 @@ jobs:
             node --import tsx script/shared-credit-grant.ts reconcile --scope="$SCOPE" --reason="factory-ops-run-$RUN_ID" --apply
           else
             node --import tsx script/shared-credit-grant.ts reconcile --scope="$SCOPE" --reason="factory-ops-run-$RUN_ID"
+          fi
+
+      - name: Factory API authority (${{ inputs.action }})
+        if: inputs.action == 'api-month-init' || inputs.action == 'api-checkpoint'
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL || secrets.OFFICE_DATABASE_URL }}
+          SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
+          ACTION: ${{ inputs.action }}
+          CONFIRM: ${{ inputs.confirm }}
+          API_MONTH: ${{ inputs.api_month }}
+          API_FIXED_USD: ${{ inputs.api_fixed_usd }}
+          API_SPENT: ${{ inputs.api_external_spent_usd }}
+          API_RESERVED: ${{ inputs.api_external_reserved_usd }}
+          API_UNKNOWN: ${{ inputs.api_external_unknown_count }}
+          FACTORY_API_EVIDENCE: ${{ inputs.api_evidence }}
+        run: |
+          set -euo pipefail
+          apply=()
+          if [ "$CONFIRM" = "APLICAR" ]; then apply=(--apply); fi
+          if [ "$ACTION" = "api-month-init" ]; then
+            node --import tsx script/factory-api-authority.ts month-init --month="$API_MONTH" --fixed-usd="$API_FIXED_USD" "${apply[@]}"
+          else
+            node --import tsx script/factory-api-authority.ts checkpoint --month="$API_MONTH" --external-spent-usd="$API_SPENT" \
+              --external-reserved-usd="$API_RESERVED" --external-unknown-count="$API_UNKNOWN" "${apply[@]}"
           fi
