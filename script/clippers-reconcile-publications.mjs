@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveSocialAnalyticsProvider } from "./social-analytics/provider.mjs";
 
 const TIMEZONE = "America/New_York";
 const DEFAULT_ACCOUNT = "streamersclipusa";
@@ -153,6 +154,80 @@ async function defaultGetPublication({ row, fetcher, env }) {
   return objects(payload).find((candidate) => publicationId(candidate) === clean(row.metricoolId)) || null;
 }
 
+const METRICS_REFRESH_WINDOW_DAYS = 14;
+
+function tiktokVideoId(url) {
+  return (/\/video\/(\d+)/.exec(clean(url)) || [])[1] || "";
+}
+
+// Post analytics come from the provider seam (script/social-analytics/). Unknown
+// provider => fail closed: nothing is refreshed and the reason is reported.
+async function refreshPublishedAnalytics({ ledger, account, now, env, fetcher, dependencies = {} }) {
+  let providerName;
+  let getPostAnalytics;
+  if (dependencies.analyticsProvider) {
+    providerName = clean(dependencies.analyticsProvider.name) || "custom";
+    getPostAnalytics = (args) => dependencies.analyticsProvider.getPostAnalytics(args);
+  } else {
+    const resolved = resolveSocialAnalyticsProvider(env, dependencies.analyticsProviders);
+    if (!resolved.provider) {
+      console.warn(`[clippers-reconcile] analytics refresh skipped: ${resolved.reason}`);
+      return { provider: resolved.name, refreshed: 0, errors: [resolved.reason] };
+    }
+    providerName = resolved.provider.name;
+    getPostAnalytics = dependencies.getPostAnalytics || ((args) => resolved.provider.getPostAnalytics(args));
+  }
+  const cutoff = now.getTime() - METRICS_REFRESH_WINDOW_DAYS * 86_400_000;
+  const byBlog = new Map();
+  for (const row of ledger) {
+    if (clean(row?.status).toLowerCase() !== "published") continue;
+    if (normalizeAccount(row.account || account) !== account) continue;
+    const publicUrl = exactTikTokPostUrl(row.publicUrl || row.publishedPostUrl, account);
+    const publishedMs = Date.parse(clean(row.publishedAt)) || zonedInstant(clean(row.scheduledFor));
+    if (!publicUrl || !Number.isFinite(publishedMs) || publishedMs < cutoff) continue;
+    const blogId = clean(row.metricoolBlogId || env.CLIPPERS_METRICOOL_BLOG_ID);
+    if (!blogId) continue;
+    const group = byBlog.get(blogId) || { rows: [], earliest: publishedMs };
+    group.rows.push({ row, publicUrl });
+    group.earliest = Math.min(group.earliest, publishedMs);
+    byBlog.set(blogId, group);
+  }
+  const errors = [];
+  let refreshed = 0;
+  for (const [blogId, group] of byBlog) {
+    let posts;
+    try {
+      posts = await getPostAnalytics({
+        blogId,
+        fromDate: new Date(group.earliest - 86_400_000).toISOString().slice(0, 10),
+        toDate: now.toISOString().slice(0, 10),
+        fetcher,
+        env,
+      });
+    } catch (error) {
+      errors.push(clean(error?.message || error).slice(0, 200) || "metricool_analytics_failed");
+      continue;
+    }
+    for (const { row, publicUrl } of group.rows) {
+      const videoId = tiktokVideoId(publicUrl);
+      const post = (Array.isArray(posts) ? posts : []).find((candidate) => clean(candidate?.videoId) === videoId
+        || tiktokVideoId(candidate?.url) === videoId
+        || strings(candidate).some((value) => tiktokVideoId(value) === videoId || clean(value) === videoId));
+      if (!post) continue;
+      const observed = explicitMetrics(post);
+      if (observed.views === undefined) continue;
+      row.publicationReconciliation = {
+        ...(row.publicationReconciliation || {}),
+        metrics: { ...(row.publicationReconciliation?.metrics || {}), ...observed },
+        metricsRefreshedAt: now.toISOString(),
+        metricsProvider: clean(post.provider) || providerName,
+      };
+      refreshed += 1;
+    }
+  }
+  return { provider: providerName, refreshed, errors };
+}
+
 function markdownReport(report) {
   const lines = [
     "# Clippers post-publication reconciliation",
@@ -230,6 +305,14 @@ export async function reconcileClipperPublications(options = {}) {
     const fetcher = options.fetcher || fetch;
     const getPublication = options.dependencies?.getPublication || defaultGetPublication;
     const results = [];
+    const analyticsRefresh = await refreshPublishedAnalytics({
+      ledger,
+      account,
+      now,
+      env,
+      fetcher,
+      dependencies: options.dependencies || {},
+    });
 
     for (const row of ledger) {
       const deliveryStatus = clean(row?.status).toLowerCase();
@@ -241,7 +324,7 @@ export async function reconcileClipperPublications(options = {}) {
           ? explicitMetrics(row.publicationReconciliation.metrics)
           : {};
         upsertPublishedMetric({ metrics, row, account, publicUrl, observed, now, workspaceRoot, reportPath });
-        results.push({ metricoolId: clean(row.metricoolId), itemId: clean(row.itemId), status: "published", publicUrl, reason: "already_reconciled" });
+        results.push({ metricoolId: clean(row.metricoolId), itemId: clean(row.itemId), status: "published", publicUrl, reason: "already_reconciled", metrics: observed });
         continue;
       }
 
@@ -300,7 +383,7 @@ export async function reconcileClipperPublications(options = {}) {
       pending: results.filter((row) => row.status === "pending").length,
       blocked: results.filter((row) => row.status === "blocked").length,
     };
-    const report = { generatedAt: now.toISOString(), account, totals, results };
+    const report = { generatedAt: now.toISOString(), source: "Metricool", provider: analyticsRefresh.provider, account, totals, analyticsRefresh, results };
     await writeJsonAtomic(ledgerPath, ledger);
     await writeJsonAtomic(metricsPath, metrics);
     await writeJsonAtomic(reportPath, report);
