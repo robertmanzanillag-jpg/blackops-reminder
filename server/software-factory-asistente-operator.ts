@@ -94,7 +94,8 @@ export function countAutoAdmissionsToday(jobs: readonly FactoryJob[], now: Date,
         const source = job.payload?.companyOrder as { orderId?: unknown; revision?: unknown } | undefined;
         return job.ownerKey === ownerKey && job.kind === "discover" && Date.parse(job.createdAt) >= since && typeof source?.orderId === "string" && typeof source.revision === "string" && !isMapped(source.orderId, source.revision)
             // A zero-cost infrastructure stop never reached a provider (#550): it does not consume autoAdmit.maxPerDay.
-            && !isZeroCostInfrastructureChain(jobs, job);
+            // A $0 provider credit/quota rejection was not billed either: it never consumes the daily count.
+            && !isZeroCostInfrastructureChain(jobs, job, { creditAvailable: true });
     }).length;
 }
 /** Admission-side variant: an unprovable count defers admission (no hold). */
@@ -167,6 +168,9 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     priorLedgers?: Credits["ledger"][];
     /** Read-only admission history (e.g. every Claude ledger row, any month). */
     admissionHistory?: ((key: string) => Promise<{ status: string } | null>)[];
+    /** True only when the selected provider has credit (no active cooldown):
+     * $0 credit/quota rejections then become bounded-retry eligible. */
+    creditProviderAvailable?: boolean;
 }) {
     const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
     if (config.ui.workflowId !== config.checks.workflowId || config.ui.workflowSha256 !== config.checks.workflowSha256 || new Set(config.orders.map(o => o.id)).size !== config.orders.length || typeof deps.readUi !== "function")
@@ -187,7 +191,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
      * readiness check passes; otherwise the latest admitted attempt (idempotent). */
     const apiReady = async () => { const read = (store as { apiBudgetStatus?: (o: string) => Promise<{ paidAdmissionReady?: boolean }> }).apiBudgetStatus; if (typeof read !== "function") return false; try { return (await read.call(store, owner)).paidAdmissionReady === true; } catch { return false; } };
     const retryIndex = async (order: CompanyOrder, jobs?: readonly FactoryJob[]) => { const p = await project(), base = companyOrderJob(order, p, config.reservations.discover), revision = (base.payload!.companyOrder as { revision: string }).revision;
-        const list = jobs ?? await store.list(owner), next = companyOrderRetryAttempt(list, ownerKey, order.id, revision);
+        const list = jobs ?? await store.list(owner), next = companyOrderRetryAttempt(list, ownerKey, order.id, revision, { creditAvailable: deps.creditProviderAvailable === true });
         if (next === 0) return 0; const admitted = list.some(j => j.ownerKey === ownerKey && j.kind === "discover" && j.key === companyOrderJob(order, p, 1, next).key);
         return admitted || await apiReady() ? next : next - 1; };
     const retries = new Map<string, number>();
@@ -530,7 +534,7 @@ async function installed(store: Store) {
     }
     // Claude spend also counts against the factory's monthly API authority (same reserve/settle path as OpenAI).
     const anthropicApiAuthority = { store: configuredSoftwareFactoryStore, owner: () => config.owner };
-    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, provider: selected.provider, anthropicApiAuthority,
+    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, provider: selected.provider, creditProviderAvailable: !cooldowns[selected.provider], anthropicApiAuthority,
         ...("apiPrice" in selected && selected.apiPrice ? {apiPrice:selected.apiPrice}:{}),
         ...("fallback" in selected && selected.fallback ? { fallback: selected.fallback } : {}), ...("priorLedgers" in selected ? { priorLedgers: selected.priorLedgers } : {}),
         // Claude admission rows (any month) count as history even when the

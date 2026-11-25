@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
-import { companyOrderRetryAttempt, isInfrastructureStop, FACTORY_ORDER_MAX_RETRIES } from "../server/software-factory-order-retry";
+import { companyOrderRetryAttempt, isInfrastructureStop, isProviderCreditStop, FACTORY_ORDER_MAX_RETRIES } from "../server/software-factory-order-retry";
+import { countAutoAdmissionsToday } from "../server/software-factory-asistente-operator";
 import { companyOrderJob, companyOrderRootKey } from "../server/software-factory-company";
 import { observeFactoryForSelfHeal } from "../server/office-self-heal-factory";
 import { recordSelfHealFactory, selfHealTestRecordId, parseSelfHealState } from "../server/office-self-heal";
@@ -84,4 +85,34 @@ test("zero-cost infrastructure stops do not consume autoAdmit.maxPerDay", async 
   const running = root(0, "running");
   assert.equal(countAutoAdmissionsToday([infra, infraBuild], at, ownerKey, notMapped), 0);
   assert.equal(countAutoAdmissionsToday([infra, infraBuild, spent, spentBuild, code, codeBuild, running], at, ownerKey, notMapped), 3);
+});
+
+test("$0 provider credit/quota rejections retry only while a provider with credit is available", () => {
+  const quota = "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_REQUEST_REJECTED:FACTORY_OPENAI_REQUEST_REJECTED:429:credit_balance_exhausted";
+  const reasons = [quota, "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_REQUEST_REJECTED:FACTORY_OPENAI_REQUEST_REJECTED:429:insufficient_quota",
+    "FACTORY_ANTHROPIC_REQUEST_REJECTED:402:billing_error", "FACTORY_ANTHROPIC_REQUEST_REJECTED:429:enforced_spend_limit_reached",
+    "FACTORY_ANTHROPIC_CREDIT_EXHAUSTED", "FACTORY_REMOTE_BUILD_FAILED:FACTORY_ALL_PROVIDERS_CREDIT_EXHAUSTED"];
+  for (const reason of reasons) {
+    const r0 = root(), chain = [r0, build(r0, "failed", reason)];
+    assert.equal(companyOrderRetryAttempt(chain, ownerKey, orderId, rev), 0, reason);
+    assert.equal(companyOrderRetryAttempt(chain, ownerKey, orderId, rev, { creditAvailable: false }), 0, reason);
+    assert.equal(companyOrderRetryAttempt(chain, ownerKey, orderId, rev, { creditAvailable: true }), 1, reason);
+  }
+  // A plain rate limit, a non-zero cost or another code is never a credit stop.
+  for (const [reason, cost] of [["FACTORY_REMOTE_BUILD_FAILED:PROVIDER_REQUEST_REJECTED:FACTORY_OPENAI_REQUEST_REJECTED:429:rate_limit_exceeded", 0], [quota, 2], ["FACTORY_OPENAI_REQUEST_REJECTED:400:insufficient_quota", 0]] as const) {
+    const r0 = root();
+    assert.equal(companyOrderRetryAttempt([r0, build(r0, "failed", reason, cost)], ownerKey, orderId, rev, { creditAvailable: true }), 0, reason);
+  }
+  // Still bounded at FACTORY_ORDER_MAX_RETRIES.
+  const r0 = root(), r1 = root(1), r2 = root(2);
+  assert.equal(companyOrderRetryAttempt([r0, r1, r2, build(r0, "failed", quota), build(r1, "failed", quota), build(r2, "failed", quota)], ownerKey, orderId, rev, { creditAvailable: true }), FACTORY_ORDER_MAX_RETRIES);
+  assert.equal(isProviderCreditStop(build(r0, "failed", quota)), true);
+});
+
+test("$0 credit rejections do not consume the autoAdmit daily count", () => {
+  const now = new Date("2026-11-25T12:20:00Z"), r0 = { ...root(), createdAt: "2026-11-25T12:00:00Z" };
+  const jobs = [r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_REQUEST_REJECTED:FACTORY_OPENAI_REQUEST_REJECTED:429:credit_balance_exhausted")];
+  assert.equal(countAutoAdmissionsToday(jobs, now, ownerKey, () => false), 0);
+  const paid = [r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PATCH")];
+  assert.equal(countAutoAdmissionsToday(paid, now, ownerKey, () => false), 1);
 });
