@@ -27,6 +27,7 @@ const REQUIRE_SAMPLE_BEFORE_SCALE = envFlag("DROPSHIPPING_REQUIRE_SAMPLE_BEFORE_
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 const liveProductSignalSourceSchema = z.enum([
+  "tiktok_shop",
   "tiktok_creative_center",
   "tiktok_search",
   "aliexpress_search",
@@ -2451,6 +2452,13 @@ function buildScoutValidation(
   const query = encodedQuery(input.candidateName);
   const evidence: DropshippingProductScoutCandidate["validation"]["evidence"] = [
     {
+      source: "tiktok_shop",
+      label: "TikTok Shop listing and seller check",
+      url: `https://www.tiktok.com/search?q=${query}%20tiktok%20shop`,
+      status: "needs_review",
+      signal: "Buscar listings en TikTok Shop: precio, unidades vendidas, rating, comision de afiliados, tiendas y creadores top, y si la categoria esta permitida en US. Solo investigacion: no abrir tienda, no contactar sellers ni creadores, no gastar.",
+    },
+    {
       source: "tiktok_creative_center",
       label: "TikTok Creative Center trend/ad check",
       url: `https://ads.tiktok.com/creative/creativeCenter?query=${query}`,
@@ -2649,7 +2657,7 @@ function rankAutopilotCandidates(candidateList: DropshippingProductScoutCandidat
       const shippingPenalty = candidate.shippingDaysMax > 21 ? 10 : candidate.shippingDaysMax > 18 ? 4 : 0;
       const qualityPenalty = candidate.qualityRisk === "medium" ? 4 : candidate.qualityRisk === "high" ? 30 : 0;
       const legalPenalty = candidate.legalRisk === "medium" ? 6 : candidate.legalRisk === "high" ? 40 : 0;
-      const sourceBonus = candidate.validation.evidence.some((item) => (item.source === "tiktok_creative_center" || item.source === "tiktok_search") && item.status === "verified") ? 6 : 0;
+      const sourceBonus = candidate.validation.evidence.some((item) => (item.source === "tiktok_shop" || item.source === "tiktok_creative_center" || item.source === "tiktok_search") && item.status === "verified") ? 6 : 0;
       const score = candidate.scorecard.total + candidate.validation.evidenceScore + sourceBonus - samplePenalty - shippingPenalty - qualityPenalty - legalPenalty;
       return {
         candidate,
