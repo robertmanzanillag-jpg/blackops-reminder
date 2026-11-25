@@ -72,6 +72,7 @@ import { getFactoryOfficeAdmission } from "./software-factory-office-connection"
 import { getAuthenticatedCurrentUserId } from "./user-context";
 import { CLIPPERS_OFFICE_INGEST_PATH, hasValidClippersOfficeIngestToken, ingestClippersOfficeBridge } from "./clippers-office-ingest";
 import { queueOfficeSourceDocument } from "./office-source-document-sync";
+import { registerSocialHubRoutes, startSocialHubScheduler } from "./social-hub/routes";
 import { officeRuntime } from "./office-runtime";
 import { loadOfficePullRequest } from "./office-github";
 
@@ -869,6 +870,9 @@ export async function registerRoutes(
   registerAgentCouncilRoutes(app);
   // Per-agent chat: threads, deterministic routing and hand-offs recorded as company orders. Owner-only.
   registerAgentChatRoutes(app);
+  // Social Hub (Metricool propio): owner-only; agent posts wait for approval; external posting gated by SOCIAL_HUB_PUBLISHING_ENABLED.
+  registerSocialHubRoutes(app);
+  startSocialHubScheduler();
   // Black Room team (CEO, analiticas, competencia, publicador, guiones, website). Owner-only; approvals before anything outward.
   registerBlackRoomTeamRoutes(app);
   // Chat with the CEO Black Room (owner + partners): routes requests to the team and runs them; approvals stay explicit.
