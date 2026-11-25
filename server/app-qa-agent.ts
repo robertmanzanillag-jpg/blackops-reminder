@@ -7,6 +7,8 @@ import { hasRealValue } from "./ceo-doctor-cli";
 import { isGitHubConnected, listRepositories } from "./github-client";
 import { getDateKeyFromClock, getZonedClock } from "./scheduler-time";
 import { escapeTelegramHtml, sendTelegramMessage, sendTelegramPhoto } from "./telegram";
+import { createHash } from "node:crypto";
+import { appQaFactoryRoute, buildAppQaSelfHealAudit, persistAppQaSelfHealAudit } from "./app-qa-self-heal";
 import { defaultCeoAlertGateDeps, runCeoAlertGate, type CeoProblem } from "./ceo-alert-gate";
 
 export type AppQaSeverity = "critical" | "high" | "medium" | "low" | "info";
@@ -442,17 +444,66 @@ function buildBugPatrolAutopilotMessage(finding: AppQaFinding, repoFullName: str
   ].join("\n");
 }
 
-export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], findings: AppQaFinding[]): Promise<BugPatrolReport> {
+/** Durable Bug Patrol ledger: one GitHub issue per finding signature, survives web restarts. */
+export type BugPatrolLedger = { version: 1; issues: Record<string, { repo: string; issueUrl?: string; issueNumber?: number; at: string }> };
+export type BugPatrolLedgerStore = { load(): Promise<BugPatrolLedger>; save(ledger: BugPatrolLedger): Promise<void> };
+export const BUG_PATROL_NAMESPACE = (userId: string) => `bug-patrol:v1:${userId}`;
+const signatureDigest = (signature: string) => createHash("sha256").update(signature).digest("hex").slice(0, 32);
+
+export function parseBugPatrolLedger(raw: string | null): BugPatrolLedger {
+  try {
+    const v = raw ? JSON.parse(raw) : null;
+    if (v?.version === 1 && v.issues && typeof v.issues === "object" && !Array.isArray(v.issues)) return { version: 1, issues: v.issues };
+  } catch { /* fall through */ }
+  return { version: 1, issues: {} };
+}
+
+async function defaultBugPatrolLedgerStore(userId: string): Promise<BugPatrolLedgerStore | null> {
+  if (process.env.AGENT_COUNCIL_STORAGE !== "postgres") return null;
+  const { getCouncilStore } = await import("./agent-council-store");
+  const store = await getCouncilStore();
+  return {
+    load: async () => parseBugPatrolLedger(await store.read(BUG_PATROL_NAMESPACE(userId))),
+    save: async (ledger) => { await store.transact(BUG_PATROL_NAMESPACE(userId), async () => JSON.stringify(ledger)); },
+  };
+}
+
+type BugPatrolOptions = {
+  /** Findings that go to the office self-heal factory instead (this repo): never a GitHub issue too. */
+  skipFindingIds?: ReadonlySet<string>;
+  /** Complete scan: ledger entries whose finding disappeared are dropped (a recurrence opens a new issue). */
+  completeScan?: boolean;
+  ledgerStore?: BugPatrolLedgerStore | null;
+  createHandoff?: (userId: string, message: string) => Promise<{ status: string; issueUrl?: string; issueNumber?: number; codexDispatchCommentUrl?: string; message?: string }>;
+};
+
+export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], findings: AppQaFinding[], options: BugPatrolOptions = {}): Promise<BugPatrolReport> {
   if (!isBugPatrolEnabled()) return emptyBugPatrolReport(false);
 
   const appByName = new Map(apps.map((app) => [app.name.toLowerCase(), app]));
-  const candidates = findings.filter(isBugPatrolCandidate);
+  const candidates = findings.filter((finding) => isBugPatrolCandidate(finding) && !options.skipFindingIds?.has(finding.id));
   const handoffs: BugPatrolHandoff[] = [];
+  const ledgerStore = options.ledgerStore === undefined ? await defaultBugPatrolLedgerStore(userId).catch(() => null) : options.ledgerStore;
+  const ledger = ledgerStore ? await ledgerStore.load().catch(() => null) : null;
+  let ledgerChanged = false;
+  const seen = new Set<string>();
 
   for (const finding of candidates) {
     const app = appByName.get(finding.appName.toLowerCase());
     const repoFullName = appRepoFullName(app);
     const signature = bugPatrolSignature(finding, repoFullName);
+    const sigKey = signatureDigest(signature);
+    seen.add(sigKey);
+    const tracked = ledger?.issues[sigKey];
+    if (repoFullName && tracked && tracked.repo === repoFullName) {
+      // Same open finding: keep working on the SAME issue (no new issue every scan/restart).
+      handoffs.push({
+        findingId: finding.id, appName: finding.appName, severity: finding.severity, title: finding.title, repoFullName,
+        status: "created", issueUrl: tracked.issueUrl, issueNumber: tracked.issueNumber,
+        reason: "Issue existente: se sigue trabajando ahí (Codex PR-first).",
+      });
+      continue;
+    }
 
     if (!repoFullName) {
       handoffs.push({
@@ -483,15 +534,18 @@ export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], f
     // Developer Autopilot pulls in the storage/runtime graph. Keep it out of
     // App QA's module initialization so pure route/telemetry scouts and their
     // release-gate tests can start without waiting on production services.
-    const { createDeveloperAutopilotHandoff } = await import("./developer-autopilot");
-    const handoff = await createDeveloperAutopilotHandoff(
-      userId,
-      buildBugPatrolAutopilotMessage(finding, repoFullName),
-      "app_qa",
-    );
+    const createHandoff = options.createHandoff ?? (async (uid: string, message: string) => {
+      const { createDeveloperAutopilotHandoff } = await import("./developer-autopilot");
+      return createDeveloperAutopilotHandoff(uid, message, "app_qa");
+    });
+    const handoff = await createHandoff(userId, buildBugPatrolAutopilotMessage(finding, repoFullName));
 
     if (handoff.status === "created" || handoff.status === "codex_dispatched") {
       markBugPatrolHandoffCreated(userId, signature);
+      if (ledger) {
+        ledger.issues[sigKey] = { repo: repoFullName, ...(handoff.issueUrl ? { issueUrl: handoff.issueUrl } : {}), ...(handoff.issueNumber ? { issueNumber: handoff.issueNumber } : {}), at: new Date().toISOString() };
+        ledgerChanged = true;
+      }
       handoffs.push({
         findingId: finding.id,
         appName: finding.appName,
@@ -516,6 +570,11 @@ export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], f
       reason: handoff.message,
     });
   }
+
+  if (ledger && options.completeScan) {
+    for (const key of Object.keys(ledger.issues)) if (!seen.has(key)) { delete ledger.issues[key]; ledgerChanged = true; }
+  }
+  if (ledger && ledgerStore && ledgerChanged) await ledgerStore.save(ledger).catch((error) => console.warn("[bug-patrol] ledger:", error instanceof Error ? error.message : error));
 
   return {
     enabled: true,
@@ -1876,7 +1935,8 @@ export async function runAppQaScan(
     incidents: await storage.getAppIncidentsForProject(app.id),
     errors: await storage.getAppErrorEvents(app.id, 20),
   })));
-  const visualReport = (notify || recordHistory || allowDailyDigest) && shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
+  const visualRan = (notify || recordHistory || allowDailyDigest) && shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt });
+  const visualReport = visualRan
     ? await runVisualClickScout()
     : buildSkippedVisualScoutReport();
 
@@ -1894,8 +1954,19 @@ export async function runAppQaScan(
   const improvementIdeas = findings.filter((finding) => finding.sourceAgent === "improvement-scout");
   const failCount = findings.filter((finding) => ["critical", "high"].includes(finding.severity)).length;
   const warnCount = findings.filter((finding) => ["medium", "low"].includes(finding.severity)).length;
+  // Complete scan = visual scout ran and GitHub was readable. Only a complete scan may clear findings.
+  const completeScan = Boolean(visualRan && githubConnected);
+  const repoByApp = appQaRepoMap(apps);
+  const factoryRoutes = new Map(findings.flatMap((finding) => {
+    const route = appQaFactoryRoute(finding, repoByApp);
+    return route ? [[finding.id, route] as const] : [];
+  }));
+  if (recordHistory && completeScan) {
+    await persistAppQaSelfHealAudit(userId, buildAppQaSelfHealAudit(findings, repoByApp, startedAt.toISOString()))
+      .catch((error) => console.warn("[app-qa] self-heal snapshot:", error instanceof Error ? error.message : error));
+  }
   const bugPatrol = recordHistory
-    ? await runBugPatrolHandoffs(userId, apps, findings)
+    ? await runBugPatrolHandoffs(userId, apps, findings, { skipFindingIds: new Set(factoryRoutes.keys()), completeScan })
     : emptyBugPatrolReport();
   const council = buildQaCouncil({
     subAgents,
@@ -1939,7 +2010,7 @@ export async function runAppQaScan(
   // Automatic scans go through the CEO alert gate: silence when healthy, one message per new
   // problem, one "resuelto" when it disappears. Passive status scans never alert.
   if (!notify && recordHistory) {
-    await notifyAppQaThroughCeoGate(userId, result).catch((error) => console.warn("[app-qa] CEO alert gate:", error instanceof Error ? error.message : error));
+    await notifyAppQaThroughCeoGate(userId, result, repoByApp, completeScan).catch((error) => console.warn("[app-qa] CEO alert gate:", error instanceof Error ? error.message : error));
   }
   if (notify) {
     const telegramConfig = await storage.getTelegramConfig(userId);
@@ -2016,29 +2087,53 @@ async function recordAppQaHistory(userId: string, result: AppQaScanResult, start
 }
 
 /** Critical/high App QA findings as CEO problems. Bug Patrol handoff => factory (PR-first) path. */
-export function appQaCeoProblems(result: Pick<AppQaScanResult, "findings" | "bugPatrol">): CeoProblem[] {
-  const handoffs = new Map((result.bugPatrol?.handoffs || []).map((handoff) => [handoff.findingId, handoff]));
-  return result.findings
-    .filter((finding) => finding.severity === "critical" || finding.severity === "high")
-    .map((finding) => {
-      const handoff = handoffs.get(finding.id);
-      const routed = handoff && (handoff.status === "created" || handoff.status === "codex_dispatched");
-      return {
-        key: `${finding.appName}:${finding.sourceAgent}:${finding.title}`,
-        source: "app-qa",
-        title: `${finding.appName}: ${finding.title}`,
-        kind: routed ? "factory" as const : "owner" as const,
-        ownerAction: finding.recommendation,
-        ...(handoff?.issueUrl ? { prUrl: handoff.issueUrl } : {}),
-      };
-    });
+export const appQaCeoScope = (completeScan: boolean): string[] => (completeScan ? ["app-qa"] : []);
+
+export function appQaRepoMap(apps: AppProject[]): Map<string, string | null> {
+  return new Map(apps.map((app) => [app.name.toLowerCase(), appRepoFullName(app)]));
 }
 
-async function notifyAppQaThroughCeoGate(userId: string, result: AppQaScanResult): Promise<void> {
+/**
+ * App QA findings as CEO problems, each saying WHERE it is being worked on:
+ * - this repo's web app, code-fixable (critical/high/medium) => office self-heal factory order app-qa:CODE;
+ * - other repos (KONG...) => the ONE Bug Patrol GitHub issue (Codex PR-first);
+ * - anything else (setup, access, session) => owner action. Critical/high only, as before.
+ */
+export function appQaCeoProblems(result: Pick<AppQaScanResult, "findings" | "bugPatrol">, repoByApp: ReadonlyMap<string, string | null> = new Map()): CeoProblem[] {
+  const handoffs = new Map((result.bugPatrol?.handoffs || []).map((handoff) => [handoff.findingId, handoff]));
+  const out: CeoProblem[] = [];
+  for (const finding of result.findings) {
+    const key = `${finding.appName}:${finding.sourceAgent}:${finding.title}`;
+    const factory = appQaFactoryRoute(finding, repoByApp);
+    if (factory) {
+      out.push({ key, source: "app-qa", title: `${finding.appName}: ${finding.title}`, kind: "factory",
+        where: `fábrica de software (orden de auto-reparación app-qa:${factory.code}, ruta ${factory.qaRoute}, evidencia ${factory.recordId.slice(0, 16)})` });
+      continue;
+    }
+    if (finding.severity !== "critical" && finding.severity !== "high") continue;
+    const handoff = handoffs.get(finding.id);
+    const routed = handoff && (handoff.status === "created" || handoff.status === "codex_dispatched");
+    out.push({
+      key,
+      source: "app-qa",
+      title: `${finding.appName}: ${finding.title}`,
+      kind: routed ? "factory" as const : "owner" as const,
+      ownerAction: finding.recommendation,
+      ...(routed && handoff?.repoFullName ? { where: `issue de GitHub en ${handoff.repoFullName} con handoff @codex fix (PR-first)${handoff.issueUrl ? `: ${handoff.issueUrl}` : ""}` } : {}),
+      ...(handoff?.issueUrl ? { prUrl: handoff.issueUrl } : {}),
+    });
+  }
+  return out;
+}
+
+async function notifyAppQaThroughCeoGate(userId: string, result: AppQaScanResult, repoByApp: ReadonlyMap<string, string | null>, completeScan: boolean): Promise<void> {
   const deps = await defaultCeoAlertGateDeps(userId);
   if (!deps) return; // fail closed: no durable ledger, no automatic messages
   // Storage-unavailable scans return earlier and never reach here, so this scan is complete.
-  const outcome = await runCeoAlertGate({ problems: appQaCeoProblems(result), scope: ["app-qa"] }, deps);
+  // Only a complete scan (visual scout ran, GitHub readable) may resolve by absence. Partial scans
+  // used to "resolve" visual findings and re-announce them on the next visual run: the same errors
+  // again and again. Now a partial scan can only add new problems.
+  const outcome = await runCeoAlertGate({ problems: appQaCeoProblems(result, repoByApp), scope: appQaCeoScope(completeScan) }, deps);
   result.telegramSent = outcome.sent > 0;
 }
 

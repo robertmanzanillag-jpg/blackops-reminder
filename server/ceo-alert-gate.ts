@@ -28,6 +28,8 @@ export type CeoProblem = {
   ownerAction?: string;
   /** Optional PR link (factory PR) known at report time. */
   prUrl?: string;
+  /** kind=factory: where the repair is being worked on (factory order or GitHub issue). */
+  where?: string;
 };
 
 export type CeoLedgerEntry = {
@@ -95,8 +97,8 @@ export function selfHealPrUrl(entry: Pick<SelfHealEntry, "attempts">): string | 
   return undefined;
 }
 
-function selfHealTitle(entry: Pick<SelfHealEntry, "role" | "code" | "prNumber" | "testPath">): string {
-  const target = entry.prNumber ? ` (PR #${entry.prNumber})` : entry.testPath ? ` (${entry.testPath})` : "";
+function selfHealTitle(entry: Pick<SelfHealEntry, "role" | "code" | "prNumber" | "testPath" | "qaRoute">): string {
+  const target = entry.prNumber ? ` (PR #${entry.prNumber})` : entry.testPath ? ` (${entry.testPath})` : entry.qaRoute ? ` (${entry.qaRoute})` : "";
   return `${entry.role}:${entry.code}${target}`;
 }
 
@@ -109,6 +111,8 @@ export function selfHealToCeoView(entries: readonly SelfHealEntry[]): { problems
     const key = `self-heal:${entry.key}`;
     if (SELF_HEAL_TERMINAL_OK.has(entry.status)) continue;
     openKeys.add(key);
+    // App QA already announced its factory orders (and sends its own "Resuelto"); only owner-needed states here.
+    if (entry.role === "app-qa" && !SELF_HEAL_NEEDS_OWNER.has(entry.status)) continue;
     if (SELF_HEAL_NEEDS_OWNER.has(entry.status)) {
       problems.push({ key: `${key}:owner`, source: "self-heal", title: selfHealTitle(entry), kind: "owner", ownerAction: selfHealOwnerAction(entry), prUrl: selfHealPrUrl(entry) });
     } else {
@@ -118,7 +122,7 @@ export function selfHealToCeoView(entries: readonly SelfHealEntry[]): { problems
   // Latest episode wins: a key re-opened after a verified episode stays open.
   for (const entry of entries) {
     const key = `self-heal:${entry.key}`;
-    if (SELF_HEAL_TERMINAL_OK.has(entry.status) && !openKeys.has(key)) resolved.set(key, selfHealPrUrl(entry));
+    if (SELF_HEAL_TERMINAL_OK.has(entry.status) && !openKeys.has(key) && entry.role !== "app-qa") resolved.set(key, selfHealPrUrl(entry));
   }
   return { problems, resolved };
 }
@@ -128,7 +132,8 @@ export type CeoAlertPlan = { ledger: CeoAlertLedger; messages: CeoAlertMessage[]
 
 export function formatNewProblem(problem: CeoProblem): string {
   if (problem.kind === "factory") {
-    return `🔧 Fallo nuevo (${problem.source}): ${problem.title}\nLa fábrica ya tiene la orden de reparación (PR-first). Te escribo de nuevo solo cuando quede resuelto.`
+    const where = problem.where ? `Se está trabajando en: ${problem.where}.` : "La fábrica ya tiene la orden de reparación (PR-first).";
+    return `🔧 Fallo nuevo (${problem.source}): ${problem.title}\n${where} Te escribo de nuevo solo cuando quede resuelto.`
       + (problem.prUrl ? `\nPR: ${problem.prUrl}` : "");
   }
   return `⚠️ Necesito que hagas algo (${problem.source}): ${problem.title}\nQué hacer: ${problem.ownerAction || "revisar el detalle en BlackOps."}\nNo lo puede arreglar la fábrica (falta dato, acceso o secreto).`

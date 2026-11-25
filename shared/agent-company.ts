@@ -185,6 +185,8 @@ export type SelfHealOrderMarker = {
   role: string; code: string; recordId: string; prNumber?: number;
   /** KNOWN_TEST_FAILURE only: the allowlisted test file; must hash to recordId. */
   testPath?: string;
+  /** app-qa APP_QA_* only: the page/route App QA reported; must hash (with code) to recordId. */
+  qaRoute?: string;
   chain?: { status: string; readyToMerge: boolean; updatedAt: string; finding: Record<string, string>; failedReason?: string; prClosedAt?: string;
     factory?: Record<string, unknown>; preMerge?: Record<string, unknown>; postMerge?: Record<string, unknown> };
 };
