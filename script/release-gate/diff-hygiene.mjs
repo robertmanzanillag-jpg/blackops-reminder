@@ -6,7 +6,7 @@
 // Hard failures (no label can override):
 //   - secrets-like content in added lines (private keys, provider tokens, URLs with passwords)
 //   - .env files, keys/certificates, credentials/, secrets/, node_modules/, macOS "._*" files
-//   - merge-conflict markers, test.only/describe.only, added files larger than 2 MB
+//   - merge-conflict markers, test.only/describe.only, files that grow past 2 MB
 //   - any change to .github/workflows/factory-candidate-checks.yml (its SHA is pinned by the
 //     factory operator configuration)
 // Needs the PR label `gate-justified` (owner decision, explained in the PR body):
@@ -79,7 +79,12 @@ for (const { status, file } of changes) {
   }
   if (status !== "D") {
     const size = Number(git("cat-file", "-s", `HEAD:${file}`).trim());
-    if (size > 2 * 1024 * 1024) fail(file, `added file larger than 2 MB (${Math.round(size / 1024)} KB)`);
+    // Only a change that makes a file cross the limit fails: an already-large file that is
+    // edited or carried over by a merge was accepted before and is not new weight.
+    const LIMIT = 2 * 1024 * 1024;
+    let baseSize = 0;
+    if (status !== "A") { try { baseSize = Number(git("cat-file", "-s", `${base}:${file}`).trim()); } catch { baseSize = 0; } }
+    if (size > LIMIT && !(baseSize > LIMIT)) fail(file, `${status === "A" ? "added" : "changed"} file larger than 2 MB (${Math.round(size / 1024)} KB)`);
   }
 }
 
