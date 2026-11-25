@@ -98,7 +98,7 @@ function rootOrder(job: FactoryAgentJob, byId: Map<string, FactoryAgentJob>): Or
   for (let hop = 0; cursor && hop < 50; hop++) {
     const source = cursor.payload?.companyOrder as { orderId?: unknown } | undefined;
     if (typeof source?.orderId === "string") return { orderId: source.orderId };
-    const prev = cursor.payload?.previousJobId;
+    const prev: unknown = cursor.payload?.previousJobId;
     cursor = typeof prev === "string" ? byId.get(prev) : undefined;
   }
   return undefined;
@@ -137,8 +137,8 @@ export function deriveFactoryAgents(input: {
 }): FactoryAgentRow[] {
   const jobs = Array.isArray(input.jobs) ? input.jobs.filter(j => j && typeof j.id === "string") : [];
   const byId = new Map(jobs.map(j => [j.id, j]));
-  const orders = Array.isArray(input.orders) ? input.orders : [];
-  const orderById = new Map(orders.map(o => [o.id, o]));
+  const orders: readonly FactoryAgentOrder[] = Array.isArray(input.orders) ? input.orders : [];
+  const orderById = new Map<string, FactoryAgentOrder>(orders.map(o => [o.id, o]));
   const orderText = new Map(orders.map(o => [o.id, o.text]));
   const cache = new Map<string, Order>();
   const orderOf = (j: FactoryAgentJob) => { if (!cache.has(j.id)) cache.set(j.id, rootOrder(j, byId)); return cache.get(j.id); };
