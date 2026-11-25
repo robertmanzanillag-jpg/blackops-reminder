@@ -429,6 +429,35 @@ export function createApprovalLedger(query) {
 /**
  * deps: { store, approvals, metricool (createPortfolioMetricool-like), stager, fetch, download, render, outputDir }
  */
+/** Why the work queue is what it is: every discovered candidate lands in exactly one bucket (counts only, no URLs). */
+export function queueFunnel(state, ledger, config, now) {
+  const dropped = {};
+  const drop = r => { dropped[r] = (dropped[r] ?? 0) + 1; };
+  const workIds = new Set(localWorkQueue(state).map(w => w.candidateId));
+  let eligible = 0;
+  for (const c of state.candidates ?? []) {
+    const clip = ledger.clips?.[c.id];
+    if (!config.platforms.includes(c.platform)) drop(`platform_not_served:${c.platform}`);
+    else if (c.approval?.status !== 'approved') drop(`approval_${c.approval?.status ?? 'missing'}`);
+    else if (!workIds.has(c.id)) drop('policy_or_takedown');
+    else if (clip && !(['failed', 'deferred'].includes(clip.status) && (clip.attempts ?? 0) < config.maxAttempts))
+      drop(['failed', 'deferred'].includes(clip.status) ? `attempts_exhausted:${clip.status}` : `already_${String(clip.status ?? 'done').split(':')[0]}`);
+    else if (!(now - Date.parse(c.publishedAt) <= config.maxSourceAgeHours * HOUR)) drop('source_too_old');
+    else if (config.lanesEnabled && !(laneSortWeight(state, ledger, c, now) > 0)) drop('lane_weight_zero');
+    else eligible++;
+  }
+  return { candidates: (state.candidates ?? []).length, eligible, dropped };
+}
+
+/** One safe line: candidates found -> dropped per reason -> rendered -> scheduled (so a 0 is always explained). */
+export function funnelSummary(report) {
+  const f = report.funnel;
+  if (!f) return `clippers funnel: status=${report.status} (no queue evaluated) rendered=${report.counts?.rendered ?? 0} scheduled=${report.counts?.scheduled ?? 0}`;
+  const drops = Object.entries(f.dropped).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(' ') || 'none';
+  const held = [...new Set(report.heldReasons ?? [])].slice(0, 8).join(',') || 'none';
+  return `clippers funnel: candidates=${f.candidates} -> dropped[${drops}] -> eligible=${f.eligible} -> rendered=${report.counts.rendered} -> scheduled=${report.counts.scheduled} (held: ${held}; status=${report.status})`;
+}
+
 export async function runCloudPublisher({ env = process.env, now = Date.now(), owner, store, approvals, metricool, stager, fetch: fetchImpl = globalThis.fetch,
   download = downloadSource, render = renderVerticalClip, detectLanguage = detectSpeechLanguage, makeDir = makeWorkDir, outputDir = null, minIntervalMs = 0, clock = () => Date.now(), growthOnly = false }) {
   // A growth-only pass (read-only analytics) runs even while publishing is off; the kill switch still stops it.
@@ -670,6 +699,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   const state = parseStreamerState(await store.read(ns));
   const ledger = cloudPublishOf(state);
   const candidatesById = new Map(state.candidates.map(c => [c.id, c]));
+  const funnel = queueFunnel(state, ledger, config, now);
+  report.funnel = funnel;
   const queue = localWorkQueue(state).map(w => candidatesById.get(w.candidateId)).filter(Boolean)
     .filter(c => { const clip = ledger.clips[c.id]; return !clip || (['failed', 'deferred'].includes(clip.status) && (clip.attempts ?? 0) < config.maxAttempts); })
     .filter(c => now - Date.parse(c.publishedAt) <= config.maxSourceAgeHours * HOUR)
@@ -696,6 +727,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const approval = live.get(candidate.approval?.pendingActionId);
     if (!['approved', 'executed'].includes(approval)) {
       if (['rejected', 'failed'].includes(approval)) { await setClip({ status: 'blocked', reason: `approval_${approval}` }); report.counts.blocked++; }
+      else report.heldReasons.push(`approval_not_live:${approval ?? 'missing'}`);
       continue;
     }
     const gate = publishGate(parseStreamerStateStrict(await store.read(ns)), candidate, { now: clock() });
@@ -1065,6 +1097,7 @@ async function main() {
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
   console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, captions: report.captions ?? null, learning: report.learning ?? null,
     growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish, autoPublishMode: a.autoPublishMode }])), decisions: report.growth.decisions.length } : null }));
+  console.log(funnelSummary({ ...report, status: report.status }));
   for (const d of report.diagnostics ?? []) console.log(`clip diagnostics: ${JSON.stringify(d)}`);
   // Handled per-clip failures (e.g. a YouTube bot block) are recorded for the office, not a red job.
   if (report.errors.length) console.log(`::warning::Streamer cloud publisher: ${report.errors.length} handled error(s): ${report.errors.slice(0, 5).join(', ')}`);
