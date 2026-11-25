@@ -1,4 +1,4 @@
-import { factoryApiExecutionWindow, assertFactoryApiJobAdmission, assertFactoryApiParentSettlement, parseFactoryApiState, emptyFactoryApiState, factoryApiStateSchema, factoryApiBudgetStatus, checkpointFactoryApiMonth, reserveFactoryApi, settleFactoryApi, unknownFactoryApi, type FactoryApiExposure } from "./software-factory-api-budget";
+import { factoryApiExecutionWindow, assertFactoryApiJobAdmission, assertFactoryApiParentSettlement, parseFactoryApiState, emptyFactoryApiState, factoryApiStateSchema, factoryApiBudgetStatus, checkpointFactoryApiMonth, reserveFactoryApi, settleFactoryApi, unknownFactoryApi, resolveFactoryApiUnknown, type FactoryApiExposure } from "./software-factory-api-budget";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { factoryJobKinds, type FactoryJob, type FactoryJobInput, type FactoryOutcome, type softwareFactoryStore } from "./software-factory-store";
@@ -119,6 +119,7 @@ export function createSoftwareFactoryObjectStore(options:FactoryObjectStoreOptio
   async reserveApi(owner,input){const key=ownerKey(owner);return mutate("reserveApi",[key,input],(state,{now})=>reserveFactoryApi(apiState(state,key),apiExposure(state,key,now),input,new Date(now).toISOString()));},
   async settleApi(owner,key,input){const ownerHash=ownerKey(owner);return mutate("settleApi",[ownerHash,key,input],(state,{now})=>settleFactoryApi(apiState(state,ownerHash),key,input,new Date(now).toISOString()));},
   async unknownApi(owner,key){const ownerHash=ownerKey(owner);return mutate("unknownApi",[ownerHash,key],state=>unknownFactoryApi(apiState(state,ownerHash),key));},
+  async resolveApiUnknown(owner,input){const key=ownerKey(owner);return mutate("resolveApiUnknown",[key,input],(state,{now})=>resolveFactoryApiUnknown(apiState(state,key),input,new Date(now).toISOString()));},
   async initializeStore(){
    const initial:Ledger={version:1,ledgerId:options.ledgerId,lastObservedAt:time(),controls:[],budgets:[],jobs:[],projects:[],findings:[],workers:[],receipts:[]};fit(initial);
    if(await options.transport.read()){await read();return;}

@@ -18,8 +18,17 @@ export const factoryApiReservationSchema = z.object({ key: z.string().min(1).max
 const rowSchema = factoryApiReservationSchema.extend({ month, createdAt: instant,
   status: z.enum(["reserved", "settled", "unknown"]), actualMicroUsd: amount.optional(),
   settledAt: instant.optional(), evidenceSha256: sha.optional(), reportedOverrunMicroUsd: amount.optional(), overrunEvidenceSha256: sha.optional() }).strict();
+/** Append-only receipt of a reviewed external-unknown resolution. It never edits a
+ * checkpoint or reservation row: the hold is settled CONSERVATIVELY at its full
+ * reserved amount (assumed spent; never released, voided, refunded or replayed). */
+const resolutionSchema = z.object({ holdSha256: sha, source: z.enum(["api-reservation", "external-checkpoint"]),
+  reservationKey: z.string().min(1).max(200).optional(), checkpointMonth: month.optional(),
+  settledMicroUsd: amount.refine(n => n > 0), evidenceSha256: sha, resolvedAt: instant,
+  policy: z.literal("conservative-full-reserved-amount") }).strict();
 export const factoryApiStateSchema = z.object({ version: z.literal(1),
-  checkpoints: z.array(checkpointSchema), reservations: z.array(rowSchema) }).strict();
+  checkpoints: z.array(checkpointSchema), reservations: z.array(rowSchema),
+  resolutions: z.array(resolutionSchema).optional() }).strict();
+export type FactoryApiUnknownResolution = z.input<typeof resolutionSchema>;
 export type FactoryApiState = z.infer<typeof factoryApiStateSchema>;
 export type FactoryApiReservation = z.input<typeof factoryApiReservationSchema>;
 export type FactoryApiCheckpoint = z.input<typeof checkpointSchema>;
@@ -39,19 +48,45 @@ export function parseFactoryApiState(value: unknown): FactoryApiState {
     if (row.status === "settled" && (row.actualMicroUsd === undefined || !row.settledAt || !row.evidenceSha256 || row.actualMicroUsd > row.maximumMicroUsd)) throw Error("FACTORY_API_LEDGER_CORRUPT");
     if (row.status !== "settled" && (row.actualMicroUsd !== undefined || row.settledAt || row.evidenceSha256)) throw Error("FACTORY_API_LEDGER_CORRUPT");
   }
+  const seen = new Set<string>(), externalByMonth = new Map<string, number>();
+  for (const r of state.resolutions ?? []) {
+    if (seen.has(r.holdSha256)) throw Error("FACTORY_API_LEDGER_CORRUPT"); seen.add(r.holdSha256);
+    if (r.source === "api-reservation") {
+      const row = state.reservations.find(x => x.key === r.reservationKey);
+      if (r.checkpointMonth !== undefined || !row || row.status !== "unknown" ||
+          r.settledMicroUsd !== Math.max(row.maximumMicroUsd, row.reportedOverrunMicroUsd ?? 0) ||
+          (state.resolutions ?? []).filter(x => x.reservationKey === r.reservationKey).length !== 1) throw Error("FACTORY_API_LEDGER_CORRUPT");
+    } else {
+      const c = state.checkpoints.find(x => x.month === r.checkpointMonth);
+      const used = (externalByMonth.get(r.checkpointMonth ?? "") ?? 0) + 1;
+      if (r.reservationKey !== undefined || !c || used > c.externalUnknownReservations || r.settledMicroUsd > c.externalReservedMicroUsd) throw Error("FACTORY_API_LEDGER_CORRUPT");
+      externalByMonth.set(r.checkpointMonth!, used);
+    }
+  }
   return state;
+}
+/** Unknown holds that no reviewed resolution receipt has settled yet. */
+export function effectiveFactoryApiUnknown(state: FactoryApiState) {
+  const resolutions = state.resolutions ?? [];
+  const resolvedKeys = new Set(resolutions.filter(r => r.source === "api-reservation").map(r => r.reservationKey));
+  const external = state.checkpoints.reduce((sum, c) => sum + c.externalUnknownReservations, 0) - resolutions.filter(r => r.source === "external-checkpoint").length;
+  return { apiReservations: state.reservations.filter(r => r.status === "unknown" && !resolvedKeys.has(r.key)).length, externalCheckpoint: external };
 }
 export function factoryApiBudgetStatus(state: FactoryApiState, exposure: FactoryApiExposure, now: string) {
   instant.parse(now); state = parseFactoryApiState(state);
   const period = now.slice(0,7), checkpoint = state.checkpoints.find(c=>c.month===period);
   for (const n of [exposure.fixedCents, exposure.spentCents, exposure.reservedCents]) amount.parse(n);
+  const resolved = new Map((state.resolutions ?? []).filter(r=>r.source==="api-reservation").map(r=>[r.reservationKey!,r]));
   const own = state.reservations.filter(r=>!r.parent);
+  // A resolved unknown counts as spent at its full reserved amount (never released).
   const spentMicroUsd = safeSum([exposure.spentCents * 10000, checkpoint?.externalSpentMicroUsd ?? 0,
-    ...own.filter(r=>r.status==="settled" && (r.month===period || r.settledAt!.slice(0,7)===period)).map(r=>r.actualMicroUsd!)]);
+    ...own.filter(r=>r.status==="settled" && (r.month===period || r.settledAt!.slice(0,7)===period)).map(r=>r.actualMicroUsd!),
+    ...own.filter(r=>resolved.has(r.key) && (r.month===period || resolved.get(r.key)!.resolvedAt.slice(0,7)===period)).map(r=>resolved.get(r.key)!.settledMicroUsd)]);
   const reservedMicroUsd = safeSum([exposure.reservedCents * 10000, ...state.checkpoints.map(c=>c.externalReservedMicroUsd),
-    ...own.filter(r=>r.status!=="settled").map(r=>Math.max(r.maximumMicroUsd,r.reportedOverrunMicroUsd??0))]);
+    ...own.filter(r=>r.status!=="settled" && !resolved.has(r.key)).map(r=>Math.max(r.maximumMicroUsd,r.reportedOverrunMicroUsd??0))]);
   const fixedMicroUsd = exposure.fixedCents*10000;
-  const unknown = exposure.unknown || state.checkpoints.some(c=>c.externalUnknownReservations>0) || state.reservations.some(r=>r.status==="unknown");
+  const effective = effectiveFactoryApiUnknown(state);
+  const unknown = exposure.unknown || effective.externalCheckpoint>0 || effective.apiReservations>0;
   const configured = exposure.configured && !!checkpoint;
   const used = safeSum([fixedMicroUsd,spentMicroUsd,reservedMicroUsd]);
   return {month:period, limitMicroUsd:FACTORY_API_LIMIT_MICRO_USD, fixedMicroUsd, spentMicroUsd,
@@ -69,6 +104,34 @@ export function checkpointFactoryApiMonth(state: FactoryApiState, exposure: Fact
   if (prior && JSON.stringify(prior)!==JSON.stringify(input)) throw Error("FACTORY_API_CHECKPOINT_IMMUTABLE");
   if (!prior) state.checkpoints.push(input);
   factoryApiBudgetStatus(state,exposure,now);
+}
+/** Reviewed, append-only resolution of ONE unknown hold. Idempotent for the exact
+ * same receipt; any other second resolution of the same hold is a conflict. */
+export function resolveFactoryApiUnknown(state: FactoryApiState, raw: { holdSha256: string; source: "api-reservation" | "external-checkpoint";
+  reservationKey?: string; checkpointMonth?: string; settledMicroUsd: number; evidenceSha256: string }, now: string) {
+  instant.parse(now);
+  const input = resolutionSchema.omit({ resolvedAt: true, policy: true }).strict().parse(raw);
+  state.resolutions ??= [];
+  const prior = state.resolutions.find(r => r.holdSha256 === input.holdSha256 || (input.reservationKey !== undefined && r.reservationKey === input.reservationKey));
+  if (prior) {
+    const { resolvedAt: _r, policy: _p, ...same } = prior;
+    if (JSON.stringify(Object.entries(same).sort()) !== JSON.stringify(Object.entries(input).sort())) throw Error("FACTORY_API_RESOLUTION_CONFLICT");
+    return { resolved: false, receipt: prior };
+  }
+  if (input.source === "api-reservation") {
+    const row = state.reservations.find(r => r.key === input.reservationKey);
+    if (!row || row.status !== "unknown") throw Error("FACTORY_API_RESOLUTION_NOT_UNKNOWN");
+    if (input.checkpointMonth !== undefined || input.settledMicroUsd !== Math.max(row.maximumMicroUsd, row.reportedOverrunMicroUsd ?? 0)) throw Error("FACTORY_API_RESOLUTION_NOT_FULL_AMOUNT");
+  } else {
+    const c = state.checkpoints.find(x => x.month === input.checkpointMonth);
+    const used = state.resolutions.filter(r => r.source === "external-checkpoint" && r.checkpointMonth === input.checkpointMonth).length;
+    if (input.reservationKey !== undefined || !c || used >= c.externalUnknownReservations) throw Error("FACTORY_API_RESOLUTION_NOT_UNKNOWN");
+    if (input.settledMicroUsd > c.externalReservedMicroUsd) throw Error("FACTORY_API_RESOLUTION_NOT_FULL_AMOUNT");
+  }
+  const receipt = { ...input, resolvedAt: now, policy: "conservative-full-reserved-amount" as const };
+  state.resolutions.push(receipt);
+  parseFactoryApiState(state);
+  return { resolved: true, receipt };
 }
 export function reserveFactoryApi(state: FactoryApiState, exposure: FactoryApiExposure, raw: FactoryApiReservation, now: string) {
   const input = factoryApiReservationSchema.parse(raw), prior = state.reservations.find(r=>r.key===input.key);
