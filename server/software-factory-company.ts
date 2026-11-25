@@ -12,7 +12,8 @@ const engineering = new Set(["code", "github", "app-qa", "mechanic", "agent-fact
 
 /** Admission is invoked only after owner authentication. Never reads Kong's company,
  * publishes an issue, marks an order done, or treats keywords as spending authority. */
-export function companyOrderJob(order: CompanyOrder, project: FactoryProject, reservationCents: number): FactoryJobInput {
+export function companyOrderJob(order: CompanyOrder, project: FactoryProject, reservationCents: number, retry = 0): FactoryJobInput {
+  if (!Number.isSafeInteger(retry) || retry < 0 || retry > 2) throw Error("FACTORY_COMPANY_RETRY_INVALID");
   assertCeoOrderActive(order);
   if (project.repo !== ASISTENTE_REPOSITORY) throw Error("FACTORY_COMPANY_REPOSITORY_MISMATCH");
   if (!order.id || order.doneAt || !order.text.trim() || order.text.length > 500
@@ -24,9 +25,14 @@ export function companyOrderJob(order: CompanyOrder, project: FactoryProject, re
   }
   if (!Number.isSafeInteger(reservationCents) || reservationCents < 1 || reservationCents > 10000) throw Error("FACTORY_COMPANY_RESERVATION_INVALID");
   const revision = digest([order.id, order.createdAt, order.text]);
-  return { key: `company-order:${digest([project.id, order.id, revision])}`, projectId: project.id,
+  // A bounded infrastructure retry (software-factory-order-retry.ts) is a new root with its own key.
+  return { key: companyOrderRootKey(project.id, order.id, revision, retry), projectId: project.id,
     kind: "discover", reservedCents: reservationCents,
-    payload: { companyOrder: { version: 1, company: "main", orderId: order.id, revision } } };
+    payload: { companyOrder: { version: 1, company: "main", orderId: order.id, revision, ...(retry ? { retry } : {}) } } };
+}
+
+export function companyOrderRootKey(projectId: string, orderId: string, revision: string, retry = 0): string {
+  return `company-order:${digest([projectId, orderId, revision])}${retry ? `:retry:${retry}` : ""}`;
 }
 
 export type CompanyOrderAdmissionReason = "eligible" | "done" | "empty_text" | "text_too_long" | "invalid_created_at" | "kong_assignee" | "kong_text"
@@ -87,11 +93,12 @@ export function createCompanyOrderDiscovery(options: {
 }): NonNullable<FactoryPipelineDependencies["discover"]> {
   return async (project, context) => {
     context.signal.throwIfAborted();
-    const source = context.source?.companyOrder as { version?: unknown; company?: unknown; orderId?: unknown; revision?: unknown } | undefined;
+    const source = context.source?.companyOrder as { version?: unknown; company?: unknown; orderId?: unknown; revision?: unknown; retry?: unknown } | undefined;
     if (!source || source.version !== 1 || source.company !== "main" || typeof source.orderId !== "string") throw Error("FACTORY_COMPANY_SOURCE_REQUIRED");
+    if (source.retry !== undefined && (!Number.isSafeInteger(source.retry) || (source.retry as number) < 1 || (source.retry as number) > 2)) throw Error("FACTORY_COMPANY_SOURCE_REQUIRED");
     const order = await options.readMainOrder(source.orderId);
     if (!order || order.id !== source.orderId) throw Error("FACTORY_COMPANY_ORDER_UNAVAILABLE");
-    const admitted = companyOrderJob(order, project, 1);
+    const admitted = companyOrderJob(order, project, 1, (source.retry as number | undefined) ?? 0);
     const current = admitted.payload!.companyOrder as { revision: string };
     if (current.revision !== source.revision) throw Error("FACTORY_COMPANY_ORDER_CHANGED");
     const baseSha = await options.resolveHead(project.repo, context.signal);

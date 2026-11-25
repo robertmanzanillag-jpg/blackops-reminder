@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { CompanyState } from "../shared/agent-company";
 import type { FactoryOrderProposal } from "../shared/software-factory-view";
 import type { FactoryJob } from "./software-factory-store";
+import { companyOrderRetryOf } from "./software-factory-order-retry";
 import { recordSelfHealFactory, type SelfHealFactoryObservation } from "./office-self-heal";
 
 /** Factory worker side of the office self-heal loop (OFFICE_SELF_HEAL_ENABLED).
@@ -11,7 +12,8 @@ import { recordSelfHealFactory, type SelfHealFactoryObservation } from "./office
  * matching self-heal attempt inside one council transaction. It never admits,
  * enqueues, writes to GitHub, merges, dispatches or calls a model. */
 const SAFE_ID = /^[a-zA-Z0-9:_-]{1,200}$/;
-const REASON = /^[A-Z0-9_]{1,100}$/;
+// Factory reasons carry a stage prefix (FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED).
+const REASON = /^[A-Z0-9_:]{1,120}$/;
 type Observation = SelfHealFactoryObservation & { orderId: string; orderRevision: string };
 const pipelineRoot = (job: FactoryJob) => ((job.result as { evidence?: { pipelineState?: { rootJobId?: unknown } } } | undefined)?.evidence?.pipelineState?.rootJobId);
 
@@ -23,6 +25,8 @@ export function observeFactoryForSelfHeal(input: { owner: string; jobs: readonly
   for (const root of jobs) {
     const source = root.payload?.companyOrder as { version?: unknown; company?: unknown; orderId?: unknown; revision?: unknown } | undefined;
     if (root.kind !== "discover" || !source || source.version !== 1 || source.company !== "main" || typeof source.orderId !== "string" || !source.orderId.startsWith("ord-sh-") || typeof source.revision !== "string" || !/^[a-f0-9]{64}$/.test(source.revision) || !SAFE_ID.test(root.id)) continue;
+    // A bounded infrastructure retry supersedes the earlier root of the same order revision.
+    if (jobs.some(j => j.kind === "discover" && j.id !== root.id && (j.payload?.companyOrder as typeof source | undefined)?.orderId === source.orderId && (j.payload?.companyOrder as typeof source | undefined)?.revision === source.revision && companyOrderRetryOf(j) > companyOrderRetryOf(root))) continue;
     const base = { orderId: source.orderId, orderRevision: source.revision, observedAt, rootJobId: root.id };
     const proposal = input.proposals.filter(p => p.orderId === source.orderId && p.orderRevision === source.revision).sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt))[0];
     if (proposal) {
