@@ -21,7 +21,10 @@ export function cycleReportKey(now) {
 }
 
 /** Raw clip_metrics document (rawClipMetrics schema) from observed cloud posts. */
-export function buildClipMetrics(cloudPublish) {
+// An empty ledger read at `now` is a complete, current summary with no records: it carries `now` so the office
+// sees a fresh NO_RECORDS instead of SOURCE_TIME_UNKNOWN/STALE. With records, generatedAt stays the latest real
+// Metricool observation (never moved forward), so old analytics still read as stale.
+export function buildClipMetrics(cloudPublish, { now } = {}) {
   const posts = Array.isArray(cloudPublish?.posts) ? cloudPublish.posts : [];
   const records = [];
   let engagementUnreported = 0, generatedAt = null;
@@ -39,6 +42,7 @@ export function buildClipMetrics(cloudPublish) {
     records.push(record);
     if (!generatedAt || observedAt > generatedAt) generatedAt = observedAt;
   }
+  if (!records.length && Number.isFinite(now)) generatedAt = new Date(now).toISOString();
   return { document: { generatedAt, records: records.slice(-10000) }, engagementUnreported };
 }
 
@@ -61,13 +65,15 @@ export function buildCycleReport(cloudPublish, { owner, now, dailyTargetPosts })
     backlogPosts: count(p => BACKLOG.has(p.status)), gapToDailyTarget: Math.max(0, target - scheduled - draftReady),
     scheduled, readyForManual: draftReady, blocked: count(p => BLOCKED.has(p.status)), draftReady,
     rightsReview: count(p => p.status === 'held_media_review'), needsSource: 0,
-    // Policy auto-approvals (rule recorded per post + audit in cloudPublish.autoApprovals); capped = held by the daily cap.
-    autoApproved: count(p => !!p.autoApproval),
-    autoApproveCapped: Math.max(0, Math.trunc(Number(cloudPublish?.lastRun?.autoApproval?.held?.auto_approve_daily_cap) || 0)),
   };
+  // Policy auto-approvals (rule recorded per post + audit in cloudPublish.autoApprovals); capped = held by the daily cap.
+  // Reported in the run log only: the office document keeps the base totals every deployed reader accepts
+  // (a strict reader without these keys marked every cloud cycle report `invalid`).
+  const autoApproval = { autoApproved: count(p => !!p.autoApproval),
+    autoApproveCapped: Math.max(0, Math.trunc(Number(cloudPublish?.lastRun?.autoApproval?.held?.auto_approve_daily_cap) || 0)) };
   const status = target > 0 && scheduled + draftReady >= target ? 'ready' : scheduled + draftReady > 0 ? 'partial' : 'blocked';
   const id = `streamer-cloud-${at}`;
-  return { key: cycleReportKey(now), document: { id, userId: owner, createdAt: at,
+  return { key: cycleReportKey(now), autoApproval, document: { id, userId: owner, createdAt: at,
     automation: { id, createdAt: at, status, totals, posts: posts.map(p => ({ status: String(p.status ?? 'unknown').slice(0, 40), draft: p.draft === true, ...(p.autoApproval ? { autoApprovalRule: String(p.autoApproval.rule ?? '').slice(0, 60) } : {}) })) } } };
 }
 
@@ -78,9 +84,10 @@ export function buildCycleReport(cloudPublish, { owner, now, dailyTargetPosts })
 export async function syncClippersOfficeSources({ cloudPublish, owner, now = Date.now(), dailyTargetPosts, db, prepare, persist }) {
   const writtenAt = new Date(now).toISOString();
   const out = { clip_metrics: null, clip_report: null, records: 0, engagementUnreported: 0 };
-  const metrics = buildClipMetrics(cloudPublish);
+  const metrics = buildClipMetrics(cloudPublish, { now });
   out.records = metrics.document.records.length; out.engagementUnreported = metrics.engagementUnreported;
   const report = buildCycleReport(cloudPublish, { owner, now, dailyTargetPosts });
+  Object.assign(out, report.autoApproval);
   for (const [kind, raw, key] of [['clip_metrics', metrics.document, ''], ['clip_report', report.document, report.key]]) {
     try {
       const prepared = prepare(kind, raw, { owner, key });

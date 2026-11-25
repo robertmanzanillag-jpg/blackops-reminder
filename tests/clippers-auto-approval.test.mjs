@@ -71,7 +71,9 @@ test('summary line and office clip_report carry auto-approved count and reasons'
   assert.match(funnelSummary(report), /auto_approve=on approved=1 \[default_no_prohibition_signals=1\] manual\[description_prohibits_clipping=1\]/);
   assert.equal(autoApprovalSummary({}), 'auto_approve=off');
   const cycle = buildCycleReport({ posts: [{ status: 'scheduled', scheduledAt: new Date(NOW).toISOString(), autoApproval: { rule: AUTO_APPROVE_RULE } }], lastRun: { autoApproval: { held: { auto_approve_daily_cap: 2 } } } }, { owner: 'o', now: NOW, dailyTargetPosts: 3 });
-  assert.equal(cycle.document.automation.totals.autoApproved, 1); assert.equal(cycle.document.automation.totals.autoApproveCapped, 2);
+  assert.deepEqual(cycle.autoApproval, { autoApproved: 1, autoApproveCapped: 2 });
+  // Counters stay out of the office document so readers deployed before #573 do not mark it invalid.
+  assert.equal('autoApproved' in cycle.document.automation.totals, false); assert.equal('autoApproveCapped' in cycle.document.automation.totals, false);
   assert.equal(cycle.document.automation.posts[0].autoApprovalRule, AUTO_APPROVE_RULE);
 });
 

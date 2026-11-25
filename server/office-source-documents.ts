@@ -91,6 +91,11 @@ function reportType(key:string):"daily"|"cycle" {
  if(DAILY_REPORT_NAME.test(key))return "daily";if(CYCLE_REPORT_NAME.test(key))return "cycle";
  throw new Error("Invalid report name");
 }
+/** Stored cycle totals keep only the base counters. The optional auto-approval counters are accepted from
+ * producers but not persisted: a reader deployed before they existed parses stored totals strictly and would
+ * mark the whole report `invalid` (they are not audited metrics either). */
+const BASE_CYCLE_TOTALS=["posts","dailyTargetPosts","weeklyTargetClips","backlogPosts","gapToDailyTarget","scheduled","readyForManual","blocked","draftReady","rightsReview","needsSource"] as const;
+function baseCycleTotals(totals:z.infer<typeof cycleTotals>){return Object.fromEntries(BASE_CYCLE_TOTALS.map(k=>[k,totals[k]]));}
 /** Validates a producer document exactly as the file reader does and returns
  * the minimal stored projection. Throws on any contract violation. */
 export function projectOfficeSourceDocument<K extends OfficeSourceDocumentKind>(kind:K,raw:unknown,context:{owner:string;key?:string}):StoredDocument<K> {
@@ -104,7 +109,7 @@ export function projectOfficeSourceDocument<K extends OfficeSourceDocumentKind>(
   case "social_metrics":value=rawSocial.parse(raw).map(q=>({id:sourceRowId("campaign_metric",q.id),createdAt:q.createdAt,impressions:q.impressions,views:q.views,orders:q.orders,revenueUsd:q.revenueUsd,spendUsd:q.spendUsd}));break;
   case "clip_metrics":{const x=rawClipMetrics.parse(raw);value={generatedAt:x.generatedAt,records:x.records.map(q=>({id:sourceRowId("clip_metric",q.id),views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}))};break;}
   case "clip_report":{
-   if(reportType(key)==="cycle"){const x=rawClipCycle.parse(raw);if(x.id!==x.automation.id || x.createdAt!==x.automation.createdAt || x.automation.posts.length!==x.automation.totals.posts)throw new Error("Invalid cycle report");if(x.userId!==context.owner)throw new ForeignOfficeSourceDocumentError();value={type:"cycle",id:sourceRowId("clip_cycle",x.id),createdAt:x.createdAt,status:x.automation.status,totals:{...x.automation.totals}};}
+   if(reportType(key)==="cycle"){const x=rawClipCycle.parse(raw);if(x.id!==x.automation.id || x.createdAt!==x.automation.createdAt || x.automation.posts.length!==x.automation.totals.posts)throw new Error("Invalid cycle report");if(x.userId!==context.owner)throw new ForeignOfficeSourceDocumentError();value={type:"cycle",id:sourceRowId("clip_cycle",x.id),createdAt:x.createdAt,status:x.automation.status,totals:baseCycleTotals(x.automation.totals)}};}
    else{const x=rawClipReport.parse(raw);if(x.userId!==context.owner)throw new ForeignOfficeSourceDocumentError();value={type:"daily",id:sourceRowId("clip_plan",x.id),createdAt:x.createdAt,publishMode:x.publishMode,plannedClips:x.plannedClips.length};}
    break;
   }

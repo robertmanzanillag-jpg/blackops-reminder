@@ -51,3 +51,10 @@ test('sync persists both kinds and never throws', async () => {
   const invalid = await syncClippersOfficeSources({ cloudPublish: ledger, owner: 'o', now, dailyTargetPosts: 5, db: {}, prepare: (k) => ({ kind: k, status: 'invalid' }), persist });
   assert.equal(invalid.clip_metrics, 'not_written_invalid');
 });
+
+test('an empty ledger read now is a fresh empty summary; observed records keep their real time', () => {
+  const at = Date.parse('2026-11-25T21:00:00Z');
+  assert.deepEqual(buildClipMetrics({ posts: [] }, { now: at }).document, { generatedAt: '2026-11-25T21:00:00.000Z', records: [] });
+  const old = { posts: [{ id: 'p', destinationKey: 'd', observation: { views: 4, observedAt: '2026-11-24T02:36:00Z' } }] };
+  assert.equal(buildClipMetrics(old, { now: at }).document.generatedAt, '2026-11-24T02:36:00.000Z');
+});
