@@ -153,3 +153,116 @@ test("is idempotent and rejects a published URL from another TikTok account", as
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("refreshes views for already-published clips from Metricool post analytics so the growth CEO can learn", async () => {
+  const url = "https://www.tiktok.com/@streamersclipusa/video/7530000000000000007";
+  const root = await workspace([scheduled({
+    status: "published",
+    publicUrl: url,
+    publishedPostUrl: url,
+    publishedAt: "2026-08-05T14:00:00.000Z",
+    metricoolBlogId: 6431687,
+    publicationReconciliation: { status: "published", publicUrl: url, metrics: {} },
+  })]);
+  const calls = [];
+  try {
+    const result = await reconcileClipperPublications({
+      workspaceRoot: root,
+      now: new Date("2026-08-08T15:00:00.000Z"),
+      env: { CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa" },
+      dependencies: {
+        async getPublication() { throw new Error("must not re-read the scheduler for reconciled rows"); },
+        async getPostAnalytics(args) {
+          calls.push(args);
+          return [
+            { videoId: "7530000000000000099", views: 5000 },
+            { shareUrl: `${url}?is_from_webapp=1`, views: 1840, likes: 92, shares: 11, comments: 6 },
+          ];
+        },
+      },
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].blogId, "6431687");
+    const metrics = JSON.parse(await readFile(path.join(root, "research", "paid-streamer-campaign-metrics.json"), "utf8"));
+    assert.equal(metrics.length, 1);
+    assert.equal(metrics[0].views, 1840, "must match the exact video id, not another post");
+    assert.equal(metrics[0].likes, 92);
+    assert.equal(metrics[0].metricEvidenceVerified, true);
+    assert.equal(metrics[0].strategyId, "specific_conflict");
+    const report = await readFile(path.join(root, "reports", "metricool-publication-reconciliation.json"), "utf8");
+    for (const needed of ["Metricool", url, "1840"]) assert.ok(report.includes(needed), `proof report must contain ${needed}`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an analytics failure never invents metrics and does not block reconciliation", async () => {
+  const url = "https://www.tiktok.com/@streamersclipusa/video/7530000000000000007";
+  const root = await workspace([scheduled({ status: "published", publicUrl: url, publishedAt: "2026-08-05T14:00:00.000Z", metricoolBlogId: 6431687 })]);
+  try {
+    const result = await reconcileClipperPublications({
+      workspaceRoot: root,
+      now: new Date("2026-08-08T15:00:00.000Z"),
+      env: { CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa" },
+      dependencies: { async getPostAnalytics() { throw new Error("metricool_analytics_http_500"); } },
+    });
+    assert.equal(result.status, "completed");
+    const metrics = JSON.parse(await readFile(path.join(root, "research", "paid-streamer-campaign-metrics.json"), "utf8"));
+    assert.equal(metrics[0].views, undefined);
+    assert.equal(metrics[0].metricEvidenceVerified, false);
+    const report = JSON.parse(await readFile(path.join(root, "reports", "metricool-publication-reconciliation.json"), "utf8"));
+    assert.deepEqual(report.analyticsRefresh.errors, ["metricool_analytics_http_500"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an alternate analytics provider can be injected and stored records are provider-neutral", async () => {
+  const url = "https://www.tiktok.com/@streamersclipusa/video/7530000000000000007";
+  const root = await workspace([scheduled({ status: "published", publicUrl: url, publishedAt: "2026-08-05T14:00:00.000Z", metricoolBlogId: 6431687 })]);
+  try {
+    const inHouse = {
+      name: "inhouse",
+      async getPostAnalytics() {
+        return [{ provider: "inhouse", postId: "p1", videoId: "7530000000000000007", url, publishedAt: "2026-08-05T14:00:00.000Z", views: 321, likes: 7, comments: 1, shares: 2, completionRate: 0.4 }];
+      },
+    };
+    await reconcileClipperPublications({
+      workspaceRoot: root,
+      now: new Date("2026-08-08T15:00:00.000Z"),
+      env: { CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa", SOCIAL_ANALYTICS_PROVIDER: "inhouse" },
+      dependencies: { analyticsProviders: { inhouse: inHouse } },
+    });
+    const metrics = JSON.parse(await readFile(path.join(root, "research", "paid-streamer-campaign-metrics.json"), "utf8"));
+    assert.equal(metrics[0].views, 321);
+    const report = JSON.parse(await readFile(path.join(root, "reports", "metricool-publication-reconciliation.json"), "utf8"));
+    assert.equal(report.provider, "inhouse");
+    assert.equal(report.analyticsRefresh.refreshed, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an unknown analytics provider fails closed and records no metrics", async () => {
+  const url = "https://www.tiktok.com/@streamersclipusa/video/7530000000000000007";
+  const root = await workspace([scheduled({ status: "published", publicUrl: url, publishedAt: "2026-08-05T14:00:00.000Z", metricoolBlogId: 6431687 })]);
+  let fetched = 0;
+  try {
+    await reconcileClipperPublications({
+      workspaceRoot: root,
+      now: new Date("2026-08-08T15:00:00.000Z"),
+      env: { CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa", SOCIAL_ANALYTICS_PROVIDER: "nope", METRICOOL_USER_TOKEN: "t", METRICOOL_USER_ID: "1" },
+      fetcher: async () => { fetched += 1; return new Response("[]"); },
+      dependencies: { async getPublication() { return null; } },
+    });
+    const metrics = JSON.parse(await readFile(path.join(root, "research", "paid-streamer-campaign-metrics.json"), "utf8"));
+    assert.equal(metrics[0].views, undefined);
+    const report = JSON.parse(await readFile(path.join(root, "reports", "metricool-publication-reconciliation.json"), "utf8"));
+    assert.equal(report.analyticsRefresh.refreshed, 0);
+    assert.deepEqual(report.analyticsRefresh.errors, ["unknown_social_analytics_provider:nope"]);
+    assert.equal(fetched, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
