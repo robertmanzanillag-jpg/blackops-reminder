@@ -1,6 +1,6 @@
 import {FactoryApiBudgetError,factoryApiPriceSchema,type FactoryApiPrice} from "./factory-api-invocation";
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,requireFactoryCacheWritePrice} from "./factory-api-token-cost";
-import {readOpenAiCacheUsage,validateTextOutputTokenDetails,factoryResponseModelMatches,factoryUnconfirmedSubCause,logFactoryResponseShape} from "./factory-api-cache-usage";
+import {readOpenAiCacheUsage,validateTextOutputTokenDetails,factoryResponseModelMatches,factoryUnconfirmedSubCause,logFactoryResponseShape,failFactoryOpenAiHttpResponse,isFactoryOpenAiRequestRejected,FACTORY_OPENAI_REQUEST_REJECTED_PATTERN} from "./factory-api-cache-usage";
 /** Stateless text only. Trusted request must authenticate, honor AbortSignal,
  * and perform zero retries. Caller must durably reserve maxCostCents first and
  * retain that reservation on unknown; credits never discount ledger charges. */
@@ -63,7 +63,7 @@ export function createOpenAiFactoryTextProvider(config:{
   async function post(endpoint:string,payload:unknown,limit:number){
    if(controller.signal.aborted)throw Error("cancelled");
    const response=await c.request("https://api.openai.com/v1/responses"+endpoint,{method:"POST",redirect:"error",signal:controller.signal,headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-   if(!response.ok){await response.body?.cancel();throw Error("HTTP_ERROR");}
+   if(!response.ok)await failFactoryOpenAiHttpResponse("openai-provider",response,payload);
    const reader=response.body?.getReader();if(!reader)throw Error("empty");
    const chunks:Uint8Array[]=[];let size=0;
    for(;;){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>limit){await reader.cancel();throw Error("RESPONSE_TOO_LARGE");}chunks.push(part.value);}
@@ -117,6 +117,10 @@ export function createOpenAiFactoryTextProvider(config:{
   }catch(error){
    // The monetary gate refused before dispatching anything to OpenAI (budget,
    // pricing, parent fence, reconciliation): nothing executed or billed.
+   // OpenAI rejected the request with a not-billed 4xx/429: fail with the
+   // specific code at $0 (the transport already settled any hold at $0).
+   let rejected:string|undefined;try{const m=error instanceof Error?Object.getOwnPropertyDescriptor(error,"message")?.value:undefined;rejected=(isFactoryOpenAiRequestRejected(error)||(error instanceof FactoryApiBudgetError&&error.dispatched))&&typeof m==="string"&&FACTORY_OPENAI_REQUEST_REJECTED_PATTERN.test(m)?m:undefined;}catch{rejected=undefined;}
+   if(rejected)return {status:"blocked",reason:"FACTORY_OPENAI_REQUEST_REJECTED",costCents:0,cause:rejected};
    const cause=factoryBlockCause(error),held=(reason:string):FactoryTextResult=>cause?{status:"blocked",reason,costCents:0,cause}:blocked(reason);
    if(error instanceof FactoryApiBudgetError&&!error.dispatched&&error.message!=="FACTORY_API_EXECUTION_UNCONFIRMED")return held("FACTORY_OPENAI_ADMISSION_UNAVAILABLE");
    // Reserved by the monetary gate but failed before the provider request was

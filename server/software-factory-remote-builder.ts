@@ -1,3 +1,4 @@
+import { FACTORY_OPENAI_REQUEST_REJECTED_PATTERN } from "./factory-api-cache-usage";
 import { factoryPatchDiagnostics } from "./software-factory-builder";
 import { createGitHubFactoryChecks, type FactoryActionsClient, type FactoryActionsProfile } from "./software-factory-actions";
 import { createHash } from "node:crypto";
@@ -116,7 +117,7 @@ export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilder
             stopped();
             phase = "PATCH";
             if (!generated.patch && generated.diagnostic && factoryPatchDiagnostics.includes(generated.diagnostic))
-                return result("failed", `FACTORY_REMOTE_BUILD_FAILED:${generated.diagnostic}${typeof generated.cause === "string" && /^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(generated.cause) ? `:${generated.cause}` : ""}`);
+                return result("failed", `FACTORY_REMOTE_BUILD_FAILED:${generated.diagnostic}${typeof generated.cause === "string" && (/^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(generated.cause) || FACTORY_OPENAI_REQUEST_REJECTED_PATTERN.test(generated.cause)) ? `:${generated.cause}` : ""}`);
             const changedFiles = validateFactoryPublicationPatch(generated.patch);
             if (changedFiles.some(file => file.split("/")[0].toLowerCase() === ".github"))
                 throw Error("FACTORY_REMOTE_WORKFLOW_CHANGE");

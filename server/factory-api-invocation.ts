@@ -1,6 +1,6 @@
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,FactoryTokenCostError} from './factory-api-token-cost';
 import {currentFactoryApiParent} from "./factory-api-context";
-import {factoryResponseModelMatches,factoryUnconfirmedSubCause,logFactoryResponseShape,type FactoryUnconfirmedSubCause} from './factory-api-cache-usage';
+import {factoryResponseModelMatches,factoryUnconfirmedSubCause,logFactoryResponseShape,isFactoryOpenAiRequestRejected,type FactoryUnconfirmedSubCause} from './factory-api-cache-usage';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import type {FactoryApiReservation} from './software-factory-api-budget';
@@ -71,7 +71,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    signal.throwIfAborted();
    dispatched=true;
    let result:T;
-   try{result=await input.call({signal,maxRetries:0,timeout});}catch(error){throw Error(factoryUnconfirmedSubCause(error)??(signal.aborted?'CANCELLED':'TRANSPORT'));}
+   try{result=await input.call({signal,maxRetries:0,timeout});}catch(error){if(isFactoryOpenAiRequestRejected(error))throw error;throw Error(factoryUnconfirmedSubCause(error)??(signal.aborted?'CANCELLED':'TRANSPORT'));}
    if(signal.aborted)throw Error('CANCELLED');if(now().getTime()>=Date.parse(price.validUntil))throw Error("PRICING_EXPIRED");
    received={value:result};
    let usage:FactoryApiUsage;try{usage=input.usage(result);}catch(error){throw Error(factoryUnconfirmedSubCause(error)??'USAGE_INVALID');}
@@ -90,6 +90,14 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
     const released=await options.store.settleApi(owner,key,{actualMicroUsd:0,evidenceSha256:apiEvidenceHash({requestSha256,notDispatched:true})}).then(r=>r?.settled!==false,()=>false);
     if(!released)await options.store.unknownApi(owner,key).catch(()=>undefined);
     throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',false);
+   }
+   // OpenAI rejected the request (4xx validation/auth/429 quota or rate limit):
+   // an error object, no usage, nothing generated or billed. Settle at $0.
+   if(isFactoryOpenAiRequestRejected(error)){
+    const released=await options.store.settleApi(owner,key,{actualMicroUsd:0,evidenceSha256:apiEvidenceHash({requestSha256,rejected:error.message})}).then(r=>r?.settled!==false,()=>false);
+    if(released)throw new FactoryApiBudgetError(error.message,true);
+    await options.store.unknownApi(owner,key).catch(()=>undefined);
+    throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',true,'SETTLE_FAILED');
    }
    await options.store.unknownApi(owner,key).catch(()=>undefined);
    const subCause=factoryUnconfirmedSubCause(error)??'UNKNOWN';
