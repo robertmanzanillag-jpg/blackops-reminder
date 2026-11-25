@@ -127,7 +127,13 @@ has an unresolved unknown count). The amount always comes from an exact stored r
   receipt, at the conservative cost `ceil(sum of children microUSD / 10000)` cents (never more than the
   job's own reservation). It goes through the existing stopped reconciliation (`reconcile`, terminal
   `failed`, `executionStopped: true`), which also pauses the factory: resuming is a separate operator
-  step. A job with any unconfirmed child refuses the whole plan (`JOB_CHILD_UNCONFIRMED`).
+  step (`factory-resume`). A job with any unconfirmed child refuses the whole plan (`JOB_CHILD_UNCONFIRMED`).
 - Admission uses the effective unknown count (`effectiveFactoryApiUnknown`), which excludes
   resolved holds. Factory jobs in `unknown` still block. Code that predates `resolutions`
   rejects the new state (fails closed); external store adapters must add `resolveApiUnknown`.
+
+## Resume (`factory-resume`)
+
+Dry run by default; `confirm=APLICAR` clears the pause through `store.setPaused(owner, false)`, the same
+path as the owner web UI. Refuses (`FACTORY_JOB_UNKNOWN` / `FACTORY_API_UNKNOWN_HOLD`) while any job is
+`unknown` or the API authority reports an unknown hold. Logs booleans and counts only.
