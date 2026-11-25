@@ -127,7 +127,7 @@
     },
     {
       "path": "server/software-factory-openai-builder.ts",
-      "sha256": "9b7c8780839d5637e8131a9f5d7321ac63e89e25175bc9deff0059ab150d601f"
+      "sha256": "824d91bf2adef5cc466ce53470099dba44e90314de51e31e214711e129ef7d08"
     },
     {
       "path": "server/software-factory-openai-count.ts",
@@ -139,7 +139,7 @@
     },
     {
       "path": "server/software-factory-openai.ts",
-      "sha256": "dd91bf77ae213bc91949e3c6c37841f9152a4081396ef4c8c306cb2f21d88bb4"
+      "sha256": "fe82a0c3f67ce08b010dee396bee409276394f82034a907b0ae80f4d4422b64c"
     },
     {
       "path": "server/software-factory-pilot-review.ts",

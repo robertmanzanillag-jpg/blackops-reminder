@@ -103,7 +103,7 @@ export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilder
             stopped();
             phase = "PATCH";
             if (!generated.patch && generated.diagnostic && factoryPatchDiagnostics.includes(generated.diagnostic))
-                return result("failed", `FACTORY_REMOTE_BUILD_FAILED:${generated.diagnostic}`);
+                return result("failed", `FACTORY_REMOTE_BUILD_FAILED:${generated.diagnostic}${typeof generated.cause === "string" && /^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(generated.cause) ? `:${generated.cause}` : ""}`);
             const changedFiles = validateFactoryPublicationPatch(generated.patch);
             if (changedFiles.some(file => file.split("/")[0].toLowerCase() === ".github"))
                 throw Error("FACTORY_REMOTE_WORKFLOW_CHANGE");

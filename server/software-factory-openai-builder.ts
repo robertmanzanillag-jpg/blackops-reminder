@@ -76,6 +76,16 @@ function exactSourcePatch(files: readonly {path:string;text:string}[], response:
   const patch=patches.join("");return Buffer.byteLength(patch)>524288?diagnose("EDIT_LIMIT_EXCEEDED"):patch;
 }
 
+/** Every pre-dispatch provider hold keeps its own code (no generic PROVIDER_BLOCKED). */
+const BLOCKED_DIAGNOSTICS: Readonly<Record<string, FactoryPatchDiagnostic>> = {
+  FACTORY_OPENAI_INPUT_INVALID: "PROVIDER_INPUT_INVALID", FACTORY_OPENAI_CANCELLED: "PROVIDER_CANCELLED",
+  FACTORY_OPENAI_COUNT_UNAVAILABLE: "PROVIDER_COUNT_UNAVAILABLE", FACTORY_OPENAI_COUNT_INVALID: "PROVIDER_COUNT_INVALID",
+  FACTORY_OPENAI_INPUT_TIER_UNVERIFIED: "PROVIDER_INPUT_TIER_UNVERIFIED", FACTORY_OPENAI_BUDGET_UNAVAILABLE: "PROVIDER_BUDGET_UNAVAILABLE",
+  FACTORY_OPENAI_ADMISSION_EXPIRED: "PROVIDER_ADMISSION_EXPIRED", FACTORY_OPENAI_ADMISSION_UNAVAILABLE: "PROVIDER_ADMISSION_UNAVAILABLE",
+  FACTORY_OPENAI_CREDENTIAL_REJECTED: "PROVIDER_CREDENTIAL_REJECTED", FACTORY_OPENAI_RATE_LIMITED: "PROVIDER_RATE_LIMITED",
+  FACTORY_OPENAI_OVERLOADED: "PROVIDER_OVERLOADED", FACTORY_OPENAI_REQUEST_REJECTED: "PROVIDER_REQUEST_REJECTED",
+};
+
 /** Operator-owned file allowlist. Never accept paths or credentials from the
  * finding/model. Source has already been exported at the exact base commit. */
 export function createOpenAiFactoryPatchGenerator(options: {
@@ -153,8 +163,9 @@ export function createOpenAiFactoryPatchGenerator(options: {
         // Pre-dispatch pricing hold (no call, no spend): incomplete or expired
         // price profile, e.g. FACTORY_API_PRICING_CONFIG missing cache rates.
         result.status === "blocked" && (reason === "FACTORY_OPENAI_CACHE_PRICING_REQUIRED" || reason === "FACTORY_OPENAI_PRICING_EXPIRED") ? "PROVIDER_PRICING_UNVERIFIED" :
-        result.status === "blocked" ? "PROVIDER_BLOCKED" : "PROVIDER_FAILED";
-      return { patch: "", costCents: result.costCents, diagnostic };
+        result.status === "blocked" ? (BLOCKED_DIAGNOSTICS[reason] ?? "PROVIDER_BLOCKED") : "PROVIDER_FAILED";
+      const cause = result.status === "blocked" && typeof result.cause === "string" && /^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(result.cause) ? result.cause : undefined;
+      return { patch: "", costCents: result.costCents, diagnostic, ...(cause ? { cause } : {}) };
     }
     const text = result.text;
     const patch = patchMode === "exactSourceEdits" ? exactSourcePatch(contents,text,reason=>{diagnostic=reason;return "";},options.requireTestEdit===true) : patchMode === "plainTextEdits" ? plainTextPatch(contents[0].text, text, reason => { diagnostic = reason; return ""; }) : text && !text.endsWith("\n") ? `${text}\n` : text;
