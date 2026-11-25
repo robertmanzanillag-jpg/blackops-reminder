@@ -56,6 +56,7 @@ test("enqueue that throws before queueing releases the hold: ledger never become
     assert.equal(status.uncertain, false); assert.equal(status.reservedMicroUsd, 0); assert.equal(status.spentMicroUsd, 0);
     // Office admissions are not blocked by the failed factory admission.
     assert.equal((await f.ledger.reserve({ key: "office-after", consumer: "office", maximumMicroUsd: 1, requestSha256: "e".repeat(64) })).admitted, true);
+    await f.ledger.releaseUndispatched("office-after");
     fail = false;
     assert.equal((await createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input)).id, "job");
 });
