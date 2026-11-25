@@ -164,3 +164,25 @@ test("metricool calendar: converts NY local time and skips drafts/published", as
   const out = await metricoolScheduled(new Date("2026-11-25"), new Date("2026-11-26"), { token: "tttttttttttttt", userId: "1", fetcher: f });
   assert.ok(out.items.length >= 1 && out.items.every((i) => i.id === "1"));
 });
+
+test("agent API rejects missing or short tokens and accepts the configured one", async () => {
+  const { registerSocialHubRoutes } = await import("../server/social-hub/routes");
+  const routes: Record<string, any[]> = {};
+  const app: any = { get: (p: string, ...h: any[]) => { routes["GET " + p] = h; }, post: (p: string, ...h: any[]) => { routes["POST " + p] = h; } };
+  const hub: any = { list: () => [], metricsSince: () => [{ network: "facebook", externalId: "1" }] };
+  registerSocialHubRoutes(app, { hub: () => hub, isOwner: () => false, media: { put: async () => {}, get: async () => null } });
+  const call = async (auth?: string) => {
+    let status = 200, body: any;
+    const res: any = { status(c: number) { status = c; return res; }, json(b: any) { body = b; return res; }, set() { return res; } };
+    await routes["GET /social-hub-agent/metrics"].at(-1)({ headers: auth ? { authorization: auth } : {}, query: {} }, res);
+    return { status, body };
+  };
+  process.env.SOCIAL_HUB_AGENT_TOKEN = "short";
+  assert.equal((await call("Bearer short")).status, 401);
+  process.env.SOCIAL_HUB_AGENT_TOKEN = "a".repeat(40);
+  assert.equal((await call()).status, 401);
+  assert.equal((await call("Bearer " + "b".repeat(40))).status, 401);
+  const ok = await call("Bearer " + "a".repeat(40));
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.length, 1);
+});

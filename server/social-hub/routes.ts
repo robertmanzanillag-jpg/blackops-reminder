@@ -1,4 +1,5 @@
 // Owner-only HTTP API for the Social Hub. Factory/office agents call getSocialHub() in-process.
+import { timingSafeEqual } from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
 import { NETWORK_CAPABILITIES, SOCIAL_NETWORKS, type SocialNetwork, type SocialPostInput, type SocialPostStatus } from "@shared/social-hub";
 import { getCurrentUserId, getSystemUserId } from "../user-context";
@@ -132,5 +133,59 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to.getTime() - from.getTime() > 45 * 86_400_000) throw new Error("Rango de fechas inválido (máx. 45 días).");
     return metricoolScheduled(from, to);
   }));
+  // ---- Agent API (cloud workers: clippers, Black Room). Outside /api on purpose: no browser session,
+  // authenticated only by Bearer SOCIAL_HUB_AGENT_TOKEN (>= 32 chars, otherwise the API is off). ----
+  const agentAuth = (req: Request, res: Response): boolean => {
+    const expected = process.env.SOCIAL_HUB_AGENT_TOKEN || "";
+    const got = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    const a = Buffer.from(got), b = Buffer.from(expected);
+    if (expected.length < 32 || a.length !== b.length || !timingSafeEqual(a, b)) {
+      res.status(401).json({ error: "Agent token inválido o no configurado." });
+      return false;
+    }
+    return true;
+  };
+  const agentName = (v: unknown) => String(v || "").replace(/[^a-z0-9:_-]/gi, "").slice(0, 60) || "agent";
+  app.get("/social-hub-agent/accounts", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    await socialHubReady();
+    let tokens: ReturnType<typeof loadTokens> = [];
+    try { tokens = loadTokens(); } catch { tokens = []; }
+    res.json(tokens.map((t) => ({ network: t.network, accountId: t.accountId, label: t.label })));
+  });
+  app.post("/social-hub-agent/media", express.raw({ type: () => true, limit: MEDIA_MAX_BYTES }), async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    try {
+      const out = await saveUpload(media, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), String(req.headers["content-type"] ?? ""), decodeURIComponent(String(req.headers["x-filename"] ?? "clip")));
+      const base = (process.env.SOCIAL_HUB_PUBLIC_URL ?? `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+      res.json({ url: `${base}/social-hub-media/${out.id}`, kind: out.kind });
+    } catch (e) {
+      res.status(e instanceof MediaRejected ? 400 : 500).json({ error: e instanceof Error ? e.message : "No se pudo subir" });
+    }
+  });
+  app.post("/social-hub-agent/posts", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    try {
+      const { agent, ...input } = (req.body ?? {}) as any;
+      const post = await queueAgentSocialPost(`office:${agentName(agent)}`, input);
+      await kvFlushOrThrow();
+      res.json(post);
+    } catch (e) {
+      if (e instanceof SocialHubValidationError) return res.status(400).json({ error: e.message, problems: e.problems });
+      res.status(409).json({ error: e instanceof Error ? e.message : "Error" });
+    }
+  });
+  app.get("/social-hub-agent/posts", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    await socialHubReady();
+    const who = `office:${agentName(req.query.agent)}`;
+    res.json(getHub().list().filter((p) => p.createdBy === who).slice(-500));
+  });
+  app.get("/social-hub-agent/metrics", async (req, res) => {
+    if (!agentAuth(req, res)) return;
+    await socialHubReady();
+    const days = Math.min(90, Math.max(1, Number(req.query.days ?? 30)));
+    res.json(getHub().metricsSince(days));
+  });
   app.get("/api/social-hub/best-time", h((req) => ({ at: getHub().bestTime(String(req.query.networks ?? "instagram").split(",") as any).toISOString() })));
 }
