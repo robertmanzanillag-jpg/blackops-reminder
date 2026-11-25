@@ -107,7 +107,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "12e0a14cf2b371cc1dfd91e1c2e085412b39f9df3a04eea24053d0f295638435"
+      "sha256": "8170c08e8266eea51d7bbac95cafaee785452d639267174bf08f89cf0b97e036"
     },
     {
       "path": "server/software-factory-asistente-review.ts",
@@ -115,7 +115,7 @@
     },
     {
       "path": "server/software-factory-company-auto.ts",
-      "sha256": "627f86f2c6649ab539acf0c7a8b2edd59d1203dd094de6d8c99e7ccadc36bcaa"
+      "sha256": "41ea2e18b8db491cae92f65fd0cf0d82ec8135c6a2dd4fbe6f7c8a715f1e0996"
     },
     {
       "path": "server/software-factory-model-routes.ts",
