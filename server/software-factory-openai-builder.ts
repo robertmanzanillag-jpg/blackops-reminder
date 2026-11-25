@@ -150,6 +150,9 @@ export function createOpenAiFactoryPatchGenerator(options: {
         reason === "FACTORY_OPENAI_NOT_COMPLETED" ? "PROVIDER_NOT_COMPLETED" :
         reason === "FACTORY_OPENAI_REFUSAL" ? "PROVIDER_REFUSAL" :
         reason === "FACTORY_OPENAI_EMPTY_TEXT" ? "PROVIDER_EMPTY_TEXT" :
+        // Pre-dispatch pricing hold (no call, no spend): incomplete or expired
+        // price profile, e.g. FACTORY_API_PRICING_CONFIG missing cache rates.
+        result.status === "blocked" && (reason === "FACTORY_OPENAI_CACHE_PRICING_REQUIRED" || reason === "FACTORY_OPENAI_PRICING_EXPIRED") ? "PROVIDER_PRICING_UNVERIFIED" :
         result.status === "blocked" ? "PROVIDER_BLOCKED" : "PROVIDER_FAILED";
       return { patch: "", costCents: result.costCents, diagnostic };
     }

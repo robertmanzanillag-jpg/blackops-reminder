@@ -38,6 +38,11 @@ test("real KNOWN_TEST_FAILURE order selects test + allowlist + direct in-scope i
   assert.deepEqual(tiny, { status: "blocked", reason: "FACTORY_AUTO_SELECTION_SELF_HEAL_SCOPE_TOO_SMALL", costCents: 0 });
   const unreadable = await selector(6, async () => { throw Error("x"); })({ orderId: order.id, revision, orderText: order.text, baseSha: BASE, maxCostCents: 50, signal: new AbortController().signal });
   assert.deepEqual(unreadable, { status: "blocked", reason: "FACTORY_AUTO_SELECTION_SELF_HEAL_SOURCE_UNAVAILABLE", costCents: 0 });
+  // Oversized tests (e.g. tests/revenue-engine.test.ts ~402 kB on main) get a distinct terminal reason.
+  const huge = await selector(6, async () => { throw Error("FACTORY_SELECTION_SOURCE_TOO_LARGE"); })({ orderId: order.id, revision, orderText: order.text, baseSha: BASE, maxCostCents: 50, signal: new AbortController().signal });
+  assert.deepEqual(huge, { status: "blocked", reason: "FACTORY_AUTO_SELECTION_SELF_HEAL_SOURCE_TOO_LARGE", costCents: 0 });
+  const long = await selector(6, async () => "x".repeat(200001))({ orderId: order.id, revision, orderText: order.text, baseSha: BASE, maxCostCents: 50, signal: new AbortController().signal });
+  assert.deepEqual(long, { status: "blocked", reason: "FACTORY_AUTO_SELECTION_SELF_HEAL_SOURCE_TOO_LARGE", costCents: 0 });
 });
 
 test("tampered or other order text is not deterministic; missing test fails closed", async () => {

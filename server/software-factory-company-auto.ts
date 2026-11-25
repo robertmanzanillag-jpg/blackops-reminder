@@ -139,8 +139,10 @@ export function createFactoryOrderFileSelector(options: {
       if (paths.length > maxFiles) return blocked("FACTORY_AUTO_SELECTION_SELF_HEAL_SCOPE_TOO_SMALL");
       if (options.readText) {
         let source: string;
-        try { source = await options.readText(input.baseSha, selfHealTest, signal); if (typeof source !== "string" || source.length > 200000) throw Error(); }
-        catch { signal.throwIfAborted(); return blocked("FACTORY_AUTO_SELECTION_SELF_HEAL_SOURCE_UNAVAILABLE"); }
+        try { source = await options.readText(input.baseSha, selfHealTest, signal); if (typeof source !== "string" || source.length > 200000) throw Error("FACTORY_SELECTION_SOURCE_TOO_LARGE"); }
+        catch (error) { signal.throwIfAborted();
+          // Oversized tests (>200 kB) also exceed the builder's model context: a distinct, terminal reason.
+          return blocked((error as Error)?.message === "FACTORY_SELECTION_SOURCE_TOO_LARGE" ? "FACTORY_AUTO_SELECTION_SELF_HEAL_SOURCE_TOO_LARGE" : "FACTORY_AUTO_SELECTION_SELF_HEAL_SOURCE_UNAVAILABLE"); }
         for (const p of resolveDirectImports(selfHealTest, source, available)) { if (paths.length >= maxFiles) break; if (!paths.includes(p)) paths.push(p); }
       }
       let valid: string[];
