@@ -135,3 +135,18 @@ test("tiktok label falls back to display name when username is not granted", asy
   const rows = await completeOAuth(url.searchParams.get("state")!, "code", f);
   assert.deepEqual([rows[0].accountId, rows[0].label], ["oid_br", "Black Room"]);
 });
+
+test("uploads: only images/videos, served by id with byte ranges", async () => {
+  const { memoryMediaStore, saveUpload, serveMedia, MediaRejected } = await import("../server/social-hub/media");
+  const store = memoryMediaStore();
+  await assert.rejects(saveUpload(store, Buffer.from("x"), "text/html", "a.html"), MediaRejected);
+  const out = await saveUpload(store, Buffer.from("0123456789"), "video/mp4", "clip.mp4");
+  assert.equal(out.kind, "video");
+  assert.match(out.id, /^[A-Za-z0-9_-]{24}\.mp4$/);
+  const row = (await store.get(out.id))!;
+  assert.equal(serveMedia(row).status, 200);
+  const part = serveMedia(row, "bytes=2-5");
+  assert.equal(part.status, 206);
+  assert.equal(part.body.toString(), "2345");
+  assert.equal(part.headers["Content-Range"], "bytes 2-5/10");
+});

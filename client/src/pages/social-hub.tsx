@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BarChart3, CalendarDays, Check, Clock, Link2, Loader2, Megaphone, Send, X } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Link2, Loader2, Megaphone, Plus, Send, Upload, X } from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,12 @@ export default function SocialHubPage() {
 
   const accounts = connections.data?.connected ?? [];
   const publishingOn = networks.data?.publishingEnabled ?? false;
+  const [presetAt, setPresetAt] = useState<{ value: string; n: number } | null>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const pickSlot = (local: string) => {
+    setPresetAt((p) => ({ value: local, n: (p?.n ?? 0) + 1 }));
+    composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div className="min-h-screen bg-[#03060b] text-white">
@@ -84,7 +90,7 @@ export default function SocialHubPage() {
               <h1 className="text-2xl font-semibold">Publicar en todas tus redes</h1>
             </div>
           </div>
-          <Badge variant="outline" className={publishingOn ? "border-emerald-300/40 text-emerald-100" : "border-amber-300/40 text-amber-100"} data-testid="badge-publishing">
+          <Badge variant="outline" className={cn("md:mr-28", publishingOn ? "border-emerald-300/40 text-emerald-100" : "border-amber-300/40 text-amber-100")} data-testid="badge-publishing">
             {publishingOn ? "Publicación externa: activa" : "Publicación externa: apagada"}
           </Badge>
         </header>
@@ -96,13 +102,15 @@ export default function SocialHubPage() {
         )}
 
         <AccountsCard data={connections.data} loading={connections.isLoading} />
-        <div className="my-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <Composer accounts={accounts} />
-          <QueueCard posts={posts.data ?? []} loading={posts.isLoading} publishingOn={publishingOn} />
+        <div className="my-5">
+          <WeekCalendar posts={posts.data ?? []} onPick={pickSlot} />
         </div>
         <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <WeekCalendar posts={posts.data ?? []} />
-          <AnalyticsCard data={analytics.data} />
+          <div ref={composerRef}><Composer accounts={accounts} presetAt={presetAt} /></div>
+          <div className="space-y-5">
+            <QueueCard posts={posts.data ?? []} loading={posts.isLoading} publishingOn={publishingOn} />
+            <AnalyticsCard data={analytics.data} />
+          </div>
         </div>
       </main>
     </div>
@@ -147,7 +155,9 @@ function AccountsCard({ data, loading }: { data?: Connections; loading: boolean 
   );
 }
 
-function Composer({ accounts }: { accounts: Connections["connected"] }) {
+type Uploaded = { url: string; kind: "image" | "video"; name: string; preview: string };
+
+function Composer({ accounts, presetAt }: { accounts: Connections["connected"]; presetAt: { value: string; n: number } | null }) {
   const [brand, setBrand] = useState("kong");
   const [caption, setCaption] = useState("");
   const [mediaKind, setMediaKind] = useState<SocialMediaKind>("none");
@@ -157,6 +167,37 @@ function Composer({ accounts }: { accounts: Connections["connected"] }) {
   const [at, setAt] = useState("");
   const [title, setTitle] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [files, setFiles] = useState<Uploaded[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (presetAt) { setWhen("custom"); setAt(presetAt.value); } }, [presetAt]);
+  useEffect(() => {
+    if (!files.length) return;
+    setMediaKind(files.length > 1 ? "carousel" : files[0].kind);
+    setMediaUrls(files.map((f) => f.url).join("\n"));
+  }, [files]);
+
+  const upload = async (list: FileList | null) => {
+    if (!list?.length) return;
+    setUploading(true); setMsg(null);
+    try {
+      const added: Uploaded[] = [];
+      for (const file of Array.from(list)) {
+        const res = await fetch("/api/social-hub/media", { method: "POST", credentials: "include", headers: { "Content-Type": file.type || "application/octet-stream", "X-Filename": encodeURIComponent(file.name) }, body: file });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || `No se pudo subir ${file.name}`);
+        added.push({ url: j.url, kind: j.kind, name: file.name, preview: URL.createObjectURL(file) });
+      }
+      setFiles((f) => [...f, ...added]);
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
+  const removeFile = (url: string) => setFiles((f) => { const next = f.filter((x) => x.url !== url); if (!next.length) { setMediaKind("none"); setMediaUrls(""); } return next; });
 
   const chosen = accounts.filter((a) => selected.includes(a.network + ":" + a.accountId));
   const limit = chosen.length ? Math.min(...chosen.map((a) => NETWORK_CAPABILITIES[a.network].maxCaptionChars)) : null;
@@ -171,7 +212,7 @@ function Composer({ accounts }: { accounts: Connections["connected"] }) {
       };
       return (await apiRequest("POST", "/api/social-hub/posts", body)).json();
     },
-    onSuccess: (p: SocialPost) => { setMsg({ ok: true, text: `Programado para ${fmt(p.publishAt)}.` }); setCaption(""); setMediaUrls(""); refresh(); },
+    onSuccess: (p: SocialPost) => { setMsg({ ok: true, text: `Programado para ${fmt(p.publishAt)}.` }); setCaption(""); setMediaUrls(""); setFiles([]); setMediaKind("none"); refresh(); },
     onError: async (e) => setMsg({ ok: false, text: await errorText(e) }),
   });
 
@@ -215,9 +256,25 @@ function Composer({ accounts }: { accounts: Connections["connected"] }) {
           {limit !== null && <p className={cn("mt-1 text-xs", caption.length > limit ? "text-red-300" : "text-zinc-500")}>{caption.length} / {limit}</p>}
         </div>
 
-        {mediaKind !== "none" && (
-          <Textarea value={mediaUrls} onChange={(e) => setMediaUrls(e.target.value)} placeholder="URL pública del archivo (una por línea en carrusel)" rows={2} className="border-white/15 bg-black/40 text-white" data-testid="input-media-urls" />
-        )}
+        <div className="space-y-2">
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={(e) => upload(e.target.files)} data-testid="input-file" />
+          <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => fileInput.current?.click()} className="border-white/15 bg-black/40 text-white hover:bg-white/10" data-testid="button-upload">
+            {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}{uploading ? "Subiendo…" : "Subir foto o video"}
+          </Button>
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-2" data-testid="list-uploads">
+              {files.map((f) => (
+                <div key={f.url} className="relative h-20 w-20 overflow-hidden rounded-lg border border-white/15 bg-black">
+                  {f.kind === "image" ? <img src={f.preview} alt={f.name} className="h-full w-full object-cover" /> : <video src={f.preview} className="h-full w-full object-cover" muted />}
+                  <button type="button" onClick={() => removeFile(f.url)} className="absolute right-1 top-1 rounded-full bg-black/70 p-0.5" aria-label="Quitar" data-testid="button-remove-upload"><X className="h-3 w-3" /></button>
+                </div>
+              ))}
+            </div>
+          )}
+          {mediaKind !== "none" && files.length === 0 && (
+            <Textarea value={mediaUrls} onChange={(e) => setMediaUrls(e.target.value)} placeholder="…o pega la URL pública del archivo (una por línea en carrusel)" rows={2} className="border-white/15 bg-black/40 text-white" data-testid="input-media-urls" />
+          )}
+        </div>
         {chosen.some((a) => a.network === "youtube" || a.network === "reddit") && (
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título (YouTube / Reddit)" className="border-white/15 bg-black/40 text-white" data-testid="input-title" />
         )}
@@ -287,28 +344,57 @@ function QueueCard({ posts, loading, publishingOn }: { posts: SocialPost[]; load
   );
 }
 
-function WeekCalendar({ posts }: { posts: SocialPost[] }) {
+const pad = (n: number) => String(n).padStart(2, "0");
+const toLocalInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const SLOTS = [9, 12, 15, 18, 21];
+
+function WeekCalendar({ posts, onPick }: { posts: SocialPost[]; onPick: (local: string) => void }) {
+  const [offset, setOffset] = useState(0);
   const days = useMemo(() => {
-    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() + offset * 7);
     return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
-  }, []);
+  }, [offset]);
+  const now = Date.now();
   return (
     <Card className="border-white/10 bg-[#080d18]/88">
-      <CardHeader><CardTitle className="flex items-center gap-2 text-white"><CalendarDays className="h-5 w-5 text-violet-200" />Próximos 7 días</CardTitle></CardHeader>
-      <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        {days.map((d) => {
-          const items = posts.filter((p) => p.status !== "cancelled" && new Date(p.publishAt).toDateString() === d.toDateString());
-          return (
-            <div key={d.toISOString()} className="min-h-24 rounded-lg border border-white/10 bg-black/30 p-2">
-              <p className="mb-1 text-xs font-semibold text-zinc-300">{d.toLocaleDateString("es", { weekday: "short", day: "numeric" })}</p>
-              {items.map((p) => (
-                <p key={p.id} className="mb-1 truncate rounded bg-violet-500/15 px-1 text-[11px] text-violet-100" title={p.caption}>
-                  {new Date(p.publishAt).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })} {p.caption}
-                </p>
-              ))}
-            </div>
-          );
-        })}
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="flex items-center gap-2 text-white"><CalendarDays className="h-5 w-5 text-violet-200" />Calendario</CardTitle>
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="ghost" disabled={offset === 0} onClick={() => setOffset((o) => o - 1)} aria-label="Semana anterior" data-testid="button-week-prev"><ChevronLeft className="h-4 w-4" /></Button>
+          <span className="text-xs text-zinc-400">{days[0].toLocaleDateString("es", { day: "numeric", month: "short" })} – {days[6].toLocaleDateString("es", { day: "numeric", month: "short" })}</span>
+          <Button size="icon" variant="ghost" onClick={() => setOffset((o) => o + 1)} aria-label="Semana siguiente" data-testid="button-week-next"><ChevronRight className="h-4 w-4" /></Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-3 text-xs text-zinc-500">Toca una hora para armar una publicación en ese momento.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+          {days.map((d) => {
+            const items = posts.filter((p) => p.status !== "cancelled" && new Date(p.publishAt).toDateString() === d.toDateString()).sort((a, b) => a.publishAt.localeCompare(b.publishAt));
+            return (
+              <div key={d.toISOString()} className="rounded-lg border border-white/10 bg-black/30 p-2" data-testid={`calendar-day-${d.toISOString().slice(0, 10)}`}>
+                <p className="mb-2 text-xs font-semibold capitalize text-zinc-200">{d.toLocaleDateString("es", { weekday: "short", day: "numeric" })}</p>
+                {items.map((p) => (
+                  <div key={p.id} className="mb-1 rounded border border-violet-300/20 bg-violet-500/15 px-1.5 py-1 text-[11px] text-violet-100" title={p.caption}>
+                    <span className="font-semibold">{new Date(p.publishAt).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}</span>{" "}
+                    <span className="opacity-80">{p.results.map((r) => NETWORK_LABEL[r.network][0]).join("")}</span>
+                    <p className="truncate">{p.caption}</p>
+                  </div>
+                ))}
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {SLOTS.map((h) => {
+                    const slot = new Date(d); slot.setHours(h, 0, 0, 0);
+                    if (slot.getTime() < now) return null;
+                    return (
+                      <button key={h} type="button" onClick={() => onPick(toLocalInput(slot))} className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:border-violet-300/50 hover:text-white" data-testid={`slot-${d.toISOString().slice(0, 10)}-${h}`}>
+                        <Plus className="mr-0.5 inline h-2.5 w-2.5" />{pad(h)}:00
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
