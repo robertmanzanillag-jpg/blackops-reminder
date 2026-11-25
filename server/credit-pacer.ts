@@ -224,7 +224,7 @@ export function advanceCreditPacer(input: { state: unknown; snapshot: PacerSnaps
   return { state: stateSchema.parse({ version: 1, ledgers: Object.fromEntries(kept) }), alerts, pace };
 }
 
-export interface TaskEfficiency { taskType: PacerTaskType; count: number; avgMicroUsd: number; previousAvgMicroUsd: number | null; trend: "cheaper" | "same" | "pricier" | "new" }
+export interface TaskEfficiency { taskType: PacerTaskType; count: number; avgMicroUsd: number; previousAvgMicroUsd: number | null; previousCount: number; trend: "cheaper" | "same" | "pricier" | "new" }
 
 /**
  * Cost-efficiency signal: average cost per run of each task type over the last
@@ -243,7 +243,7 @@ export function taskEfficiency(ledger: CreditPacerLedgerState | undefined, today
     const recent = window(end - 7 * PACER_DAY_MS, end, type), earlier = window(end - 14 * PACER_DAY_MS, end - 7 * PACER_DAY_MS, type);
     if (!recent.count) continue;
     const trend = !earlier.count ? "new" : recent.avg < earlier.avg * 0.95 ? "cheaper" : recent.avg > earlier.avg * 1.05 ? "pricier" : "same";
-    result.push({ taskType: type, count: recent.count, avgMicroUsd: recent.avg, previousAvgMicroUsd: earlier.count ? earlier.avg : null, trend });
+    result.push({ taskType: type, count: recent.count, avgMicroUsd: recent.avg, previousAvgMicroUsd: earlier.count ? earlier.avg : null, previousCount: earlier.count, trend });
   }
   return result;
 }

@@ -41,6 +41,10 @@ export type AgentCareer = {
   vitality?: import("./agent-vitality").CareerVitality;
   /** Deterministic lessons from this agent's own measured job outcomes (shared/agent-self-improvement.ts). */
   learning?: import("./agent-self-improvement").AgentLearning;
+  /** Rendimiento por dólar (successful outputs per $), measured week over week. */
+  efficiency?: import("./agent-self-improvement").AgentEfficiency;
+  /** Bounded prompt/context shrink applied automatically from the efficiency trend. */
+  tuning?: import("./agent-self-improvement").EfficiencyTuning;
 };
 
 export type SkillSource = "academia" | "orden" | "leccion";
