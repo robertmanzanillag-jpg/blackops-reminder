@@ -32,6 +32,8 @@ const PUBLIC_API_PATHS = [
   "/api/blackroom-agent/metricool/schedule",
   // Bearer CLIPPERS_OFFICE_INGEST_TOKEN checked in the handler (server/clippers-office-ingest.ts).
   "/api/clippers/office-ingest",
+  // Social Hub OAuth return: protected by the one-time state minted in the owner-only /oauth/start (server/social-hub/oauth.ts).
+  "/api/social-hub/oauth/callback",
 ];
 
 // These device endpoints remain protected by the BlackRoom bearer token in
