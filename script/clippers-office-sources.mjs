@@ -32,9 +32,11 @@ export function buildClipMetrics(cloudPublish) {
     if (!observedAt) continue;
     const engagement = Object.fromEntries(ENGAGEMENT.map(k => [k, nonNegInt(o[k])]));
     if (ENGAGEMENT.some(k => engagement[k] === null)) engagementUnreported++;
-    records.push({ id: p.id, accountId: String(p.destinationKey || p.destination?.brandId || 'unknown').slice(0, 200), clipId: p.id,
-      publishedAt: typeof o.publishedAt === 'string' ? o.publishedAt.slice(0, 500) : null, views: o.views,
-      likes: engagement.likes ?? 0, comments: engagement.comments ?? 0, shares: engagement.shares ?? 0, saves: engagement.saves ?? 0 });
+    // Never invent data: an engagement metric Metricool did not report is omitted (optional in the schema), not 0.
+    const record = { id: p.id, accountId: String(p.destinationKey || p.destination?.brandId || 'unknown').slice(0, 200), clipId: p.id,
+      publishedAt: typeof o.publishedAt === 'string' ? o.publishedAt.slice(0, 500) : null, views: o.views };
+    for (const k of ENGAGEMENT) if (engagement[k] !== null) record[k] = engagement[k];
+    records.push(record);
     if (!generatedAt || observedAt > generatedAt) generatedAt = observedAt;
   }
   return { document: { generatedAt, records: records.slice(-10000) }, engagementUnreported };

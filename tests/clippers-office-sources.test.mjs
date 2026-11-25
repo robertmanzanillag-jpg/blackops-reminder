@@ -16,6 +16,9 @@ test('metrics only from real observations; unreported engagement is counted', ()
   assert.equal(document.records[0].views, 95);
   assert.equal(document.records[0].likes, 3);
   assert.equal(engagementUnreported, 1);
+  // Never invent data: engagement Metricool did not report is omitted, never stored as 0.
+  for (const k of ['likes', 'comments', 'shares', 'saves']) assert.equal(k in document.records[1], false, k);
+  assert.equal(document.records[0].comments, 0); // a real reported 0 is kept
   assert.equal(document.generatedAt, '2026-11-24T14:30:00.000Z');
   assert.deepEqual(buildClipMetrics({ posts: [] }).document, { generatedAt: null, records: [] });
 });
