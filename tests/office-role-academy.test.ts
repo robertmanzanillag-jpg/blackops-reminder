@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createRoleAcademyRunner,parseRoleAcademy,roleAcademySummary} from "../server/office-role-academy";
+import {createRoleAcademyRunner,parseRoleAcademy,roleAcademySummary,ROLE_ACADEMY_CURRICULUM_VERSION} from "../server/office-role-academy";
 import {roleFixtures} from "../server/office-role-curricula";
 const NOW=Date.parse("2026-11-06T12:00:00Z");
 function setup(){let time=NOW;const company:any={careers:{code:{generation:1}},academyJobs:[]};let state:any={roles:{version:1,roles:{}},tokens:{reservations:[]}};let chain=Promise.resolve();const calls:any[]=[];
@@ -49,4 +49,17 @@ test("owner domain pause skips commercial cohorts without changing their history
   await runner.tick();assert.equal(h.calls.length,4);assert.deepEqual(h.state().roleAcademy.jobs.slice(0,1),history);
   assert.equal(h.state().roleAcademy.jobs.at(-1).role,"revenue");
  }finally{if(previous===undefined)delete process.env.CEO_PAUSED_DOMAINS;else process.env.CEO_PAUSED_DOMAINS=previous;}
+});
+test("journal written under the previous curriculum digest still parses and the role re-plans under the current one",async()=>{
+ const h=setup(),OLD="1e29b3f76b6551945a2ee5e21b6d20f5e3a9af552e27c20bf8e61ec55da06d8d";
+ assert.notEqual(ROLE_ACADEMY_CURRICULUM_VERSION,OLD);
+ const stale={id:"11111111-1111-4111-8111-111111111111",fence:"22222222-2222-4222-8222-222222222222",role:"code",generation:1,fixtureId:"retired-fixture",curriculumVersion:OLD,startedAt:new Date(NOW-2*86400000).toISOString(),expiresAt:new Date(NOW-2*86400000+360000).toISOString(),status:"unknown",reason:"Interrupted evaluation; reconcile before retry."};
+ h.setState({...h.state(),roleAcademy:{version:1,jobs:[stale]}});
+ assert.equal(parseRoleAcademy(h.state().roleAcademy).jobs.length,1);
+ assert.equal(roleAcademySummary(h.state().roleAcademy).find(r=>r.role==="code")!.status,"pending");
+ await createRoleAcademyRunner({...h,dailyPairs:1}).tick();
+ const jobs=h.state().roleAcademy.jobs;assert.equal(jobs.length,2);assert.equal(h.calls.length,2);
+ assert.equal(jobs[1].curriculumVersion,ROLE_ACADEMY_CURRICULUM_VERSION);assert.equal(jobs[1].status,"completed");
+ assert.equal(roleAcademySummary(h.state().roleAcademy).find(r=>r.role==="code")!.completedPairs,1);
+ const bad=structuredClone(h.state().roleAcademy);bad.jobs[1].fixtureId="retired-fixture";assert.throws(()=>parseRoleAcademy(bad));
 });
