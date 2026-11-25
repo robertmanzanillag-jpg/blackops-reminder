@@ -4,6 +4,7 @@ import { NETWORK_CAPABILITIES, SOCIAL_NETWORKS, type SocialNetwork, type SocialP
 import { getCurrentUserId, getSystemUserId } from "../user-context";
 import { envCredentialStore, listEnvAccounts } from "./providers";
 import { buildAuthUrl, completeOAuth, loadTokens, oauthConfigured, oauthCredentialStore, OAUTH_APPS, removeToken, tokenStoreStatus } from "./oauth";
+import { metricoolScheduled } from "./metricool-calendar";
 import { MEDIA_MAX_BYTES, MediaRejected, postgresMediaStore, saveUpload, serveMedia, type MediaStore } from "./media";
 import { hydrateSocialHub, kvFlush, kvFlushOrThrow, kvStatus } from "./persist";
 import { persistentSocialHubStore, SocialHub, SocialHubValidationError } from "./scheduler";
@@ -124,5 +125,12 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
       res.status(out.status).set(out.headers).end(out.body);
     } catch { res.status(500).end(); }
   });
+  // Read-only: what Metricool still has scheduled, shown in the calendar during the migration.
+  app.get("/api/social-hub/metricool", h(async (req) => {
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date();
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date(Date.now() + 7 * 86_400_000);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to.getTime() - from.getTime() > 45 * 86_400_000) throw new Error("Rango de fechas inválido (máx. 45 días).");
+    return metricoolScheduled(from, to);
+  }));
   app.get("/api/social-hub/best-time", h((req) => ({ at: getHub().bestTime(String(req.query.networks ?? "instagram").split(",") as any).toISOString() })));
 }

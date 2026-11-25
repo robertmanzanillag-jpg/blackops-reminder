@@ -150,3 +150,17 @@ test("uploads: only images/videos, served by id with byte ranges", async () => {
   assert.equal(part.body.toString(), "2345");
   assert.equal(part.headers["Content-Range"], "bytes 2-5/10");
 });
+
+test("metricool calendar: converts NY local time and skips drafts/published", async () => {
+  const { zonedToIso, metricoolScheduled } = await import("../server/social-hub/metricool-calendar");
+  assert.equal(zonedToIso("2026-11-25T11:00:00", "America/New_York"), "2026-11-25T16:00:00.000Z");
+  assert.equal(zonedToIso("2026-07-01T11:00:00", "America/New_York"), "2026-07-01T15:00:00.000Z");
+  const rows = [
+    { id: 1, publicationDate: { dateTime: "2026-11-25T11:00:00", timezone: "America/New_York" }, text: "a", providers: [{ network: "tiktok", status: "PENDING" }] },
+    { id: 2, publicationDate: { dateTime: "2026-11-25T12:00:00", timezone: "America/New_York" }, text: "b", draft: true, providers: [] },
+    { id: 3, publicationDate: { dateTime: "2026-11-25T13:00:00", timezone: "America/New_York" }, text: "c", providers: [{ network: "facebook", status: "PUBLISHED" }] },
+  ];
+  const f = (async () => new Response(JSON.stringify({ data: rows }), { status: 200 })) as any;
+  const out = await metricoolScheduled(new Date("2026-11-25"), new Date("2026-11-26"), { token: "tttttttttttttt", userId: "1", fetcher: f });
+  assert.ok(out.items.length >= 1 && out.items.every((i) => i.id === "1"));
+});
