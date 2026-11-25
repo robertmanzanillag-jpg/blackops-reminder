@@ -1,5 +1,8 @@
 export const factoryPatchDiagnostics = [
   "PROVIDER_OUTPUT_LIMIT", "PROVIDER_INCOMPLETE", "PROVIDER_RESPONSE_CANCELLED", "PROVIDER_RESPONSE_FAILED", "PROVIDER_NOT_COMPLETED", "PROVIDER_REFUSAL", "PROVIDER_EMPTY_TEXT", "PROVIDER_BLOCKED", "PROVIDER_PRICING_UNVERIFIED", "PROVIDER_FAILED",
+  // Specific pre-dispatch holds (no provider generation, no spend).
+  "PROVIDER_INPUT_INVALID", "PROVIDER_CANCELLED", "PROVIDER_COUNT_UNAVAILABLE", "PROVIDER_COUNT_INVALID", "PROVIDER_INPUT_TIER_UNVERIFIED",
+  "PROVIDER_BUDGET_UNAVAILABLE", "PROVIDER_ADMISSION_EXPIRED", "PROVIDER_ADMISSION_UNAVAILABLE", "PROVIDER_CREDENTIAL_REJECTED", "PROVIDER_RATE_LIMITED", "PROVIDER_OVERLOADED", "PROVIDER_REQUEST_REJECTED",
   "EDIT_PATH_NOT_ALLOWED", "OVERLAPPING_EDITS", "EDIT_LIMIT_EXCEEDED", "MALFORMED_JSON", "INVALID_EDIT_SHAPE", "INVALID_EDIT_TEXT", "NONUNIQUE_EDIT", "NON_TEXT_EDIT", "UNSUPPORTED_SOURCE", "EMPTY_PATCH", "TEST_EDIT_REQUIRED",
 ] as const;
 export type FactoryPatchDiagnostic = typeof factoryPatchDiagnostics[number];
@@ -25,7 +28,7 @@ export interface FactoryBuilderDependencies {
   // Trusted control-plane adapters only. Never load these from project code.
   // Export only tracked source at EXACT sha, without git metadata/credentials.
   exportSource?: (repository: string, sha: string, destination: string) => Promise<{ sha: string }>;
-  generatePatch?: (input: FactoryBuildInput, context: { workspace: string; maxCostCents: number; signal?: AbortSignal }) => Promise<{ patch: string; costCents: number; diagnostic?: FactoryPatchDiagnostic }>;
+  generatePatch?: (input: FactoryBuildInput, context: { workspace: string; maxCostCents: number; signal?: AbortSignal }) => Promise<{ patch: string; costCents: number; diagnostic?: FactoryPatchDiagnostic; cause?: string }>;
   runIsolated?: (command: IsolatedCommand) => Promise<void>;
   publishPullRequest?: (input: { repository: string; baseSha: string; patch: string; expectedPatchSha256: string }) => Promise<{ headSha: string; prUrl: string; appliedPatchSha256: string }>;
 }

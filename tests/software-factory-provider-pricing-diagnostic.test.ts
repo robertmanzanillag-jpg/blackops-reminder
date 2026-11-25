@@ -18,6 +18,6 @@ test("pre-dispatch pricing holds surface PROVIDER_PRICING_UNVERIFIED instead of 
   assert.ok((factoryPatchDiagnostics as readonly string[]).includes("PROVIDER_PRICING_UNVERIFIED"));
   for (const reason of ["FACTORY_OPENAI_CACHE_PRICING_REQUIRED", "FACTORY_OPENAI_PRICING_EXPIRED", "FACTORY_ANTHROPIC_PRICING_EXPIRED"])
     assert.deepEqual(await run({ status: "blocked", reason, costCents: 0 }), { patch: "", costCents: 0, diagnostic: "PROVIDER_PRICING_UNVERIFIED" });
-  assert.deepEqual(await run({ status: "blocked", reason: "FACTORY_OPENAI_INPUT_TIER_UNVERIFIED", costCents: 0 }), { patch: "", costCents: 0, diagnostic: "PROVIDER_BLOCKED" });
+  assert.deepEqual(await run({ status: "blocked", reason: "FACTORY_OPENAI_INPUT_TIER_UNVERIFIED", costCents: 0 }), { patch: "", costCents: 0, diagnostic: "PROVIDER_INPUT_TIER_UNVERIFIED" });
   assert.deepEqual(await run({ status: "failed", reason: "FACTORY_OPENAI_PRICING_EXPIRED", costCents: 0 }), { patch: "", costCents: 0, diagnostic: "PROVIDER_FAILED" });
 });

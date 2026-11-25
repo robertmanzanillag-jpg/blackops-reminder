@@ -6,7 +6,12 @@ import {readOpenAiCacheUsage,validateTextOutputTokenDetails} from "./factory-api
  * retain that reservation on unknown; credits never discount ledger charges. */
 export type FactoryTextResult =
  | {status:"completed";text:string;costCents:number;inputTokens:number;outputTokens:number}
- | {status:"blocked"|"failed"|"unknown";reason:string;costCents:number};
+ | {status:"blocked"|"failed"|"unknown";reason:string;costCents:number;
+    /** Pre-dispatch only: the code-owned refusal behind a generic hold
+     * (e.g. FACTORY_API_RECONCILIATION_REQUIRED). Never exception text. */
+    cause?:string};
+/** Only code-shaped messages are surfaced; arbitrary exception text never is. */
+export const factoryBlockCause=(error:unknown)=>{try{const m=error instanceof Error?Object.getOwnPropertyDescriptor(error,"message")?.value:undefined;return typeof m==="string"&&/^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(m)?m:undefined;}catch{return undefined;}};
 export function createOpenAiFactoryTextProvider(config:{
  request:(url:string,init:RequestInit)=>Promise<Response>;
  model:string;
@@ -106,8 +111,9 @@ export function createOpenAiFactoryTextProvider(config:{
   }catch(error){
    // The monetary gate refused before dispatching anything to OpenAI (budget,
    // pricing, parent fence, reconciliation): nothing executed or billed.
-   if(error instanceof FactoryApiBudgetError&&!error.dispatched&&error.message!=="FACTORY_API_EXECUTION_UNCONFIRMED")return blocked("FACTORY_OPENAI_ADMISSION_UNAVAILABLE");
-   return submitted?{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0}:blocked("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
+   const cause=factoryBlockCause(error),held=(reason:string):FactoryTextResult=>cause?{...blocked(reason),cause}:blocked(reason);
+   if(error instanceof FactoryApiBudgetError&&!error.dispatched&&error.message!=="FACTORY_API_EXECUTION_UNCONFIRMED")return held("FACTORY_OPENAI_ADMISSION_UNAVAILABLE");
+   return submitted?{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0}:held("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
   finally{clearTimeout(timer);input.signal.removeEventListener("abort",abort);}
  };
 }
