@@ -104,3 +104,10 @@ test("a live desk lease shows Trabajando; a completed review shows En espera", (
   const done: any = { ...emptyCouncilState(), officeExecution: { deskWork: { version: 1, jobs: [{ role: "kong:Venues", status: "completed", startedAt: iso(NOW - H), completedAt: iso(NOW - H + 1000) }] } } };
   assert.equal(deriveAgentStatus("kong:Venues", done, NOW).state, "en_espera");
 });
+
+test("malformed desk journal is tolerated by the runner read (never bricks the cycle)", async () => {
+  const { readDeskWork } = await import("../server/office-desk-work");
+  assert.deepEqual(readDeskWork(undefined), { version: 1, jobs: [] });
+  assert.deepEqual(readDeskWork({ version: 2, jobs: "x" }), { version: 1, jobs: [] });
+  assert.deepEqual(readDeskWork({ version: 1, jobs: [{ role: "nope" }] }), { version: 1, jobs: [] });
+});

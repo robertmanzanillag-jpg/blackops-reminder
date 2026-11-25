@@ -401,7 +401,15 @@ function parseDurableCouncilState(raw: string | null, owner: string): CouncilSta
     parseFactoryCareerLedger(value.officeExecution.factoryCareers);
     parseSelfHealState(value.officeExecution.selfHeal,owner);
     parseCreditPacerState(value.officeExecution.creditPacer);
-    parseDeskWork(value.officeExecution.deskWork);
+    // Desk work is an advisory journal: a malformed one is dropped, never allowed to brick the cycle.
+    if (value.officeExecution.deskWork !== undefined) {
+      try { parseDeskWork(value.officeExecution.deskWork); }
+      catch (error) {
+        console.warn("[agent-council] dropping invalid desk work journal:", error instanceof Error ? error.message : error);
+        delete value.officeExecution.deskWork;
+        raw = JSON.stringify(value);
+      }
+    }
   }
   return parseCouncilState(raw);
 }

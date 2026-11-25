@@ -79,6 +79,11 @@ export function parseDeskWork(value: unknown): DeskWorkState {
   return { version: 1, jobs };
 }
 
+/** Tolerant read for the runner: an invalid journal resets to empty instead of failing every tick. */
+export function readDeskWork(value: unknown): DeskWorkState {
+  try { return parseDeskWork(value); } catch { return { version: 1, jobs: [] }; }
+}
+
 export function deskArtifactId(job: Pick<DeskWorkJob, "id" | "role" | "fence" | "status" | "reason" | "audit" | "deliverable">): string {
   return digest({ id: job.id, role: job.role, fence: job.fence, status: job.status, reason: job.reason ?? null, audit: job.audit, deliverable: job.deliverable });
 }
@@ -146,7 +151,7 @@ export function createDeskWorkRunner(options: { council: Council; readSources: (
       const assigned: DeskWorkJob[] = [];
       await options.council.updateOfficeExecution(execution => {
         assigned.length = 0;
-        const journal = parseDeskWork(execution.deskWork);
+        const journal = readDeskWork(execution.deskWork);
         const jobs = journal.jobs.map(j => j.status === "running" && ms(j.expiresAt) <= start ? { ...j, status: "unknown" as const, reason: "expired_no_automatic_retry" as const } : j);
         for (const role of roles) {
           if (jobs.some(j => j.role === role && (j.slot === slot || j.status === "running"))) continue;
