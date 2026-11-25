@@ -100,6 +100,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - name: Mask the API evidence note
+        # Public logs echo each step's env; mask the evidence text before any step receives it.
+        # Read from the event payload (never inlined into the script) so the note cannot inject shell.
+        if: inputs.action == 'api-checkpoint'
+        run: |
+          evidence="$(jq -r '.inputs.api_evidence // ""' "$GITHUB_EVENT_PATH")"
+          if [ -n "${evidence//[[:space:]]/}" ]; then echo "::add-mask::$evidence"; fi
       - name: Refuse an unconfirmed apply
         if: (inputs.action == 'migrate-apply' || inputs.action == 'sources-migrate-apply' || inputs.action == 'credit-new') && inputs.confirm != 'APLICAR'
         run: |
