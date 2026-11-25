@@ -31,7 +31,8 @@ async function main() {
     if (!state.configured) throw Error("FACTORY_ONCE_NOT_CONFIGURED");
     if (state.paused) { console.log(JSON.stringify({ reason: "paused", progressed: 0 })); return; }
     phase = "execution";
-    const result = await runSoftwareFactoryOnce(createSoftwareFactoryWorker({ ...config, store, scheduleOwner: owner }), { signal: shutdown.signal, maxStages: 4, durationMs: 30 * 60 * 1000 });
+    const result = await runSoftwareFactoryOnce(createSoftwareFactoryWorker({ ...config, store, scheduleOwner: owner }), { signal: shutdown.signal, maxStages: 4, durationMs: 30 * 60 * 1000,
+      onFailure: (stage, error) => console.error(JSON.stringify(factoryOnceFailure(error, "execution", stage))) });
     console.log(JSON.stringify(result));
     if (["quarantined", "aborted"].includes(result.reason)) process.exitCode = 1;
   } finally {
