@@ -292,7 +292,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     const selectFiles = createFactoryOrderFileSelector({ ledger: credits.ledger, model, routes: routesFor(model), roots: config.writeRoots, maxFiles: config.maxFilesPerOrder, maxOutputTokens: config.maxOutputTokens,
         listPaths: (baseSha, signal) => listFactorySelectablePaths(client, baseSha, config.writeRoots, signal),
         readText: async (baseSha, path, signal) => { signal.throwIfAborted(); const data = (await client.repos.getContent({ owner: "robertmanzanillag-jpg", repo: "blackops-reminder", path, ref: baseSha })).data as { encoding?: string; content?: string; size?: number };
-            if (data.encoding !== "base64" || typeof data.content !== "string" || !Number.isSafeInteger(data.size) || data.size! > 200000) throw Error("FACTORY_SELECTION_SOURCE_INVALID");
+            if (Number.isSafeInteger(data.size) && data.size! > 200000) throw Error("FACTORY_SELECTION_SOURCE_TOO_LARGE");
+            if (data.encoding !== "base64" || typeof data.content !== "string" || !Number.isSafeInteger(data.size)) throw Error("FACTORY_SELECTION_SOURCE_INVALID");
             const bytes = Buffer.from(data.content.replace(/\s/g, ""), "base64"); if (bytes.length !== data.size) throw Error("FACTORY_SELECTION_SOURCE_INVALID");
             return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); } });
     const discover = createCompanyOrderDiscovery({ readMainOrder: id => readMainOrder(owner, id), resolveHead: async (repo, signal) => { signal.throwIfAborted(); if (repo !== ASISTENTE_REPOSITORY)

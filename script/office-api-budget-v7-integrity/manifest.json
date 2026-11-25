@@ -107,7 +107,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "8170c08e8266eea51d7bbac95cafaee785452d639267174bf08f89cf0b97e036"
+      "sha256": "95f77205fbcca3f3765f7b6fd043734230bf647fa69f5a865a247b47aa93760a"
     },
     {
       "path": "server/software-factory-asistente-review.ts",
@@ -115,7 +115,7 @@
     },
     {
       "path": "server/software-factory-company-auto.ts",
-      "sha256": "41ea2e18b8db491cae92f65fd0cf0d82ec8135c6a2dd4fbe6f7c8a715f1e0996"
+      "sha256": "9c134480af7081f04fbadc0300e1690a3de99bd96ec3c08969d97ad09261c327"
     },
     {
       "path": "server/software-factory-model-routes.ts",
@@ -127,7 +127,7 @@
     },
     {
       "path": "server/software-factory-openai-builder.ts",
-      "sha256": "3b27afeb6e30a5d87a2a7d1645f060574f1bde76c92e8195105d1cf924529259"
+      "sha256": "9b7c8780839d5637e8131a9f5d7321ac63e89e25175bc9deff0059ab150d601f"
     },
     {
       "path": "server/software-factory-openai-count.ts",
