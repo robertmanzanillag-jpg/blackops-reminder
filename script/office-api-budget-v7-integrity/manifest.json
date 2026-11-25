@@ -31,7 +31,7 @@
     },
     {
       "path": "server/ai-provider-credit-cooldown.ts",
-      "sha256": "1330ab7409dda377d20a9bb772a853b06b992973f644a8b3ef1b86d7fa968371"
+      "sha256": "4a3d4e35764f7de97f742095bc1b3d86041bb078b170b24b4abad6437ae54f6a"
     },
     {
       "path": "server/clippers-local-news-translation.ts",
@@ -63,11 +63,11 @@
     },
     {
       "path": "server/office-anthropic-credits.ts",
-      "sha256": "70ba35d3df1588738ac65110e7d00ec2f3690abce31f1fb36a7dedcb64d046f4"
+      "sha256": "e6eb479d56023134c623975b1d71bb41fff264eb3924108e02209ec938b57ac1"
     },
     {
       "path": "server/office-execution.ts",
-      "sha256": "1c1e12a558c2d741588fc31463446f99232b7d8eb8c1b0dbd1ec9e3da59118ec"
+      "sha256": "f54ce77563d333d5666546dfe463b4a9d2a3a8344a38275089f2a252ccbee722"
     },
     {
       "path": "server/office-openai.ts",
@@ -107,7 +107,7 @@
     },
     {
       "path": "server/software-factory-anthropic.ts",
-      "sha256": "ebbac1f02db3d905e23493194921a4d5381fe4c8251aa36fb6a87f890a6be97d"
+      "sha256": "c81bc133b72788f631cb1cd4414e8f5a52a77f4606d34c708856572f73e03bf1"
     },
     {
       "path": "server/software-factory-api-budget.ts",
@@ -119,7 +119,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "f5c80eb43e6f9f39d20e1056d509026bca5f42d090d6bcab06feb11873627eed"
+      "sha256": "3d0c8461926a5f0db9cd3263754bda8f211bc0df7489dc376611fb12fdb5e41b"
     },
     {
       "path": "server/software-factory-asistente-review.ts",

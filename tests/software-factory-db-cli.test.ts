@@ -80,7 +80,7 @@ test("stopped jobs expose only kind, status, reason code and self-heal origin", 
   ]);
   assert.deepEqual(rows, [
     { status: "failed", kind: "build", reason: "FACTORY_AUTO_SELECTION_TEST_PATH_REQUIRED", selfHealOrder: true, createdAt: "2026-11-20T10:00:00.000Z", completedAt: null },
-    { status: "blocked", kind: "discover", reason: "UNSPECIFIED", selfHealOrder: false, createdAt: "2026-11-21T10:00:00.000Z", completedAt: "2026-11-21T10:05:00.000Z" },
-    { status: "failed", kind: "unknown", reason: "UNSPECIFIED", selfHealOrder: false, createdAt: null, completedAt: null },
+    { status: "blocked", kind: "discover", reason: "FACTORY_REASON_FREE_TEXT", selfHealOrder: false, createdAt: "2026-11-21T10:00:00.000Z", completedAt: "2026-11-21T10:05:00.000Z" },
+    { status: "failed", kind: "unknown", reason: "FACTORY_REASON_NOT_RECORDED", selfHealOrder: false, createdAt: null, completedAt: null },
   ]);
 });
