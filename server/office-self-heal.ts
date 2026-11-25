@@ -123,7 +123,16 @@ export type SelfHealObservedAudit = {
   role: string; jobId: string; completedAt: string; status: "completed" | "blocked"; completeCoverage: boolean; artifactId: string;
   findings: Array<{ code: string; recordId: string | null }>;
   records: Record<string, SelfHealAuditRecord>;
+  /** Record ids the source deliberately stopped ordering (outside factory rules): never "cleared" by absence. */
+  outOfScope?: Record<string, string>;
 };
+
+const OUT_OF_SCOPE = /^SELF_HEAL_OUT_OF_SCOPE_[A-Z_]{1,40}$/;
+/** Out-of-scope reason for this entry in the audit, if the source flagged it. */
+function outOfScopeReason(audit: SelfHealObservedAudit, recordId: string | null): string | undefined {
+  const r = recordId && audit.outOfScope && Object.prototype.hasOwnProperty.call(audit.outOfScope, recordId) ? audit.outOfScope[recordId] : undefined;
+  return typeof r === "string" && OUT_OF_SCOPE.test(r) ? r : undefined;
+}
 
 type JournalJob = { id?: unknown; role?: unknown; status?: unknown; completedAt?: unknown; artifactId?: unknown; audit?: any; webAudit?: any; source?: any };
 
@@ -283,6 +292,8 @@ function advance(entry: SelfHealEntry, audits: readonly SelfHealObservedAudit[],
   // The problem disappeared before any fix was proposed: verified by re-audit, nothing to merge.
   if (f?.state !== "proposal") {
     const later = after(a.createdAt, entry.role).at(-1);
+    const oos = later && outOfScopeReason(later, entry.recordId);
+    if (oos) return { ...out, status: "escalated", reason: oos };
     if (later && !later.findings.some(x => x.code === entry.code && x.recordId === entry.recordId)) { a.outcome = "cleared"; return { ...out, status: "cleared" }; }
   }
   if (!f) return now - Date.parse(a.createdAt) > SELF_HEAL_FACTORY_ADMISSION_WAIT_MS ? { ...out, status: "needs_owner", reason: "FACTORY_NOT_ADMITTED" } : { ...out, status: "ordered" };
@@ -393,7 +404,7 @@ export function planSelfHeal(input: { state: unknown; company: CompanyState; jou
   let entries = state.entries.map(entry => {
     if (entry.status === "escalated") {
       const later = audits.filter(x => x.role === entry.role && x.status === "completed" && Date.parse(x.completedAt) > Date.parse(entry.updatedAt)).at(-1);
-      return later && !later.findings.some(x => x.code === entry.code && x.recordId === entry.recordId) ? { ...entry, status: "cleared" as const, updatedAt: iso } : entry;
+      return later && !outOfScopeReason(later, entry.recordId) && !later.findings.some(x => x.code === entry.code && x.recordId === entry.recordId) ? { ...entry, status: "cleared" as const, updatedAt: iso } : entry;
     }
     const next = advance(entry, audits, now);
     return JSON.stringify(next) === JSON.stringify(entry) ? entry : { ...next, updatedAt: iso };

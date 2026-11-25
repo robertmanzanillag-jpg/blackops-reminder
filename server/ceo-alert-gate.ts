@@ -77,6 +77,8 @@ const SELF_HEAL_NEEDS_OWNER = new Set(["needs_owner", "escalated"]);
 
 const SELF_HEAL_OWNER_ACTIONS: Record<string, string> = {
   FACTORY_NOT_ADMITTED: "La fábrica no aceptó la orden en 72 h. Revisa que la fábrica esté encendida (software-factory-cloud) y que tenga cupo diario.",
+  SELF_HEAL_OUT_OF_SCOPE_OVERSIZE: "El test es demasiado grande para la fábrica (>192 kB). Divídelo en archivos más pequeños o arréglalo a mano; la fábrica no lo reintentará.",
+  SELF_HEAL_OUT_OF_SCOPE_UNFIXABLE: "Este test no se puede arreglar con las reglas de la fábrica (paquete faltante, cuelgue o herramienta del Mac). Decide si se arregla a mano o se elimina del allowlist.",
   FACTORY_OUTCOME_UNKNOWN: "No puedo leer el resultado de la fábrica. Revisa la última ejecución de software-factory-cloud en GitHub Actions.",
 };
 
