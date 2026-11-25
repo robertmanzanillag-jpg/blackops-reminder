@@ -17,6 +17,7 @@ type Connections = {
   storage?: { backend: string; lastWriteError: { message: string } | null };
 };
 type Networks = { publishingEnabled: boolean };
+type MetricoolItem = { id: string; brand: string; publishAt: string; text: string; networks: string[]; statuses: string[]; media: string[] };
 type Analytics = {
   byNetwork: Record<string, { posts: number; views: number; likes: number; comments: number; shares: number; engagement: number }>;
   topPosts: Array<{ network: SocialNetwork; externalId: string; engagement: number; views: number }>;
@@ -355,6 +356,13 @@ function WeekCalendar({ posts, onPick }: { posts: SocialPost[]; onPick: (local: 
     return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
   }, [offset]);
   const now = Date.now();
+  const rangeFrom = days[0].toISOString();
+  const rangeTo = new Date(days[6].getTime() + 86_400_000).toISOString();
+  const mc = useQuery<{ items: MetricoolItem[]; errors: string[]; configured: boolean }>({
+    queryKey: [`/api/social-hub/metricool?from=${encodeURIComponent(rangeFrom)}&to=${encodeURIComponent(rangeTo)}`],
+    staleTime: 5 * 60_000,
+  });
+  const [showMc, setShowMc] = useState(true);
   return (
     <Card className="border-white/10 bg-[#080d18]/88">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -366,10 +374,18 @@ function WeekCalendar({ posts, onPick }: { posts: SocialPost[]; onPick: (local: 
         </div>
       </CardHeader>
       <CardContent>
-        <p className="mb-3 text-xs text-zinc-500">Toca una hora para armar una publicación en ese momento.</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-zinc-500">Toca una hora para armar una publicación en ese momento.</p>
+          <label className="flex items-center gap-2 text-xs text-zinc-400">
+            <input type="checkbox" checked={showMc} onChange={(e) => setShowMc(e.target.checked)} data-testid="toggle-metricool" />
+            Mostrar lo agendado en Metricool {mc.isLoading ? "(cargando…)" : mc.data?.configured ? `(${mc.data.items.length})` : "(sin conexión)"}
+          </label>
+        </div>
+        {mc.data?.errors?.length ? <p className="mb-2 text-xs text-amber-300">Metricool: {mc.data.errors.join(" · ")}</p> : null}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
           {days.map((d) => {
             const items = posts.filter((p) => p.status !== "cancelled" && new Date(p.publishAt).toDateString() === d.toDateString()).sort((a, b) => a.publishAt.localeCompare(b.publishAt));
+            const mcItems = showMc ? (mc.data?.items ?? []).filter((m) => new Date(m.publishAt).toDateString() === d.toDateString()) : [];
             return (
               <div key={d.toISOString()} className="rounded-lg border border-white/10 bg-black/30 p-2" data-testid={`calendar-day-${d.toISOString().slice(0, 10)}`}>
                 <p className="mb-2 text-xs font-semibold capitalize text-zinc-200">{d.toLocaleDateString("es", { weekday: "short", day: "numeric" })}</p>
@@ -378,6 +394,14 @@ function WeekCalendar({ posts, onPick }: { posts: SocialPost[]; onPick: (local: 
                     <span className="font-semibold">{new Date(p.publishAt).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}</span>{" "}
                     <span className="opacity-80">{p.results.map((r) => NETWORK_LABEL[r.network][0]).join("")}</span>
                     <p className="truncate">{p.caption}</p>
+                  </div>
+                ))}
+                {mcItems.map((m) => (
+                  <div key={"mc" + m.id} className="mb-1 rounded border border-zinc-400/20 bg-zinc-500/10 px-1.5 py-1 text-[11px] text-zinc-300" title={m.text} data-testid={`metricool-item-${m.id}`}>
+                    <span className="font-semibold">{new Date(m.publishAt).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}</span>{" "}
+                    <span className="rounded bg-zinc-700/60 px-1 text-[9px] uppercase">Metricool</span>{" "}
+                    <span className="opacity-80">{m.brand} · {m.networks.join(", ")}</span>
+                    <p className="truncate">{m.text}</p>
                   </div>
                 ))}
                 <div className="mt-1 flex flex-wrap gap-1">
