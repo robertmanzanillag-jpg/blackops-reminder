@@ -31,6 +31,10 @@ type CodebaseMap = {
 };
 
 const REPO_ROOT = process.cwd();
+function headCommitDate(): string {
+  try { return execFileSync("git", ["log", "-1", "--format=%cI"], { cwd: REPO_ROOT, encoding: "utf8" }).trim() || new Date(0).toISOString(); }
+  catch { return new Date(0).toISOString(); }
+}
 const OUTPUT_DIR = path.join(REPO_ROOT, "docs");
 const JSON_OUT = path.join(OUTPUT_DIR, "codebase-map.json");
 const MD_OUT = path.join(OUTPUT_DIR, "codebase-map.md");
@@ -197,8 +201,9 @@ function buildMap(): CodebaseMap {
   const tests = visibleFiles.filter((file) => file.startsWith("tests/") && file.endsWith(".test.ts")).sort();
 
   return {
-    generatedAt: new Date().toISOString(),
-    repoRoot: REPO_ROOT,
+    // Deterministic: the HEAD commit date and a relative root, so CI reruns on main only change the map when the code changed.
+    generatedAt: headCommitDate(),
+    repoRoot: ".",
     packageName,
     scripts,
     totals: {

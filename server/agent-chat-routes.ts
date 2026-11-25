@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { appContextSliceText } from "./app-context-pack-loader";
 import { AgentChatInputError, AgentChatNotFound, KongOrderUncertain, createAgentChatService, createChatStorageThreadStore } from "./agent-chat";
 import { getCurrentUserId, getSystemUserId } from "./user-context";
 
@@ -18,7 +19,7 @@ export function registerAgentChatRoutes(app: Pick<Express, "get" | "post">, deps
       import("./agent-council"), import("./replit_integrations/chat/storage"), import("./agent-chat-model"), import("./kong-office-orders")]);
     const council = getAgentCouncil();
     // KONG orders read KONG_OFFICE_ORDER_URL / KONG_OFFICE_ORDER_TOKEN at call time; unset token = honest "not enabled" reply.
-    return createAgentChatService({ store: createChatStorageThreadStore(chatStorage, owner), council, model: createAgentChatModel(council), kongOrders: createKongOfficeOrderClient() });
+    return createAgentChatService({ store: createChatStorageThreadStore(chatStorage, owner), council, model: createAgentChatModel(council), kongOrders: createKongOfficeOrderClient(), contextSlice: (q, n) => appContextSliceText(q, n) });
   })());
   const allow = (req: Request, res: Response) => {
     try {

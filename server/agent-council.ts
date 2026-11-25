@@ -1245,6 +1245,12 @@ async function loadCurriculumReal(root = process.cwd()): Promise<CurriculumModul
   await doc("rules", "Reglas de la empresa", "AGENTS.md");
   await doc("claude", "Como trabajamos con IA y costos", "CLAUDE.md");
   await doc("map", "Mapa del codigo", "docs/codebase-map.md");
+  {
+    // Compact, versioned app context pack (regenerated on merge to main, no AI): the academy teaches its hash and size, never the whole file.
+    const { loadAppContextPack } = await import("./app-context-pack-loader");
+    const pack = loadAppContextPack(root);
+    if (pack) modules.push({ id: "context-pack", title: "Paquete de contexto de la app", summary: `${pack.project}@${pack.packHash.slice(0, 12)}: ${pack.files.length} archivos, ${pack.facts.routes.length} rutas, ${pack.facts.workflows.length} workflows. Pide un recorte, no leas el repo entero.` });
+  }
   await doc("ceo-plan", "Plan del CEO Assistant", "CEO_ASSISTANT_PLAN.md");
   try {
     const schema = await import("@shared/schema");
@@ -1472,6 +1478,6 @@ function outcomeCostTrends(pacer: unknown, now: number): CostTrend[] {
     const today = new Date(now).toISOString().slice(0, 10);
     const rows = Object.values(parsed.ledgers).flatMap(ledger => taskEfficiency(ledger, today));
     return rows.filter(row => rows.filter(other => other.taskType === row.taskType).length === 1)
-      .map(row => ({ taskType: row.taskType, avgMicroUsd: row.avgMicroUsd, previousAvgMicroUsd: row.previousAvgMicroUsd }));
+      .map(row => ({ taskType: row.taskType, avgMicroUsd: row.avgMicroUsd, previousAvgMicroUsd: row.previousAvgMicroUsd, count: row.count, previousCount: row.previousCount }));
   } catch { return []; }
 }

@@ -297,11 +297,71 @@ export function stampSelfImprovementCooldowns(company: CompanyState, created: Co
 // no recorded outcome gets no lesson. Lessons are bounded per agent, stored on its career and
 // injected into its next prompt (server/agent-chat.ts factsText) and shown by the roster panel.
 
-export type AgentLessonKind = "bloqueo" | "diagnostico" | "duracion" | "costo" | "revision";
+export type AgentLessonKind = "bloqueo" | "diagnostico" | "duracion" | "costo" | "revision" | "eficiencia";
 export type AgentLesson = { id: string; kind: AgentLessonKind; text: string; evidence: number; firstAt: string; lastAt: string };
 export type AgentLearning = { lessons: AgentLesson[]; total: number; updatedAt: string };
 export type OutcomeSample = { agentId: string; jobId: string; status: "completed" | "blocked"; at: string; reason?: string; diagnostics: string[]; durationMs?: number; verdict?: "success" | "attributable_failure" };
-export type CostTrend = { taskType: string; avgMicroUsd: number; previousAvgMicroUsd: number | null };
+export type CostTrend = { taskType: string; avgMicroUsd: number; previousAvgMicroUsd: number | null; count?: number; previousCount?: number; avgTokens?: number | null };
+
+// ---- Rendimiento por dólar: "gastar menos cada vez y rendir más" ----
+// Deterministic metric per agent from its own outcomes (last 7 days vs the 7 before) and the
+// credit-pacer spend of the task type it alone owns (COST_OWNERS). No spend record -> no metric.
+export type AgentEfficiency = {
+  taskType: string; weekSuccesses: number; prevWeekSuccesses: number; weekMicroUsd: number; prevWeekMicroUsd: number;
+  successesPerUsd: number | null; prevSuccessesPerUsd: number | null; microUsdPerSuccess: number | null; tokensPerSuccess: number | null;
+  trend: "mejor" | "peor" | "igual" | "nuevo"; updatedAt: string;
+};
+/** Prompt/context shrink applied automatically. Bounds: slices 1..4, history 2..6 (defaults = no shrink). */
+export type EfficiencyTuning = { contextSlices: number; historyMessages: number; preferCachedPrefix: boolean; batch: boolean; reason: string; updatedAt: string };
+export const TUNING_DEFAULT = { contextSlices: 4, historyMessages: 6 } as const;
+export const TUNING_MIN = { contextSlices: 1, historyMessages: 2 } as const;
+
+export function efficiencyTuningOf(raw: unknown): { contextSlices: number; historyMessages: number } {
+  const clamp = (v: unknown, lo: number, hi: number) => Number.isSafeInteger(v) ? Math.min(hi, Math.max(lo, v as number)) : hi;
+  const t = isObj(raw) ? raw : {};
+  return { contextSlices: clamp(t.contextSlices, TUNING_MIN.contextSlices, TUNING_DEFAULT.contextSlices), historyMessages: clamp(t.historyMessages, TUNING_MIN.historyMessages, TUNING_DEFAULT.historyMessages) };
+}
+
+export function deriveAgentEfficiency(samples: OutcomeSample[], now: number, cost?: CostTrend): AgentEfficiency | null {
+  if (!cost || !Number.isSafeInteger(cost.count) || !Number.isSafeInteger(cost.avgMicroUsd) || cost.count! < 1) return null;
+  const inWin = (s: OutcomeSample, from: number, to: number) => { const t = ms(s.at); return t > now - from && t <= now - to + 5_000; };
+  const ok = (s: OutcomeSample) => s.status === "completed";
+  const weekSuccesses = samples.filter(s => ok(s) && inWin(s, OUTCOME_WINDOW_MS, 0)).length;
+  const prevWeekSuccesses = samples.filter(s => ok(s) && inWin(s, 2 * OUTCOME_WINDOW_MS, OUTCOME_WINDOW_MS + 5_000)).length;
+  const weekMicroUsd = cost.avgMicroUsd * cost.count!;
+  const prevCount = Number.isSafeInteger(cost.previousCount) ? cost.previousCount! : 0;
+  const prevWeekMicroUsd = Number.isSafeInteger(cost.previousAvgMicroUsd) && prevCount > 0 ? cost.previousAvgMicroUsd! * prevCount : 0;
+  const perUsd = (n: number, micro: number) => micro > 0 ? Math.round((n / (micro / 1e6)) * 100) / 100 : null;
+  const successesPerUsd = perUsd(weekSuccesses, weekMicroUsd), prevSuccessesPerUsd = perUsd(prevWeekSuccesses, prevWeekMicroUsd);
+  const tokensPerSuccess = Number.isSafeInteger(cost.avgTokens) && weekSuccesses > 0 ? Math.round((cost.avgTokens! * cost.count!) / weekSuccesses) : null;
+  const trend = prevSuccessesPerUsd === null || successesPerUsd === null ? "nuevo"
+    : successesPerUsd > prevSuccessesPerUsd * 1.1 ? "mejor" : successesPerUsd < prevSuccessesPerUsd * 0.9 ? "peor" : "igual";
+  return { taskType: cost.taskType, weekSuccesses, prevWeekSuccesses, weekMicroUsd, prevWeekMicroUsd, successesPerUsd, prevSuccessesPerUsd,
+    microUsdPerSuccess: weekSuccesses ? Math.round(weekMicroUsd / weekSuccesses) : null, tokensPerSuccess, trend, updatedAt: new Date(now).toISOString() };
+}
+
+/** Bounded, one step per week: worse yield -> shrink context/history; shrinking that cost successes -> relax one step. */
+export function deriveEfficiencyTuning(eff: AgentEfficiency, prev: unknown, now: number): EfficiencyTuning | null {
+  const cur = efficiencyTuningOf(prev);
+  const prevAt = isObj(prev) ? ms(prev.updatedAt) : 0;
+  if (prevAt && now - prevAt < OUTCOME_WINDOW_MS) return null;
+  const base = { preferCachedPrefix: true, batch: eff.weekMicroUsd > 0 && eff.weekSuccesses >= 4, updatedAt: new Date(now).toISOString() };
+  if (eff.trend === "peor" && eff.weekSuccesses >= eff.prevWeekSuccesses) {
+    const next = { contextSlices: Math.max(TUNING_MIN.contextSlices, cur.contextSlices - 1), historyMessages: Math.max(TUNING_MIN.historyMessages, cur.historyMessages - 1) };
+    if (next.contextSlices === cur.contextSlices && next.historyMessages === cur.historyMessages) return null;
+    return { ...next, ...base, reason: "rendimiento_por_dolar_bajo" };
+  }
+  if (eff.weekSuccesses < eff.prevWeekSuccesses && (cur.contextSlices < TUNING_DEFAULT.contextSlices || cur.historyMessages < TUNING_DEFAULT.historyMessages)) {
+    return { contextSlices: Math.min(TUNING_DEFAULT.contextSlices, cur.contextSlices + 1), historyMessages: Math.min(TUNING_DEFAULT.historyMessages, cur.historyMessages + 1), ...base, reason: "menos_exitos_relajar" };
+  }
+  return null;
+}
+
+function efficiencyLesson(eff: AgentEfficiency, lastAt: string): Omit<AgentLesson, "firstAt"> | null {
+  if (eff.trend !== "peor" || eff.successesPerUsd === null || eff.prevSuccessesPerUsd === null) return null;
+  return { id: `eficiencia:${eff.taskType}`, kind: "eficiencia", evidence: eff.weekSuccesses, lastAt,
+    text: `Rendimiento por dólar bajó de ${eff.prevSuccessesPerUsd} a ${eff.successesPerUsd} éxitos/$ (${eff.taskType}): usa solo el recorte de contexto necesario, reutiliza el prefijo estable y agrupa trabajos.` };
+}
 
 export const MAX_AGENT_LESSONS = 6;
 export const PROMPT_LESSONS = 3;
@@ -387,8 +447,17 @@ export function applyOutcomeLessons(company: CompanyState, samples: OutcomeSampl
     if (!career) continue;
     const cost = costTrends.find(t => COST_OWNERS[t.taskType] === agentId);
     const derived = deriveAgentLessons(list, now, cost);
+    const eff = deriveAgentEfficiency(list, now, cost);
+    const effLesson = eff && list.length ? efficiencyLesson(eff, list.reduce((a, b) => ms(b.at) > ms(a.at) ? b : a).at) : null;
+    if (effLesson) derived.push(effLesson);
+    const same = (a: unknown, b: AgentEfficiency) => isObj(a) && JSON.stringify({ ...a, updatedAt: "" }) === JSON.stringify({ ...b, updatedAt: "" });
+    if (eff && !same(career.efficiency, eff)) {
+      const tuning = deriveEfficiencyTuning(eff, careers[agentId].tuning, now);
+      careers = { ...careers, [agentId]: { ...careers[agentId], efficiency: eff, ...(tuning ? { tuning } : {}) } };
+    }
     if (!derived.length) continue;
-    const prev = career.learning && Array.isArray(career.learning.lessons) ? career.learning : { lessons: [], total: 0, updatedAt: iso };
+    const prevCareer = careers[agentId];
+    const prev = prevCareer.learning && Array.isArray(prevCareer.learning.lessons) ? prevCareer.learning : { lessons: [], total: 0, updatedAt: iso };
     const merged = new Map(prev.lessons.map(l => [l.id, l]));
     let added = 0, changed = false;
     for (const d of derived) {
@@ -400,7 +469,7 @@ export function applyOutcomeLessons(company: CompanyState, samples: OutcomeSampl
     if (!changed) continue;
     const lessons = [...merged.values()].sort((a, b) => ms(b.lastAt) - ms(a.lastAt) || a.id.localeCompare(b.id)).slice(0, MAX_AGENT_LESSONS);
     const total = Math.min(Number.isSafeInteger(prev.total) ? prev.total + added : added, 1_000_000);
-    careers = { ...careers, [agentId]: { ...career, learning: { lessons, total, updatedAt: iso } } };
+    careers = { ...careers, [agentId]: { ...prevCareer, learning: { lessons, total, updatedAt: iso } } };
   }
   return careers === company.careers ? company : { ...company, careers };
 }
@@ -417,4 +486,11 @@ export function learningSummary(learning: unknown): { aprendizajes: number; ulti
   const total = Number.isSafeInteger(learning.total) ? Math.max(learning.total, learning.lessons.length) : learning.lessons.length;
   const last = learning.lessons[0];
   return { aprendizajes: total, ultimoAprendizaje: isObj(last) && typeof last.text === "string" ? last.text.slice(0, 240) : null };
+}
+
+/** Roster summary of rendimiento por dólar (null fields when no spend was recorded). */
+export function efficiencySummary(eff: unknown): { exitosPorDolar: number | null; costoPorExito: number | null; tendenciaEficiencia: AgentEfficiency["trend"] | null } {
+  if (!isObj(eff)) return { exitosPorDolar: null, costoPorExito: null, tendenciaEficiencia: null };
+  const e = eff as AgentEfficiency;
+  return { exitosPorDolar: typeof e.successesPerUsd === "number" ? e.successesPerUsd : null, costoPorExito: Number.isSafeInteger(e.microUsdPerSuccess) ? e.microUsdPerSuccess : null, tendenciaEficiencia: ["mejor", "peor", "igual", "nuevo"].includes(e.trend) ? e.trend : null };
 }

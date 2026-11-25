@@ -4,7 +4,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 // Mirrors server/office-roster-status.ts (GET /api/agents-office/roster-status).
 type RosterState = "trabajando" | "en_espera" | "bloqueado" | "sin_datos";
-type RosterView = { observedAt: string; counts: Record<RosterState, number>; agents: Array<{ id: string; name: string; group: string; job: string; state: RosterState; lastActivityAt: string | null; doing?: string; reason?: string; aprendizajes?: number; ultimoAprendizaje?: string | null }> };
+type RosterView = { observedAt: string; counts: Record<RosterState, number>; agents: Array<{ id: string; name: string; group: string; job: string; state: RosterState; lastActivityAt: string | null; doing?: string; reason?: string; aprendizajes?: number; ultimoAprendizaje?: string | null; exitosPorDolar?: number | null; costoPorExito?: number | null; tendenciaEficiencia?: "mejor" | "peor" | "igual" | "nuevo" | null }> };
 
 // Every agent of the company with a status read from persisted records (no AI calls).
 const BADGE: Record<RosterState, { text: string; className: string }> = {
@@ -80,6 +80,7 @@ export function OfficeRosterPanel() {
                 {agent.doing && <p className="mt-0.5 text-xs text-emerald-200">Ahora: {agent.doing}</p>}
                 {agent.reason && <p className="mt-0.5 text-xs text-red-200">Motivo: {agent.reason}</p>}
                 <p className="mt-0.5 text-xs text-sky-200" data-testid={`roster-learning-${agent.id}`}>Aprendizajes: {agent.aprendizajes ?? 0}{agent.ultimoAprendizaje ? ` · Último: ${agent.ultimoAprendizaje}` : ""}</p>
+                <p className="mt-0.5 text-xs text-emerald-200" data-testid={`roster-efficiency-${agent.id}`}>Rendimiento por dólar: {agent.exitosPorDolar == null ? "sin gasto medido" : `${agent.exitosPorDolar} éxitos/$${agent.costoPorExito != null ? ` · $${(agent.costoPorExito / 1e6).toFixed(3)} por éxito` : ""}${agent.tendenciaEficiencia ? ` · ${agent.tendenciaEficiencia}` : ""}`}</p>
               </li>)}
             </ul>
           </section>)}
