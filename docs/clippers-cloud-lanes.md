@@ -85,3 +85,13 @@ YouTube blocks yt-dlp on datacenter IPs ("confirm you're not a bot").
 - Actions minutes (Linux, 1×): `owned_content` takes about 15–25 min/day (ffmpeg renders + uploads). The weekly 8 h sleep render at 1 fps takes about 60–120 min/week. `marketplace` takes about 10 min/day. That is about **1,300–1,700 min/month** for these lanes. It adds to the streamer jobs (about 1,500–2,500 min/month) and the office worker. Private repos get 2,000 included minutes on Free/Pro (3,000 on Team). Overage is $0.008/min, so 1,500 extra minutes is about **$12/month**.
 - Drive storage: $0 within the existing plan (motivation ~20 MB × 10/day ≈ 6 GB/month, sleep 1–2 GB/week). Prune `renders/` older than 30 days, or upgrade Google One storage (100 GB is $1.99/month).
 - Postgres: a few MB in the existing database. YouTube API: $0. Metricool: existing plan. AI: $0 (deterministic renders).
+
+## 6. Office evidence from the cloud (clip_metrics / clip_report)
+
+After each non-dry streamer cloud run (publish and `--growth-only`), `script/clippers-streamer-cloud-worker.mjs`
+projects its Postgres ledger (`clippers-streamers:<owner>` -> `cloudPublish`) with `script/clippers-office-sources.mjs`
+and upserts the `clip_metrics` and `clip_report` (cycle) office source documents with the same guarded writer as the
+web mirror (`server/office-source-documents.ts`). Only posts with a real Metricool observation become metric records;
+engagement Metricool did not report is stored as 0 and counted in the log as `engagementUnreported`.
+Opt out: repository variable `CLIPPERS_OFFICE_SOURCES_SYNC=false`. Provenance label `clip_reports` (office role view)
+is the reader's name for the stored kind `clip_report`; both are intentional.

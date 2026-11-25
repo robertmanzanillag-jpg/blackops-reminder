@@ -257,6 +257,7 @@ jobs:
           CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
           # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
           CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
+          CLIPPERS_OFFICE_SOURCES_SYNC: ${{ vars.CLIPPERS_OFFICE_SOURCES_SYNC || 'true' }}
           CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
         run: |
@@ -435,6 +436,7 @@ jobs:
           CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
           # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
           CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
+          CLIPPERS_OFFICE_SOURCES_SYNC: ${{ vars.CLIPPERS_OFFICE_SOURCES_SYNC || 'true' }}
           CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
         run: |
@@ -514,4 +516,5 @@ jobs:
           CLIPPERS_STREAMER_LANES_ENABLED: 'true'
           # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
           CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
+          CLIPPERS_OFFICE_SOURCES_SYNC: ${{ vars.CLIPPERS_OFFICE_SOURCES_SYNC || 'true' }}
         run: node --import tsx script/clippers-streamer-cloud-worker.mjs --growth-only

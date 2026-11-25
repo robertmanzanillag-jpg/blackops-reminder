@@ -174,7 +174,9 @@ function metricsFrom(row, destination) {
   const completionRate = metrics.completionRate;
   if (!Number.isSafeInteger(views) || views < 0 || (completionRate != null &&
       (!Number.isFinite(completionRate) || completionRate < 0 || completionRate > 1))) return null;
-  return { views, completionRate: completionRate ?? null };
+  // Optional engagement: only provider-reported non-negative integers (never invented).
+  const pick = (...keys) => { for (const k of keys) if (Number.isSafeInteger(metrics[k]) && metrics[k] >= 0) return metrics[k]; return null; };
+  return { views, completionRate: completionRate ?? null, likes: pick('likes', 'likeCount'), comments: pick('comments', 'commentCount'), shares: pick('shares', 'shareCount'), saves: pick('saves', 'saved', 'favorites') };
 }
 const schedulerId = row => String(row?.id ?? row?.uuid ?? '');
 
