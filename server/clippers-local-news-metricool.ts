@@ -763,6 +763,12 @@ async function safeJson(response: Response, timeoutMs = DEFAULT_METRICOOL_RESPON
   }
 }
 
+/** Result for a delivery refused by the publishing seam (unknown SOCIAL_PUBLISHING_PROVIDER): nothing scheduled. */
+export function localNewsPublishingRefused(reason: string, options: ClipperLocalNewsMetricoolOptions = {}): ClipperLocalNewsMetricoolResult {
+  const { ledgerPath } = resolvePaths(options, options.env || process.env);
+  return { ...emptyResult(ledgerPath), reason };
+}
+
 function emptyResult(ledgerPath: string): ClipperLocalNewsMetricoolResult {
   return {
     status: "blocked",

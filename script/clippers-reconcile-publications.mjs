@@ -2,6 +2,7 @@ import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promis
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveSocialAnalyticsProvider } from "./social-analytics/provider.mjs";
+import { publishingCapability } from "./social-publishing/provider.mjs";
 
 const TIMEZONE = "America/New_York";
 const DEFAULT_ACCOUNT = "streamersclipusa";
@@ -134,24 +135,11 @@ async function writeJsonAtomic(filePath, value) {
   await rename(temporary, filePath);
 }
 
+// Metricool scheduler lookup moved behind the publishing seam (script/social-publishing/metricool.mjs).
+// Unknown SOCIAL_PUBLISHING_PROVIDER => throws, the row is reported "blocked" and nothing changes.
 async function defaultGetPublication({ row, fetcher, env }) {
-  const token = clean(env.METRICOOL_USER_TOKEN);
-  const userId = clean(env.METRICOOL_USER_ID);
-  const blogId = clean(row.metricoolBlogId || env.CLIPPERS_METRICOOL_BLOG_ID);
-  if (!token || !userId || !blogId) throw new Error("metricool_reconciliation_credentials_missing");
-  const date = clean(row.scheduledFor).slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("scheduled_date_missing");
-  const url = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${encodeURIComponent(blogId)}`
-    + `&userId=${encodeURIComponent(userId)}&integrationSource=MCP`
-    + `&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59`
-    + `&timezone=${encodeURIComponent(TIMEZONE)}&extendedRange=false`;
-  const response = await fetcher(url, {
-    headers: { "X-Mc-Auth": token, accept: "application/json" },
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!response.ok) throw new Error(`metricool_http_${response.status}`);
-  const payload = JSON.parse(await response.text());
-  return objects(payload).find((candidate) => publicationId(candidate) === clean(row.metricoolId)) || null;
+  const findScheduledPublication = publishingCapability("findScheduledPublication", { env, site: "clippers-reconcile-publications" });
+  return findScheduledPublication({ row, fetcher, env });
 }
 
 const METRICS_REFRESH_WINDOW_DAYS = 14;

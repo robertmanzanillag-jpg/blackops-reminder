@@ -2,7 +2,8 @@ import {
   bootstrapClipperLocalNews,
   runClipperLocalNewsCycle,
 } from "./clippers-local-news-agent";
-import { deliverClipperLocalNewsToMetricool } from "./clippers-local-news-metricool";
+import type { deliverClipperLocalNewsToMetricool } from "./clippers-local-news-metricool";
+import { deliverLocalNewsThroughPublishingSeam } from "./social-publishing/local-news";
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 const MIN_INTERVAL_MINUTES = 2;
@@ -100,7 +101,7 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
   const config = getClipperLocalNewsSchedulerConfig(env);
   const bootstrap = deps.bootstrap || bootstrapClipperLocalNews;
   const runCycle = deps.runCycle || runClipperLocalNewsCycle;
-  const deliver = deps.deliver || deliverClipperLocalNewsToMetricool;
+  const deliver = deps.deliver || deliverLocalNewsThroughPublishingSeam;
   const fetcher = deps.fetch || globalThis.fetch;
   const now = deps.now || (() => new Date());
   const scheduleInterval = deps.setInterval || globalThis.setInterval;

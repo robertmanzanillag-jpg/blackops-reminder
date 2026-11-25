@@ -25,8 +25,18 @@ import {
   type BlackRoomRemoteControlState,
 } from "./blackroom-remote-control";
 import { executeBlackRoomChatMessage } from "./blackroom-chat-service";
-import { BlackRoomMetricoolUncertainError, scheduleBlackRoomMetricoolPost, type BlackRoomMetricoolReceipt } from "./blackroom-metricool-bridge";
+import { BlackRoomMetricoolUncertainError, type BlackRoomMetricoolReceipt } from "./blackroom-metricool-bridge";
+import { publishingCapability, type PublishingLegacy } from "./social-publishing/provider";
 import { BlackRoomPublicationBlockedError } from "./blackroom-publication-guard";
+
+// Publishing seam (SOCIAL_PUBLISHING_PROVIDER): the Metricool flow is reached only through the
+// provider adapter. Unknown provider => BlackRoomPublicationBlockedError (definitely not submitted).
+const scheduleBlackRoomMetricoolPost: PublishingLegacy["scheduleBlackRoomPost"] = (input, options) => {
+  let schedule: PublishingLegacy["scheduleBlackRoomPost"];
+  try { schedule = publishingCapability("scheduleBlackRoomPost", { env: options?.env, site: "blackroom-control-routes" }); }
+  catch (refusal) { return Promise.reject(new BlackRoomPublicationBlockedError(refusal instanceof Error ? refusal.message : String(refusal))); }
+  return schedule(input, options);
+};
 import { BLACKROOM_CEO_DAILY_POSTS, BLACKROOM_CEO_MAX_DAILY_POSTS, BLACKROOM_CEO_REFRESH_MS, buildBlackRoomLearningSlots, collectBlackRoomMetricoolAnalytics, planBlackRoomCampaignPosts } from "./blackroom-growth-ceo";
 import { getCurrentUserId } from "./user-context";
 import { isConfiguredSingleUserOwner } from "./single-user-owner";

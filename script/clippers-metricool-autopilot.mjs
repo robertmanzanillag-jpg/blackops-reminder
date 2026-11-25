@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { createPortfolioMetricool, confirmedNonPublishingDraft } from "./clippers-portfolio-metricool.mjs";
+import { confirmedNonPublishingDraft } from "./clippers-portfolio-metricool.mjs";
+import { createPublishingClient, publishingCapability } from "./social-publishing/provider.mjs";
 import { metricoolWriteRefusal } from "../shared/clippers-metricool-writer.mjs";
 import { createMacLedgerGuard, macLedgerEnv } from "./clippers-mac-ledger-guard.mjs";
 
-const METRICOOL_MCP_URL = "https://ai.metricool.com/mcp";
 const TIMEZONE = "America/New_York";
 const ACCOUNT_DAILY_TARGET = 5;
 /** This lane's share of an account/network day (CLIPPERS_MARKETPLACE_LANE_DAILY_QUOTA, 0-5, default 2). */
@@ -42,113 +42,6 @@ function captionHasTag(caption, tag) {
   const captionTags = new Set((String(caption || "").match(/#[A-Za-z0-9._-]+/g) || [])
     .map((value) => value.toLowerCase()));
   return captionTags.has(String(tag || "").toLowerCase());
-}
-
-function parseMcpEnvelope(raw, contentType = "") {
-  if (/^text\/event-stream\b/i.test(contentType) || /^\s*(?:event:|data:)/m.test(raw)) {
-    const events = raw.split(/\r?\n\r?\n/).flatMap((event) => {
-      const data = event.split(/\r?\n/).filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trim()).join("\n");
-      if (!data || data === "[DONE]") return [];
-      return [JSON.parse(data)];
-    });
-    return events.findLast((event) => event?.result || event?.error) || events.at(-1);
-  }
-  return JSON.parse(raw);
-}
-
-async function callMetricoolMcp(fetcher, token, args) {
-  const response = await fetcher(METRICOOL_MCP_URL, {
-    method: "POST",
-    headers: {
-      "X-Mc-Auth": token,
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: `clippers-${Date.now()}`,
-      method: "tools/call",
-      params: { name: "createScheduledPost", arguments: args },
-    }),
-    signal: AbortSignal.timeout(180_000),
-  });
-  const raw = await response.text();
-  if (!response.ok) throw new Error(`Metricool MCP failed with HTTP ${response.status}`);
-  const envelope = parseMcpEnvelope(raw, response.headers.get("content-type") || "");
-  if (envelope?.error || envelope?.result?.isError) throw new Error("Metricool MCP rejected the scheduled post");
-  return envelope?.result;
-}
-
-function objects(value) {
-  const found = [];
-  const visit = (candidate) => {
-    if (Array.isArray(candidate)) return candidate.forEach(visit);
-    if (!candidate || typeof candidate !== "object") return;
-    found.push(candidate);
-    Object.values(candidate).forEach(visit);
-  };
-  visit(value);
-  return found;
-}
-
-async function verifyMetricoolSchedule(fetcher, token, userId, blogId, caption, publicationDateTime, options = {}) {
-  const date = publicationDateTime.slice(0, 10);
-  const url = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}`
-    + `&userId=${encodeURIComponent(userId)}&integrationSource=MCP`
-    + `&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59`
-    + `&timezone=${encodeURIComponent(TIMEZONE)}&extendedRange=false`;
-  const attempts = Math.max(1, Math.min(10, Math.trunc(Number(options.attempts ?? 6)) || 1));
-  const delayMs = Math.max(0, Math.min(30_000, Math.trunc(Number(options.delayMs ?? 2_000)) || 0));
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (attempt && delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
-    const response = await fetcher(url, {
-      headers: { "X-Mc-Auth": token, accept: "application/json" },
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!response.ok) throw new Error(`Metricool verification failed with HTTP ${response.status}`);
-    const value = JSON.parse(await response.text());
-    const match = objects(value).find((record) => {
-      const text = String(record.text ?? record.caption ?? record.content ?? "");
-      const publication = record.publicationDate;
-      const dateTime = typeof publication === "string"
-        ? publication
-        : String(publication?.dateTime ?? record.publicationDateTime ?? record.date ?? "");
-      return text === caption && dateTime.startsWith(publicationDateTime);
-    });
-    const id = verifiedRecordId(match);
-    if (id) return id;
-  }
-  throw new Error("Metricool scheduling outcome is unverified");
-}
-
-async function listMetricoolTikTokSchedule(fetcher, token, userId, blogId, startDate, endDate) {
-  const url = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}`
-    + `&userId=${encodeURIComponent(userId)}&integrationSource=MCP`
-    + `&start=${startDate}T00%3A00%3A00&end=${endDate}T23%3A59%3A59`
-    + `&timezone=${encodeURIComponent(TIMEZONE)}&extendedRange=false`;
-  const response = await fetcher(url, {
-    headers: { "X-Mc-Auth": token, accept: "application/json" },
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!response.ok) throw new Error(`Metricool schedule preflight failed with HTTP ${response.status}`);
-  const value = JSON.parse(await response.text());
-  return objects(value).flatMap((record) => {
-    const providers = Array.isArray(record.providers) ? record.providers : [];
-    if (!providers.some((provider) => String(provider?.network || "").toLowerCase() === "tiktok")) return [];
-    const publication = record.publicationDate;
-    const dateTime = typeof publication === "string"
-      ? publication
-      : String(publication?.dateTime ?? record.publicationDateTime ?? record.date ?? "");
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateTime)) return [];
-    return [{
-      id: verifiedRecordId(record),
-      nonpublishingDraft: confirmedNonPublishingDraft(record, 'tiktok'),
-      caption: String(record.text ?? record.caption ?? record.content ?? ""),
-      dateTime: dateTime.slice(0, 19),
-      mediaUrl: String(record.mediaUrl ?? record.media?.url ?? record.media?.[0]?.url ?? ""),
-    }];
-  });
 }
 
 function localDateParts(date) {
@@ -323,6 +216,18 @@ export async function runMetricoolAutopilot(options = {}) {
   if (!dryRun && env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED !== "true") {
     return { status: "blocked", reason: "explicit_autopublish_authorization_required", scheduled: 0 };
   }
+  // Publishing seam (SOCIAL_PUBLISHING_PROVIDER): unknown provider => nothing scheduled, reason returned.
+  let publishing;
+  try {
+    const site = "clippers-metricool-autopilot";
+    publishing = {
+      callMetricoolMcp: publishingCapability("callMetricoolMcp", { env, site }),
+      verifyMetricoolSchedule: publishingCapability("verifyMetricoolSchedule", { env, site }),
+      listMetricoolTikTokSchedule: publishingCapability("listMetricoolTikTokSchedule", { env, site }),
+    };
+  } catch (error) {
+    return { status: "blocked", reason: String(error?.message || error).slice(0, 120), scheduled: 0, blocked: 0 };
+  }
   const fetcher = options.fetch || fetch;
   const workspaceRoot = path.resolve(options.workspaceRoot || env.CLIPPERS_WORKSPACE_ROOT || "clippers_workspace");
   const reportDir = path.join(workspaceRoot, "reports");
@@ -429,7 +334,7 @@ export async function runMetricoolAutopilot(options = {}) {
   }
   const startDate = localDateParts(now);
   const endDate = localDateParts(new Date(now.getTime() + 7 * 86_400_000));
-  const existingSchedule = await listMetricoolTikTokSchedule(
+  const existingSchedule = await publishing.listMetricoolTikTokSchedule(
     fetcher,
     token,
     userId,
@@ -479,7 +384,7 @@ export async function runMetricoolAutopilot(options = {}) {
   const ledgerGuard = () => {
     if (guard) return guard;
     let metricool = null;
-    try { metricool = createPortfolioMetricool({ token, userId, fetcher }); } catch { /* guard fails closed */ }
+    try { metricool = createPublishingClient({ token, userId, fetcher, env }); } catch { /* guard fails closed */ }
     guard = createMacLedgerGuard({ env: macLedgerEnv(env), workspaceRoot, metricool });
     return guard;
   };
@@ -493,7 +398,7 @@ export async function runMetricoolAutopilot(options = {}) {
       continue;
     }
     scheduleIndex += 1;
-    const immediateSchedule = await listMetricoolTikTokSchedule(
+    const immediateSchedule = await publishing.listMetricoolTikTokSchedule(
       fetcher, token, userId, blogId, publicationDateTime.slice(0, 10), publicationDateTime.slice(0, 10),
     );
     const equivalent = immediateSchedule.find((row) => normalized(row.caption) === normalized(validation.caption)
@@ -585,7 +490,7 @@ export async function runMetricoolAutopilot(options = {}) {
     receiptBase.ledgerEvidence = reservation.evidence;
     let receipt;
     try {
-      await callMetricoolMcp(fetcher, token, {
+      await publishing.callMetricoolMcp(fetcher, token, {
         date: zonedDateTime(publicationDateTime),
         blogId: String(blogId),
         info: JSON.stringify(payload),
@@ -594,7 +499,7 @@ export async function runMetricoolAutopilot(options = {}) {
           file_id: `clippers-${item.itemId}.mp4`,
         }],
       });
-      const metricoolId = await verifyMetricoolSchedule(
+      const metricoolId = await publishing.verifyMetricoolSchedule(
         fetcher,
         token,
         userId,
