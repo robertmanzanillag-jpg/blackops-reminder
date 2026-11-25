@@ -19,7 +19,9 @@ const failureCodes = new Set([
   "FACTORY_ANTHROPIC_CLOCK_UNVERIFIED",
 ]);
 export type FactoryOncePhase = "configuration" | "imports" | "database" | "operator" | "state" | "execution" | "shutdown";
-export function factoryOnceFailure(error: unknown, phase: FactoryOncePhase) {
+/** Code-owned constants only: exact uppercase identifiers, optionally one `:SUFFIX`. */
+const codeOwnedPattern = /^(?:FACTORY|SOFTWARE_FACTORY|CREDIT|SELF_HEAL|OWNER_ORDER|COMPANY_ORDER)_[A-Z0-9_]{2,64}(?::[A-Z0-9_]{2,64})?$/;
+export function factoryOnceFailure(error: unknown, phase: FactoryOncePhase, stage?: string) {
   // Even shaped provider/DB errors are untrusted: never copy a stack, cause,
   // arbitrary message, SQL detail, URL or identifier into Actions logs.
   let code = "FACTORY_ONCE_UNAVAILABLE";
@@ -28,10 +30,12 @@ export function factoryOnceFailure(error: unknown, phase: FactoryOncePhase) {
       const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
       const databaseCode = Object.getOwnPropertyDescriptor(error, "code")?.value;
       if (error instanceof Error && typeof message === "string" && failureCodes.has(message)) code = message;
+      else if (error instanceof Error && typeof message === "string" && codeOwnedPattern.test(message)) code = message;
       else if (databaseCode === "55P03") code = "FACTORY_DATABASE_LOCK_UNAVAILABLE";
     }
   } catch { /* A hostile getter is still an unclassified failure. */ }
-  return { event: "factory_once_failure", phase, code, automaticReplay: false };
+  const safeStage = typeof stage === "string" && /^[a-z-]{1,24}$/.test(stage) ? stage : undefined;
+  return { event: "factory_once_failure", phase, ...(safeStage ? { stage: safeStage } : {}), code, automaticReplay: false };
 }
 
 /** Preserve all admission guards, with a distinct safe reason for each refusal. */

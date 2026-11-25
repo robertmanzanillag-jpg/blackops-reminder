@@ -46,3 +46,19 @@ test("verified completion followed by invocation deadline is a clean bounded exi
  const f=fixture();let calls=0;f.worker.tick=async()=>{calls++;f.expire();return {kind:"progressed"} as any;};
  assert.equal((await runSoftwareFactoryOnce(f.worker,f.options)).reason,"deadline");assert.equal(calls,1);assert.equal(f.counts().timers,0);
 });
+test("quarantine reports the failing stage and only a safe code-owned error code",async()=>{
+ const { factoryOnceFailure } = await import("../server/software-factory-diagnostics");
+ const secret="owner order text postgres://u:p@h/db";
+ const logs:string[]=[];const onFailure=(stage:string,error:unknown)=>logs.push(JSON.stringify(factoryOnceFailure(error,"execution",stage)));
+ const a=fixture();a.worker.schedule=async()=>{throw Error("FACTORY_DISCOVERY_SCOPE_INVALID");};
+ assert.equal((await runSoftwareFactoryOnce(a.worker,{...a.options,onFailure})).reason,"quarantined");
+ const b=fixture();b.worker.tick=async()=>{throw Error(secret);};
+ assert.equal((await runSoftwareFactoryOnce(b.worker,{...b.options,onFailure})).reason,"quarantined");
+ const c=fixture();c.worker.tick=async()=>({kind:"quarantined"} as any);
+ assert.equal((await runSoftwareFactoryOnce(c.worker,{...c.options,onFailure:(s,e)=>{onFailure(s,e);throw Error("x");}})).reason,"quarantined");
+ assert.deepEqual(logs.map(l=>JSON.parse(l)),[
+  {event:"factory_once_failure",phase:"execution",stage:"schedule",code:"FACTORY_DISCOVERY_SCOPE_INVALID",automaticReplay:false},
+  {event:"factory_once_failure",phase:"execution",stage:"tick",code:"FACTORY_ONCE_UNAVAILABLE",automaticReplay:false},
+  {event:"factory_once_failure",phase:"execution",stage:"tick-quarantined",code:"FACTORY_ONCE_UNAVAILABLE",automaticReplay:false}]);
+ assert.equal(logs.join().includes(secret),false);
+});
