@@ -111,3 +111,11 @@ test("social hub oauth callback is reachable without a browser session (state-pr
   assert.equal(isPublicApiPath("/api/social-hub/oauth/start/facebook"), false);
   assert.equal(isPublicApiPath("/api/social-hub/connections"), false);
 });
+
+test("a failed database write is reported, never confirmed as saved", async () => {
+  const { hydrateSocialHub, kvSet, kvFlushOrThrow, kvStatus } = await import("../server/social-hub/persist");
+  await hydrateSocialHub(["state", "tokens"], { async read() { return null; }, async write() { throw new Error("db down"); } });
+  kvSet("tokens", "x");
+  await assert.rejects(kvFlushOrThrow(), /db down/);
+  assert.equal(kvStatus().lastWriteError?.key, "tokens");
+});

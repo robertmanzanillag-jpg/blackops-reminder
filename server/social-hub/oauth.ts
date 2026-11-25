@@ -64,15 +64,20 @@ function unseal(sealed: string): string {
   return Buffer.concat([d.update(enc), d.final()]).toString("utf8");
 }
 
+let tokenReadError: string | null = null;
+export function tokenStoreStatus() { return { readError: tokenReadError }; }
+
 export function loadTokens(): StoredToken[] {
   const raw = kvGet("tokens");
-  if (!raw) return [];
-  try { return JSON.parse(unseal(raw)); } catch { return []; }
+  if (!raw) { tokenReadError = null; return []; }
+  try { const list = JSON.parse(unseal(raw)); tokenReadError = null; return list; }
+  catch { tokenReadError = "Hay cuentas guardadas pero no se pueden descifrar: SOCIAL_HUB_TOKEN_KEY cambió."; return []; }
 }
 function saveTokens(list: StoredToken[]) {
   kvSet("tokens", seal(JSON.stringify(list)));
 }
 export function upsertTokens(rows: StoredToken[]) {
+  if (tokenReadError) throw new Error(tokenReadError + " No sobrescribo para no perderlas.");
   const list = loadTokens().filter((t) => !rows.some((r) => r.network === t.network && r.accountId === t.accountId));
   saveTokens([...list, ...rows]);
 }
