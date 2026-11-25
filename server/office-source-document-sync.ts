@@ -77,3 +77,9 @@ export function mirrorOfficeSourceFile(input:{kind:OfficeSourceDocumentKind;file
  }catch{return false;}
 }
 export function officeSourceDocumentSyncStatus():OfficeSourceSyncStatus {return shared?shared.status():{enabled:enabled(),written:0,skipped:0,failed:0};}
+/** Direct queue for documents produced off-host (the Mac Clippers worker via
+ * the authenticated office bridge). Same validation, owner and gating as the
+ * file mirror; returns false when disabled or not accepted. */
+export function queueOfficeSourceDocument(input:{kind:OfficeSourceDocumentKind;raw:unknown;owner?:string;key?:string}):boolean {
+ try{if(!enabled())return false;return sharedSync().queue({kind:input.kind,raw:input.raw,owner:input.owner??null,key:input.key??""});}catch{return false;}
+}

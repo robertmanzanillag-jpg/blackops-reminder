@@ -70,6 +70,8 @@ import { registerKongRepairRoutes } from "./kong-repair-routes";
 import { registerKongMirrorRoutes, readKongMirrorSummarySpend } from "./kong-mirror-routes";
 import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
 import { getAuthenticatedCurrentUserId } from "./user-context";
+import { CLIPPERS_OFFICE_INGEST_PATH, hasValidClippersOfficeIngestToken, ingestClippersOfficeBridge } from "./clippers-office-ingest";
+import { queueOfficeSourceDocument } from "./office-source-document-sync";
 import { officeRuntime } from "./office-runtime";
 import { loadOfficePullRequest } from "./office-github";
 
@@ -3590,6 +3592,18 @@ export async function registerRoutes(
       res.json({ intakeKit: result.intakeKit });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers intake kit" });
+    }
+  });
+
+  // Mac Clippers worker -> office bridge. Public for session auth; the bearer
+  // token is checked here and the route fails closed without it.
+  app.post(CLIPPERS_OFFICE_INGEST_PATH, (req, res) => {
+    if (!hasValidClippersOfficeIngestToken(req.get("authorization"))) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    try {
+      const result = ingestClippersOfficeBridge(req.body, { owner: getSystemUserId(), queue: queueOfficeSourceDocument });
+      return res.status(result.status).json(result.body);
+    } catch {
+      return res.status(500).json({ ok: false, error: "INGEST_FAILED" });
     }
   });
 

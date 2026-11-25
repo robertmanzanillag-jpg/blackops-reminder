@@ -64,7 +64,7 @@ export const rawClipCycle=z.object({id,userId:id,createdAt:stamp,automation:z.ob
  * exports ("2026-11-18", "11/18/2026 10:00", ...). It is never stored or
  * audited, so its format must not turn a real metrics summary into invalid
  * evidence; it is only bounded. */
-export const rawClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id,accountId:id,clipId:id,publishedAt:z.string().max(500).nullable(),views:num,likes:num,comments:num,shares:num,saves:num})).max(10000)});
+export const rawClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id,accountId:id,clipId:id,publishedAt:z.string().max(500).nullable(),views:num,likes:num.optional(),comments:num.optional(),shares:num.optional(),saves:num.optional()})).max(10000)});
 
 /** Stored projections: strict, so nothing beyond the audited fields survives.
  * Producer ids (which may embed URLs, names or emails) are replaced by the
@@ -75,7 +75,7 @@ const storedNews=z.object({version:z.literal(1),updatedAt:stamp,lastRunAt:stamp.
 const storedProducts=z.array(z.object({id:rowId,updatedAt:stamp,status:productState}).strict()).max(10000);
 const storedSuppliers=z.array(z.object({id:rowId,updatedAt:stamp,status:supplierState,score:num}).strict()).max(10000);
 const storedSocial=z.array(z.object({id:rowId,createdAt:stamp,impressions:num,views:num,orders:num,revenueUsd:num,spendUsd:num}).strict()).max(10000);
-const storedClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id:rowId,views:num,likes:num,comments:num,shares:num,saves:num}).strict()).max(10000)}).strict();
+const storedClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id:rowId,views:num,likes:num.optional(),comments:num.optional(),shares:num.optional(),saves:num.optional()}).strict()).max(10000)}).strict();
 const storedDaily=z.object({type:z.literal("daily"),id,createdAt:stamp,publishMode,plannedClips:num.int().max(10000)}).strict();
 const storedCycle=z.object({type:z.literal("cycle"),id,createdAt:stamp,status:cycleState,totals:cycleTotals.strict()}).strict();
 const storedReport=z.discriminatedUnion("type",[storedDaily,storedCycle]);
