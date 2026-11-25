@@ -476,6 +476,12 @@ app.use((req, res, next) => {
       }).catch((error) => {
         log(`Failed to start Metricool analytics scheduler: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
       });
+      // Read-only daily Metricool TikTok refresh for the marketing-cmo office source.
+      void import("./marketing-social-metrics-sync").then((marketingSocial) => {
+        marketingSocial.startMarketingSocialScheduler();
+      }).catch((error) => {
+        log(`Failed to start marketing social metrics scheduler: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
+      });
       if (shouldStartResourceIntensiveSchedulers()) {
         startPromoVideoDailyScheduler();
         startCybersecurityScheduler();
