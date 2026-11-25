@@ -36,6 +36,9 @@ import type { CreditPacer } from "./credit-pacer-runtime";
 import { blackopsApplicationName } from "./agent-council-store";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
+/** Exact-source edits may carry up to 64 KiB of before+after text (~16k tokens);
+ * 8192 truncated real builds (PROVIDER_OUTPUT_LIMIT). Cost stays bounded by reservations. */
+export const FACTORY_MAX_OUTPUT_TOKENS = 32000;
 const cents = z.number().int().min(1).max(100);
 const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.literal("asistente"), baseBranch: z.enum(FACTORY_ASISTENTE_BASE_BRANCHES),
     writeRoots: z.array(z.string().min(1).max(200)).min(1).max(16).default([...FACTORY_DEFAULT_WRITE_ROOTS]),
@@ -44,7 +47,7 @@ const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.
     checks: z.object({ trigger: z.literal("push"), workflowId: z.number().int().positive(), workflowPath: z.literal(".github/workflows/factory-candidate-checks.yml"), workflowSha256: digest, jobName: z.string().min(1), testStep: z.string().min(1), buildStep: z.string().min(1), browserStep: z.string().min(1) }).strict(),
     allowGitHubResultsAzureHosts: z.boolean().default(false),
     archiveHosts: z.array(z.string().regex(/^[-a-z0-9]+\.blob\.core\.windows\.net$/)).min(1).max(10),
-    reservations: z.object({ discover: cents, build: cents, simulate: cents, review: cents }).strict(), maxOutputTokens: z.number().int().min(16).max(8192), maxInputTokens: z.number().int().min(1).max(100000),
+    reservations: z.object({ discover: cents, build: cents, simulate: cents, review: cents }).strict(), maxOutputTokens: z.number().int().min(16).max(FACTORY_MAX_OUTPUT_TOKENS), maxInputTokens: z.number().int().min(1).max(100000),
     orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.enum([ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_DEADLINE_ID]), paths: z.array(z.string().min(1).max(1000)).min(1).max(FACTORY_MAX_FILES_PER_ORDER) }).strict()).max(5),
     ui: z.object({ workflowSha256: digest, harnessSha256: digest, workflowId: z.number().int().positive() }).strict(),
     /** Automatic admission of eligible owner orders created at or after since.

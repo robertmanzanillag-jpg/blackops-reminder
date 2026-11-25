@@ -103,11 +103,11 @@
     },
     {
       "path": "server/software-factory-asistente-build.ts",
-      "sha256": "4651cad7a3e81abe7d038d7782195f4deb9c2254e1e5a0d92e4db4a9ab660839"
+      "sha256": "9ee07da077c0ab557e8ead1a9bb3da175993e65ac4e5d1d51beaa78ae1ba6d3b"
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "ab39a552aaf4430ba58b31e4d1e23e01658cb68975e97af291fa4c18781002db"
+      "sha256": "3a2339bd9f7e59d525a3cc1574269a95d0538e9d9e477c12cca7c7b445a61e1b"
     },
     {
       "path": "server/software-factory-asistente-review.ts",
@@ -127,7 +127,7 @@
     },
     {
       "path": "server/software-factory-openai-builder.ts",
-      "sha256": "15ac14bf06f279b3cbcd4b89bb97b00a7a8ef90536ddb042de25c14d6088bfad"
+      "sha256": "3b27afeb6e30a5d87a2a7d1645f060574f1bde76c92e8195105d1cf924529259"
     },
     {
       "path": "server/software-factory-openai-count.ts",
