@@ -2,7 +2,7 @@ import type { AppIncident, AppProject, MonitoredProject } from "@shared/schema";
 import { isGitHubConnected, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import { escapeTelegramHtml, sendTelegramMessage } from "./telegram";
-import { defaultCeoAlertGateDeps, runCeoAlertGate, type CeoProblem } from "./ceo-alert-gate";
+import { defaultCeoAlertGateDeps, runCeoAlertGate, type CeoAlertGateResult, type CeoProblem } from "./ceo-alert-gate";
 import { hasRealValue } from "./ceo-doctor-cli";
 
 const AUTO_ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
@@ -500,6 +500,7 @@ export async function importMissingGithubApps(userId: string): Promise<CyberInve
 export const __cybersecurityAgentInternals = {
   alertSignature,
   automaticAlertSignature,
+  shouldSendAutomaticAlert,
   githubRepoToAppProjectInput,
   inferPriorityFromRepo,
   isLikelyAppRepo,
@@ -688,17 +689,19 @@ export async function runCybersecurityScan(
     skills: recommendSkills(threats),
   };
 
-  // Automatic scans: CEO alert gate (silence when healthy, one message per new threat, one
-  // "resuelto" when it disappears). Manual scans (notify) still send the full report.
+  // Automatic scans: CEO alert gate (silence when healthy, one message per new threat, a daily
+  // reminder while open, one "resuelto" when it disappears). Manual scans (notify) still send the
+  // full report. Security never goes silent: if the gate is unavailable we fall back to the
+  // previous behaviour (full report, 2 h in-memory cooldown) for critical/high threats.
+  let fallback = false;
   if (!scanOptions.notify && scanOptions.allowAutomaticAlert) {
-    try {
-      const deps = await defaultCeoAlertGateDeps(userId);
-      if (deps) {
-        const outcome = await runCeoAlertGate({ problems: cyberCeoProblems(result), scope: githubError ? [] : ["cybersecurity"] }, deps);
-        result.telegramSent = outcome.sent > 0;
-      }
-    } catch (error) {
-      console.warn("[cybersecurity] CEO alert gate:", error instanceof Error ? error.message : error);
+    fallback = await notifyCyberThroughCeoGate(userId, result);
+  }
+  if (fallback && shouldSendAutomaticAlert(userId, result)) {
+    const telegramConfig = await storage.getTelegramConfig(userId);
+    const botToken = getTelegramBotToken();
+    if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
+      result.telegramSent = await sendTelegramMessage(botToken, telegramConfig.chatId, formatTelegramReport(result));
     }
   }
   if (scanOptions.notify) {
@@ -723,6 +726,26 @@ export function cyberCeoProblems(result: Pick<CybersecurityScanResult, "threats"
       kind: "owner" as const,
       ownerAction: threat.recommendation,
     }));
+}
+
+export type CyberGateRunner = (userId: string, input: Parameters<typeof runCeoAlertGate>[0]) => Promise<CeoAlertGateResult | null>;
+
+const defaultCyberGateRunner: CyberGateRunner = async (userId, input) => {
+  const deps = await defaultCeoAlertGateDeps(userId);
+  return deps ? runCeoAlertGate(input, deps) : null;
+};
+
+/** Returns true when the caller must fall back to the legacy alert (gate unavailable/unreadable). */
+export async function notifyCyberThroughCeoGate(userId: string, result: CybersecurityScanResult, runner: CyberGateRunner = defaultCyberGateRunner): Promise<boolean> {
+  try {
+    const outcome = await runner(userId, { problems: cyberCeoProblems(result), scope: result.githubError ? [] : ["cybersecurity"] });
+    if (!outcome || outcome.skippedReason?.startsWith("CEO_ALERT_LEDGER_UNAVAILABLE")) return cyberCeoProblems(result).length > 0;
+    result.telegramSent = outcome.sent > 0;
+    return false;
+  } catch (error) {
+    console.warn("[cybersecurity] CEO alert gate:", error instanceof Error ? error.message : error);
+    return cyberCeoProblems(result).length > 0;
+  }
 }
 
 export function startCybersecurityScheduler(): void {

@@ -121,17 +121,20 @@ export function selfHealToCeoView(entries: readonly SelfHealEntry[]): { problems
   return { problems, resolved };
 }
 
-export type CeoAlertPlan = { ledger: CeoAlertLedger; messages: string[]; changed: boolean };
+export type CeoAlertMessage = { ids: string[]; text: string };
+export type CeoAlertPlan = { ledger: CeoAlertLedger; messages: CeoAlertMessage[]; changed: boolean };
 
 export function formatNewProblem(problem: CeoProblem): string {
   if (problem.kind === "factory") {
     return `🔧 Fallo nuevo (${problem.source}): ${problem.title}\nLa fábrica ya tiene la orden de reparación (PR-first). Te escribo de nuevo solo cuando quede resuelto.`
       + (problem.prUrl ? `\nPR: ${problem.prUrl}` : "");
   }
-  return `⚠️ Necesito que hagas algo (${problem.source}): ${problem.title}\nQué hacer: ${problem.ownerAction || "revisar el detalle en BlackOps."}\nNo lo puede arreglar la fábrica (falta dato, acceso o secreto). No te lo repito.`;
+  return `⚠️ Necesito que hagas algo (${problem.source}): ${problem.title}\nQué hacer: ${problem.ownerAction || "revisar el detalle en BlackOps."}\nNo lo puede arreglar la fábrica (falta dato, acceso o secreto).`
+    + (problem.source === REMIND_OWNER_SOURCE ? " Te lo recuerdo una vez al día mientras siga abierto." : " No te lo repito.");
 }
 
 export function formatReminder(entry: CeoLedgerEntry): string {
+  if (entry.kind === "owner") return `⏳ Sigue abierto (${entry.source}): ${entry.title}\nSigue pendiente de tu acción.`;
   return `⏳ Sigue abierto (${entry.source}): ${entry.title}\nLa fábrica sigue trabajando en ello.` + (entry.prUrl ? `\nPR: ${entry.prUrl}` : "");
 }
 
@@ -140,10 +143,14 @@ export function formatResolved(entry: CeoLedgerEntry, prUrl?: string): string {
   return `✅ Resuelto (${entry.source}): ${entry.title}` + (link ? `\nPR: ${link}` : "\nYa no aparece en la última revisión.");
 }
 
+/** Security threats re-alert once per day while open, even when only Robert can fix them. */
+export const REMIND_OWNER_SOURCE = "cybersecurity";
+
 /**
  * Pure planner. `scope` lists the sources whose scan just completed reliably: only entries of
  * those sources can be resolved by absence. `resolvedKeys` (self-heal verified/cleared) resolve
- * explicitly with their PR link.
+ * explicitly with their PR link. With `delivered`, only changes whose message was actually
+ * delivered are recorded; everything else is retried on the next cycle.
  */
 export function planCeoAlerts(input: {
   ledger: CeoAlertLedger;
@@ -151,9 +158,15 @@ export function planCeoAlerts(input: {
   scope: readonly string[];
   resolvedKeys?: ReadonlyMap<string, string | undefined>;
   now: number;
+  delivered?: ReadonlySet<string>;
 }): CeoAlertPlan {
   const iso = new Date(input.now).toISOString();
-  const messages: string[] = [];
+  const messages: CeoAlertMessage[] = [];
+  const ok = (id: string) => !input.delivered || input.delivered.has(id);
+  const push = (id: string, text: string) => {
+    const same = messages.find((m) => m.text === text);
+    if (same) same.ids.push(id); else messages.push({ ids: [id], text });
+  };
   let changed = false;
   const entries = input.ledger.entries.map((e) => ({ ...e }));
   const byKey = new Map(entries.map((e) => [`${e.source}\u0000${e.key}`, e]));
@@ -165,17 +178,18 @@ export function planCeoAlerts(input: {
     current.add(id);
     const existing = byKey.get(id);
     if (!existing || existing.status === "resolved") {
+      push(id, formatNewProblem(problem));
+      if (!ok(id)) continue;
       const entry: CeoLedgerEntry = { key: problem.key, source: problem.source, title: problem.title.slice(0, 200), kind: problem.kind, status: "open", firstNotifiedAt: iso, lastNotifiedAt: iso, ...(problem.prUrl ? { prUrl: problem.prUrl } : {}) };
-      if (existing) Object.assign(existing, entry, { resolvedAt: undefined }); else { entries.push(entry); byKey.set(id, entry); }
-      messages.push(formatNewProblem(problem));
+      if (existing) { Object.assign(existing, entry); delete existing.resolvedAt; } else { entries.push(entry); byKey.set(id, entry); }
       changed = true;
       continue;
     }
     if (problem.prUrl && existing.prUrl !== problem.prUrl) { existing.prUrl = problem.prUrl; changed = true; }
-    if (existing.kind === "factory" && input.now - Date.parse(existing.lastNotifiedAt) >= CEO_ALERT_REMINDER_MS) {
-      existing.lastNotifiedAt = iso;
-      messages.push(formatReminder(existing));
-      changed = true;
+    const reminds = existing.kind === "factory" || existing.source === REMIND_OWNER_SOURCE;
+    if (reminds && input.now - Date.parse(existing.lastNotifiedAt) >= CEO_ALERT_REMINDER_MS) {
+      push(id, formatReminder(existing));
+      if (ok(id)) { existing.lastNotifiedAt = iso; changed = true; }
     }
   }
 
@@ -188,11 +202,11 @@ export function planCeoAlerts(input: {
     if (current.has(id) && !explicit) continue;
     if (!explicit && !scope.has(entry.source)) continue;
     const prUrl = explicit ? input.resolvedKeys!.get(baseKey) : undefined;
+    push(id, formatResolved(entry, prUrl));
+    if (!ok(id)) continue;
     entry.status = "resolved";
     entry.resolvedAt = iso;
     if (prUrl) entry.prUrl = prUrl;
-    const text = formatResolved(entry, prUrl);
-    if (!messages.includes(text)) messages.push(text);
     changed = true;
   }
 
@@ -215,28 +229,41 @@ export type CeoAlertGateDeps = {
   now(): number;
 };
 
-export type CeoAlertGateResult = { sent: number; planned: number; skippedReason?: string };
+export type CeoAlertGateResult = { sent: number; planned: number; failed: number; skippedReason?: string };
+
+const reason = (error: unknown) => (error instanceof Error ? error.message.slice(0, 120) : "sin detalle");
 
 export async function runCeoAlertGate(
   input: { problems: readonly CeoProblem[]; scope: readonly string[]; resolvedKeys?: ReadonlyMap<string, string | undefined> },
   deps: CeoAlertGateDeps,
 ): Promise<CeoAlertGateResult> {
-  let messages: string[] = [];
+  // Phase 1: read + plan (ledger unchanged). Phase 2 records only what was delivered.
+  let messages: CeoAlertMessage[] = [];
   try {
     await deps.transact(async (raw) => {
-      const plan = planCeoAlerts({ ledger: parseCeoAlertLedger(raw), ...input, now: deps.now() });
-      messages = plan.messages;
-      // Ledger is written before sending: a send failure never turns into an hourly repeat.
-      return JSON.stringify(plan.ledger);
+      messages = planCeoAlerts({ ledger: parseCeoAlertLedger(raw), ...input, now: deps.now() }).messages;
+      return raw ?? JSON.stringify(emptyCeoAlertLedger());
     });
   } catch (error) {
-    return { sent: 0, planned: 0, skippedReason: `CEO_ALERT_LEDGER_UNAVAILABLE: ${error instanceof Error ? error.message.slice(0, 120) : "sin detalle"}` };
+    return { sent: 0, planned: 0, failed: 0, skippedReason: `CEO_ALERT_LEDGER_UNAVAILABLE: ${reason(error)}` };
   }
+  if (!messages.length) return { sent: 0, planned: 0, failed: 0 };
+  const delivered = new Set<string>();
   let sent = 0;
-  for (const text of messages) {
-    try { if (await deps.send(text)) sent++; } catch { /* logged by caller via counts */ }
+  for (const message of messages) {
+    let okSend = false;
+    try { okSend = await deps.send(message.text); } catch { okSend = false; }
+    if (okSend) { sent++; message.ids.forEach((id) => delivered.add(id)); }
   }
-  return { sent, planned: messages.length };
+  const failed = messages.length - sent;
+  if (!delivered.size) return { sent, planned: messages.length, failed };
+  try {
+    await deps.transact(async (raw) => JSON.stringify(planCeoAlerts({ ledger: parseCeoAlertLedger(raw), ...input, now: deps.now(), delivered }).ledger));
+  } catch (error) {
+    // Sent but not recorded: it will be re-sent next cycle (duplicate beats a dropped alert).
+    return { sent, planned: messages.length, failed, skippedReason: `CEO_ALERT_LEDGER_WRITE_FAILED: ${reason(error)}` };
+  }
+  return { sent, planned: messages.length, failed };
 }
 
 export const CEO_ALERT_NAMESPACE = (userId: string) => `ceo-alerts:v1:${userId}`;
@@ -271,7 +298,7 @@ export async function runSelfHealCeoAlerts(
     entries = parseSelfHealState(input.selfHealState, input.owner).entries;
   } catch (error) {
     // Unreadable ledger is not "healthy" and not "resolved": send nothing.
-    return { sent: 0, planned: 0, skippedReason: `SELF_HEAL_STATE_UNREADABLE: ${error instanceof Error ? error.message.slice(0, 80) : "sin detalle"}` };
+    return { sent: 0, planned: 0, failed: 0, skippedReason: `SELF_HEAL_STATE_UNREADABLE: ${error instanceof Error ? error.message.slice(0, 80) : "sin detalle"}` };
   }
   const view = selfHealToCeoView(entries);
   return runCeoAlertGate({ problems: view.problems, scope: ["self-heal"], resolvedKeys: view.resolved }, deps);
