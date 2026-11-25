@@ -103,8 +103,10 @@ new methods must fail selection rather than silently use a different budget.
 ## External unknown resolution (`api-unknown-resolve`)
 
 Reviewed, operator-only and append-only. Dry run by default; writes only with `confirm=APLICAR`.
-It targets ONE hold: the code-owned News execution id, or `api_hold_id`, which must match an
-existing hold. It looks in every place the hold can live: the shared OpenAI credit ledger
+With an empty `api_hold_id` it targets every unresolved `unknown` reservation in the API authority
+ledger (rows in any other status are never touched) and the unknown Factory jobs whose spend is tied to
+them (`reservation.parent.jobId`). `api_hold_id=news` (or another id, which must match an existing hold)
+targets ONE hold: the code-owned News execution id. It looks in every place the hold can live: the shared OpenAI credit ledger
 (`agent_council_state`, Office key `office:<sha256(id)>`), the API authority reservations, and
 external-checkpoint unknowns (a checkpoint reconciled after the shared row was created that still
 has an unresolved unknown count). The amount always comes from an exact stored row, never from input.
@@ -121,6 +123,11 @@ has an unresolved unknown count). The amount always comes from an exact stored r
   receipts are also stored in the authority state. Logs show digests and amounts only.
 - Idempotent: a repeat finds the receipt and writes nothing; a different receipt for the same hold
   is `FACTORY_API_RESOLUTION_CONFLICT`. Reserved/settled (non-unknown) holds are refused.
+- Tied Factory job: resolved only when EVERY child reservation is settled or carries a resolution
+  receipt, at the conservative cost `ceil(sum of children microUSD / 10000)` cents (never more than the
+  job's own reservation). It goes through the existing stopped reconciliation (`reconcile`, terminal
+  `failed`, `executionStopped: true`), which also pauses the factory: resuming is a separate operator
+  step. A job with any unconfirmed child refuses the whole plan (`JOB_CHILD_UNCONFIRMED`).
 - Admission uses the effective unknown count (`effectiveFactoryApiUnknown`), which excludes
   resolved holds. Factory jobs in `unknown` still block. Code that predates `resolutions`
   rejects the new state (fails closed); external store adapters must add `resolveApiUnknown`.

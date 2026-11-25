@@ -37,7 +37,8 @@ export function summarizeNewsHold(ledgers: Array<{ reservations?: unknown } | nu
 type BudgetStatus = { month: string; fixedMicroUsd: number; spentMicroUsd: number; reservedMicroUsd: number;
   remainingMicroUsd: number | null; configured: boolean; unknown: boolean; paidAdmissionReady: boolean; reason: string;
   reconciliationEvidenceSha256: string | null };
-type ApiState = { checkpoints: Array<{ month: string; externalUnknownReservations: number }>; reservations: Array<{ status: string }> };
+type ApiState = { checkpoints: Array<{ month: string; externalUnknownReservations: number }>; reservations: Array<{ key: string; status: string }>;
+  resolutions?: Array<{ source: string; reservationKey?: string }> };
 
 /** Shape the read-only authority block for `status`. */
 export function shapeApiAuthority(input: { tablePresent: boolean; stateRowExists: boolean; monthInitialized: boolean;
@@ -50,8 +51,9 @@ export function shapeApiAuthority(input: { tablePresent: boolean; stateRowExists
     fixedMicroUsd: status.fixedMicroUsd, spentMicroUsd: status.spentMicroUsd, reservedMicroUsd: status.reservedMicroUsd,
     remainingMicroUsd: status.remainingMicroUsd,
     unknownHolds: {
-      apiReservations: state.reservations.filter(r => r.status === "unknown").length,
-      externalCheckpoint: state.checkpoints.reduce((sum, c) => sum + c.externalUnknownReservations, 0),
+      // Effective counts: holds settled by a reviewed resolution receipt no longer count.
+      apiReservations: state.reservations.filter(r => r.status === "unknown" && !(state.resolutions ?? []).some(x => x.reservationKey === r.key)).length,
+      externalCheckpoint: state.checkpoints.reduce((sum, c) => sum + c.externalUnknownReservations, 0) - (state.resolutions ?? []).filter(x => x.source === "external-checkpoint").length,
       factoryJobUnknown: input.factoryUnknownJob,
     },
     unknown: status.unknown, paidAdmissionReady: status.paidAdmissionReady, reason: status.reason,

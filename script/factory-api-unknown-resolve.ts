@@ -6,10 +6,12 @@ import { createSharedOpenAiCreditLedger, type SharedCreditState } from "../serve
 import { createSharedCreditTransaction } from "../server/shared-openai-credit-store";
 import { safeErrorCode } from "./software-factory-db-cli";
 import { readApiAuthority } from "./factory-api-authority-read";
-import { parseResolveArgs, planUnknownResolution, runUnknownResolution } from "./factory-api-unknown-resolve-core";
+import { createHash } from "node:crypto";
+import { parseResolveArgs, planAllApiUnknown, planUnknownResolution, runUnknownResolution, type UnknownFactoryJob } from "./factory-api-unknown-resolve-core";
 
 // factory-ops `api-unknown-resolve` (docs/factory-api-budget-authority.md):
-//   [--hold-id=ID] [--apply]   default hold: the quarantined News execution (code-owned, never printed)
+//   [--hold-id=ID|news] [--apply]   default: every unknown API-ledger reservation (+ tied unknown Factory jobs);
+//                                   --hold-id=news targets the quarantined News execution (code-owned, never printed)
 //   evidence text from env FACTORY_API_EVIDENCE (only its SHA-256 and length are printed)
 //   shared-credit scope from env SHARED_CREDIT_SCOPE
 // Dry run by default: reads only and prints the plan. Apply settles at the FULL reserved amount.
@@ -35,8 +37,15 @@ async function main() {
     const read = async () => {
       const raw = await council.read(ledgerOwner(scope));
       const shared = raw === null ? null : JSON.parse(raw) as SharedCreditState;
-      const { authority, state } = await readOnly(pool, c => readApiAuthority(c, owner));
-      return { shared, authority, plan: planUnknownResolution({ holdId: args.holdId, shared, api: state }) };
+      const { authority, state, jobs } = await readOnly(pool, async c => {
+        const read = await readApiAuthority(c, owner);
+        const rows = await c.query("SELECT id, input FROM software_factory_jobs WHERE owner_key=$1 AND status='unknown'", [createHash("sha256").update(owner).digest("hex")]);
+        const jobs: UnknownFactoryJob[] = rows.rows.map(r => ({ id: String(r.id), reservedCents: Number((r.input as { reservedCents?: unknown })?.reservedCents) }))
+          .filter(j => Number.isSafeInteger(j.reservedCents) && j.reservedCents >= 0);
+        return { ...read, jobs };
+      });
+      const plan = args.holdId === undefined ? planAllApiUnknown({ api: state, jobs }) : planUnknownResolution({ holdId: args.holdId, shared, api: state, jobs });
+      return { shared, authority, plan };
     };
     const before = await read();
     const shared = before.shared;
@@ -52,14 +61,16 @@ async function main() {
           now: () => new Date(), maximumGrantObservationAgeMs: 60_000 });
         await ledger.settle({ ...step, reconciliation: { executionStopped: true } });
       },
-      resolveApi: receipt => createSoftwareFactoryStore(pool as never).resolveApiUnknown(owner, receipt) });
+      resolveApi: receipt => createSoftwareFactoryStore(pool as never).resolveApiUnknown(owner, receipt),
+      reconcileJob: step => createSoftwareFactoryStore(pool as never).reconcile(owner, step.jobId, { actualCostCents: step.actualCostCents, executionStopped: true, reason: step.reason }) });
     if (!args.apply || !result.applied) {
       console.log(JSON.stringify({ dryRun: !args.apply, evidenceChars: args.evidenceChars, evidenceSha256: args.evidenceSha256, plan: result, authority: before.authority }));
       if (args.apply && before.plan.refusal) process.exitCode = 1;
       return;
     }
     const after = await read();
-    console.log(JSON.stringify({ applied: true, plan: result, after: { plan: after.plan.alreadyResolved, reason: after.authority.reason, unknown: after.authority.unknown } }));
+    console.log(JSON.stringify({ applied: true, plan: result, after: { alreadyResolved: after.plan.alreadyResolved, reason: after.authority.reason, unknown: after.authority.unknown,
+      unknownHolds: after.authority.unknownHolds, paidAdmissionReady: after.authority.paidAdmissionReady } }));
   } finally { await pool.end(); }
 }
 void main().catch(error => {

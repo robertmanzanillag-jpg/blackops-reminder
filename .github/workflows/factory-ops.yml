@@ -25,9 +25,12 @@ name: Factory operations (manual)
 #                    evidence SHA-256 only, never the evidence text) and any refusal; with
 #                    confirm=APLICAR writes it. Refuses if the quarantined News hold is still unknown
 #                    and not recorded as an external unknown. See docs/factory-api-budget-authority.md.
-#   api-unknown-resolve dry run by default: finds the quarantined News hold (or api_hold_id, validated
-#                    against existing unknown holds) in the shared credit ledger / API authority /
-#                    external checkpoint and prints the plan (ledgers, microUSD, digests only). With
+#   api-unknown-resolve dry run by default. Empty api_hold_id: every unresolved `unknown` API-ledger
+#                    reservation plus the unknown Factory jobs tied to it (reservation.parent.jobId).
+#                    api_hold_id=news (or a validated id): that one hold across shared credit ledger /
+#                    API authority / external checkpoint. Prints the plan (ledgers, microUSD, digests only).
+#                    Tied jobs go to terminal `failed` at ceil(children microUSD) cents via the
+#                    existing stopped reconciliation (which pauses the factory, as reconcile always does). With
 #                    confirm=APLICAR it settles it CONSERVATIVELY at its full reserved amount and appends
 #                    an immutable receipt (evidence SHA-256 + timestamp). Never releases or replays.
 #
@@ -88,7 +91,7 @@ on:
         type: string
         default: ""
       api_hold_id:
-        description: "api-unknown-resolve: hold id (empty = quarantined News execution)"
+        description: "api-unknown-resolve: empty = all unknown API-ledger reservations (+ tied unknown jobs); news = quarantined News hold"
         required: false
         type: string
         default: ""

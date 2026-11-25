@@ -99,7 +99,7 @@
     },
     {
       "path": "server/software-factory-api-budget.ts",
-      "sha256": "ecffe98f565f9f4a8c8a86830c1b97081e851e2e23e4a3d55d254789059a06e8"
+      "sha256": "2ca6f2aa84603d2173bcb475a74db53042a7278696c007c7a4d8a142893565cc"
     },
     {
       "path": "server/software-factory-asistente-build.ts",

@@ -185,8 +185,10 @@ export function assertFactoryApiJobAdmission(state: FactoryApiState, exposure: F
 export function assertFactoryApiParentSettlement(state:FactoryApiState,jobId:string,status:string,costCents:number) {
   if(status==="unknown")return;
   const children=state.reservations.filter(r=>r.parent?.jobId===jobId);
-  if(children.some(r=>r.status!=="settled"))throw Error("FACTORY_API_PARENT_CHILD_UNCONFIRMED");
-  const actual=safeSum(children.map(r=>r.actualMicroUsd!));
+  // A reviewed resolution receipt counts its child as settled at the FULL reserved amount.
+  const resolved=new Map((state.resolutions??[]).filter(r=>r.source==="api-reservation").map(r=>[r.reservationKey!,r.settledMicroUsd]));
+  if(children.some(r=>r.status!=="settled"&&!resolved.has(r.key)))throw Error("FACTORY_API_PARENT_CHILD_UNCONFIRMED");
+  const actual=safeSum(children.map(r=>r.status==="settled"?r.actualMicroUsd!:resolved.get(r.key)!));
   if(costCents*10000<actual)throw Error("FACTORY_API_PARENT_COST_UNDERSTATED");
 }
 
