@@ -222,6 +222,29 @@ export function parseStreamerState(raw) {
   catch { return emptyStreamerState(); }
 }
 
+/** 0 = open approval, 1 = fresh source (<= 72 h, the cloud publisher's default age window), 2 = stale. */
+export function retentionTier(c, now) {
+  if (['pending', 'approved'].includes(c.approval?.status) && now - Date.parse(c.publishedAt) <= 72 * HOUR) return 0;
+  return now - Date.parse(c.publishedAt) <= 72 * HOUR ? 1 : 2;
+}
+
+/** Why no approval row was requested: first failing gate per candidate (counts only). */
+export function approvalEligibility(state, config) {
+  const platforms = config.approvalPlatforms?.length ? config.approvalPlatforms : ['twitch', 'youtube'];
+  const out = {};
+  const add = r => { out[r] = (out[r] ?? 0) + 1; };
+  for (const c of state.candidates) {
+    if (!platforms.includes(c.platform)) add(`platform_not_served:${c.platform}`);
+    else if (c.approval?.status !== 'not_requested') add(`approval_${c.approval?.status ?? 'missing'}`);
+    else if (c.clipPolicy?.status !== 'allowed_unless_prohibited') add('creator_prohibited');
+    else if (!creatorPolicyChecked(state, c)) add('creator_policy_unchecked');
+    else if (takedownBlocks(state.takedowns, { creatorKey: c.creatorKey, creatorGroupId: state.creators?.[c.creatorKey]?.creatorGroupId, candidateId: c.id })) add('takedown');
+    else if (c.platform === 'twitch' && !clipLengthAllowed(c.durationSec)) add('clip_too_long');
+    else add('eligible');
+  }
+  return out;
+}
+
 /** Pure merge of one discovery pass into state. */
 export function applyDiscovery(state, { now, twitch, youtube, config }) {
   const next = structuredClone(state), checkedAt = iso(now);
@@ -248,8 +271,11 @@ export function applyDiscovery(state, { now, twitch, youtube, config }) {
       firstSeenAt: prior?.firstSeenAt ?? checkedAt, mp4Guess: raw.platform === 'twitch' ? twitchClipMp4Guess(raw.thumbnailUrl) : null });
   }
   // Keep only the newest/highest; prohibited ones stay visible (with evidence) but are never queued.
+  // Retention: a fixed 200 cap sorted by score alone let stale high-score rows (old clips, re-seen YouTube
+  // trending) push every new Twitch clip out before it could be queued. Rows with an open approval are kept
+  // (their approval must stay trackable), then sources published in the last 72 h, then the rest by score.
   next.candidates = [...byId.values()].filter(c => now - Date.parse(c.observedAt) <= 7 * 24 * HOUR)
-    .sort((a, b) => b.score - a.score).slice(0, MAX_CANDIDATES);
+    .sort((a, b) => retentionTier(a, now) - retentionTier(b, now) || b.score - a.score).slice(0, MAX_CANDIDATES);
   next.signals = [...(twitch?.streams ?? []), ...(youtube?.videos ?? []).filter(v => v.kind === 'live')]
     .map(s => ({ ...s, ...popScore({ ...s, live: true }), clipPolicy: next.creators[s.creatorKey]?.policy?.status ?? 'allowed_unless_prohibited' }))
     .sort((a, b) => b.score - a.score).slice(0, 30);
@@ -417,7 +443,7 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
     if (overdue.length) heldReasons.push('takedown_overdue');
     report.counts = { candidates: state.candidates.length, allowed: state.candidates.filter(c => c.clipPolicy?.status === 'allowed_unless_prohibited').length,
       prohibitedCreators: Object.values(state.creators).filter(c => c.policy?.status === 'prohibited').length, liveSignals: state.signals.length,
-      queuedForApproval: queued, awaitingApproval: state.candidates.filter(c => c.approval?.status === 'pending').length,
+      queuedForApproval: queued, approvalEligibility: approvalEligibility(state, config), awaitingApproval: state.candidates.filter(c => c.approval?.status === 'pending').length,
       approved: state.candidates.filter(c => c.approval?.status === 'approved').length,
       needsLocalDownload: state.candidates.filter(c => c.download?.mode === 'needs_local_download' && c.approval?.status === 'approved').length,
       takedownsOpen: state.takedowns.filter(t => !t.removedAt).length };
