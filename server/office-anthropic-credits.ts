@@ -65,8 +65,9 @@ export function createCreditLimitedOfficeClaudeRun(options: { ledger: Ledger; pr
       await ledger.markUnknown(key, `office-claude:${key.slice(13)}`).catch(() => undefined);
       throw Error("OFFICE_CREDIT_EXECUTION_UNCONFIRMED");
     }
-    // Cache tokens billed conservatively at the full input rate.
-    const actualMicroUsd = Math.ceil(((input + cacheRead + cacheWrite) * pricing.inputNanoUsdPerToken + output * pricing.outputNanoUsdPerToken) / 1000);
+    // Cache reads billed conservatively at the full input rate; cache writes at
+    // 2x input (the 1-hour write rate, the highest documented multiplier).
+    const actualMicroUsd = Math.ceil(((input + cacheRead + 2 * cacheWrite) * pricing.inputNanoUsdPerToken + output * pricing.outputNanoUsdPerToken) / 1000);
     await ledger.settle({ key, actualMicroUsd, evidenceId: parsed.id });
     const text = Array.isArray(parsed.content) ? parsed.content.filter((b: any) => b?.type === "text" && typeof b.text === "string").map((b: any) => b.text).join("") : "";
     if (parsed.stop_reason !== "end_turn" || !text.trim()) throw Error("OFFICE_ANTHROPIC_INCOMPLETE_RESULT");

@@ -88,7 +88,7 @@ export function shapeReviewerAcademy(company: unknown) {
 export function shapeTokens(raw: unknown, now: number) {
   const month = monthUtc(now);
   const reservations = object(raw) ? list(raw.reservations).filter(object) : [];
-  return { month, reservations: countByStatus(reservations.filter(r => r.month === month).map(r => r.status), ["reserved", "accounted"]) };
+  return { month, reservations: countByStatus(reservations.filter(r => r.month === month).map(r => r.status), ["reserved", "accounted", "released"]) };
 }
 
 const isoOrNull = (value: unknown) => {

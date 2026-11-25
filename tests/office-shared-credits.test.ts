@@ -43,7 +43,7 @@ async function fixture(fixedCents=0, pricingConfig: string | null = catalog()) {
       if (tokenFailure === "lost-ack") throw Error("private-token-commit-ack-detail");
       if (expireBeforeRequest) time = new Date(expiry); return id;
     },
-    recordTokens: (id, metadata) => tokenBudget.recordUsage(id, metadata),
+    recordTokens: (id, metadata) => tokenBudget.recordUsage(id, metadata), releaseTokens: id => tokenBudget.release(id),
     fetch: (async (url: string | URL | Request, init?: RequestInit) => {
       sentBody = String(init?.body);
       calls++; assert.equal(String(url), "https://api.openai.com/v1/responses"); assert.equal(init?.signal?.aborted, false);
@@ -199,4 +199,16 @@ test("Office financial escrow uses the full escaped request byte bound shared wi
   const primaryBound = Math.ceil(((bytes+1024)*800+32*1600)/1000);
   assert.equal(f.credit().reservations[0].reservedMicroUsd,primaryBound);
   assert.equal(f.tokens().reservations[0].reservedTokens,promptBytes+32+1024);
+});
+
+test("OpenAI 429 insufficient_quota settles money at $0 and releases the token hold (not billed)", async () => {
+  const f = await fixture();
+  f.rawResponse(new Response(JSON.stringify({ error: { type: "insufficient_quota", code: "insufficient_quota", message: "synthetic" } }), { status: 429, headers: { "content-type": "application/json" } }));
+  await assert.rejects(f.run("Review synthetic work", "assignment:quota"), /^Error: OFFICE_OPENAI_CREDIT_EXHAUSTED$/);
+  assert.equal(f.calls(), 1);
+  assert.equal(f.credit().reservations[0].status, "settled");
+  assert.equal((await f.ledger.status()).spentMicroUsd, 0); assert.equal((await f.ledger.status()).reservedMicroUsd, 0);
+  assert.equal(f.tokens().reservations[0].status, "released");
+  // Replay of the same assignment never calls the provider again.
+  await assert.rejects(f.run("Review synthetic work", "assignment:quota")); assert.equal(f.calls(), 1);
 });

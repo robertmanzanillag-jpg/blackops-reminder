@@ -36,7 +36,7 @@ async function verifiedHistory(){
 
 test('active v7 public source inventory and every frozen v6 byte retain exact integrity',async()=>{
  const result=await verifyActiveIntegrity(root,manifest);
- assert.equal(result.activeSourceCount,36);assert.equal(result.frozenV6FileCount,10);assert.equal(result.installable,false);
+ assert.equal(result.activeSourceCount,39);assert.equal(result.frozenV6FileCount,10);assert.equal(result.installable,false);
  await verifiedHistory();
 });
 

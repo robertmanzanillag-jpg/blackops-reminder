@@ -12,7 +12,7 @@ const metadata = z.object({ sessionId: z.string().regex(/^resp_/), model: z.stri
   provider: z.literal("openai"), completedAt: stamp, usage }).strict();
 const tokensSchema = z.object({ reservations: z.array(z.object({ id: z.string().min(1), month: z.string().regex(/^\d{4}-\d{2}$/),
   model: z.string().min(1), reservedTokens: amount.refine(value => value > 0), createdAt: stamp,
-  status: z.enum(["reserved", "accounted"]), result: metadata.optional() }).strict()) }).strict();
+  status: z.enum(["reserved", "accounted", "released"]), result: metadata.optional() }).strict()) }).strict();
 const configSchema = z.object({ grant: z.object({ id: identifier, accountScope: identifier, availableMicroUsd: amount,
   observedAt: stamp, expiresAt: stamp, verificationEvidenceId: identifier }).strict(),
   pricing: z.object({ model: z.string().min(1), inputNanoUsdPerToken: amount.refine(value => value > 0),

@@ -17,8 +17,10 @@ export function createCreditLimitedOfficeRun(options: {
   pricing: { model: string; inputNanoUsdPerToken: number; outputNanoUsdPerToken: number; validUntil: string };
   authorizeTokens: (limits: { model: string; promptBytes: number; maxOutputTokens: number }) => Promise<string>;
   recordTokens: (reservation: string, result: Omit<OfficeOpenAIResult, "text">) => Promise<void>;
+  /** Releases a token hold whose call was rejected before execution (not billed). */
+  releaseTokens: (reservation: string) => Promise<void>;
 }) {
-  const { ledger, now, authorizeTokens, recordTokens } = options;
+  const { ledger, now, authorizeTokens, recordTokens, releaseTokens } = options;
   const env = { ...options.env }, price = { ...options.pricing }, transport = options.fetch || fetch;
   if (!price.model || env.OFFICE_OPENAI_MODEL !== price.model ||
       ![price.inputNanoUsdPerToken, price.outputNanoUsdPerToken].every(n => Number.isSafeInteger(n) && n > 0) ||
@@ -83,7 +85,10 @@ export function createCreditLimitedOfficeRun(options: {
       // OpenAI answered with a not-billed HTTP rejection (e.g. 429
       // insufficient_quota): nothing executed, so the hold settles at $0.
       if (admitted && rejected) {
-        await ledger.settle({ key, actualMicroUsd: 0, evidenceId: `office-openai-rejected:${rejected.replace("FACTORY_OPENAI_REQUEST_REJECTED:", "").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80)}` });
+        try { await ledger.settle({ key, actualMicroUsd: 0, evidenceId: `office-openai-rejected:${rejected.replace("FACTORY_OPENAI_REQUEST_REJECTED:", "").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80)}` }); }
+        catch { await ledger.markUnknown(key, `office-execution:${key.slice(7)}`).catch(() => undefined); throw Error("OFFICE_CREDIT_EXECUTION_UNCONFIRMED"); }
+        // The token hold for this not-executed call is released too (counts 0 tokens).
+        if (tokenReservation) await releaseTokens(tokenReservation).catch(() => undefined);
         throw Error(isOpenAiRejectionCauseExhausted(rejected) ? "OFFICE_OPENAI_CREDIT_EXHAUSTED" : "OFFICE_OPENAI_REQUEST_REJECTED");
       }
       if (admitted) await ledger.markUnknown(key, `office-execution:${key.slice(7)}`).catch(() => undefined);

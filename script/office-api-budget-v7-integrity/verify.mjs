@@ -8,6 +8,7 @@ export const HISTORICAL_FIXTURE_SHA256='2e66f0abc9aff73ddca5884a1e777ac3253262cd
 export const REQUIRED_SOURCES=Object.freeze([
   "script/software-factory-pilot-exports.ts",
   "server/ai-model-router.ts",
+  "server/ai-provider-credit-cooldown.ts",
   "server/clippers-local-news-translation.ts",
   "server/factory-api-cache-usage.ts",
   "server/factory-api-context.ts",
@@ -15,6 +16,7 @@ export const REQUIRED_SOURCES=Object.freeze([
   "server/factory-api-sdk.ts",
   "server/factory-api-token-cost.ts",
   "server/gemini-client.ts",
+  "server/office-anthropic-credits.ts",
   "server/office-execution.ts",
   "server/office-openai.ts",
   "server/office-protocol.ts",
@@ -24,6 +26,7 @@ export const REQUIRED_SOURCES=Object.freeze([
   "server/postgres-pool-safety.ts",
   "server/shared-openai-credit-ledger.ts",
   "server/shared-openai-credit-runtime.ts",
+  "server/software-factory-anthropic-ledger.ts",
   "server/software-factory-anthropic.ts",
   "server/software-factory-api-budget.ts",
   "server/software-factory-asistente-build.ts",

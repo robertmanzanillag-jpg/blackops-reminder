@@ -139,6 +139,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     readOrders: (owner: string) => Promise<CompanyOrder[]>;
     githubRequest: (url: string, init: RequestInit) => Promise<Response>;
     modelRequest: (url: string, init: RequestInit) => Promise<Response>;
+    /** Claude routes reserve/settle on the factory monthly API authority too. */
+    anthropicApiAuthority?: import("./software-factory-model-routes").FactoryAnthropicApiAuthority;
     apiPrice?: FactoryApiPrice;
     download: typeof fetch;
     readUi: OperatorUiReader;
@@ -296,8 +298,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     // OpenAI shared credit could not be admitted at startup. Undefined keeps
     // the exact single-provider behavior.
     const claudeModel = (pricing: Credits["pricing"], request: (url: string, init: RequestInit) => Promise<Response>) => ({ request, model: pricing.model, inputNanoUsdPerToken: pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: pricing.outputNanoUsdPerToken, pricingValidUntil: pricing.validUntil, maxInputTokens: config.maxInputTokens, now, effort: "high" as const });
-    const claudeRoute: FactoryModelRoute | undefined = deps.provider === "anthropic" ? { provider: "anthropic", ledger: credits.ledger, model: claudeModel(credits.pricing, deps.modelRequest), historyLedgers: [...(deps.priorLedgers ?? [])] }
-        : deps.fallback ? { provider: "anthropic", ledger: deps.fallback.ledger, model: claudeModel(deps.fallback.pricing, deps.fallback.request) } : undefined;
+    const claudeRoute: FactoryModelRoute | undefined = deps.provider === "anthropic" ? { provider: "anthropic", ledger: credits.ledger, model: claudeModel(credits.pricing, deps.modelRequest), historyLedgers: [...(deps.priorLedgers ?? [])], ...(deps.anthropicApiAuthority ? { apiAuthority: deps.anthropicApiAuthority } : {}) }
+        : deps.fallback ? { provider: "anthropic", ledger: deps.fallback.ledger, model: claudeModel(deps.fallback.pricing, deps.fallback.request), ...(deps.anthropicApiAuthority ? { apiAuthority: deps.anthropicApiAuthority } : {}) } : undefined;
     const routesFor = (openAiModel: typeof model): FactoryModelRoute[] | undefined => deps.provider === "anthropic" ? [claudeRoute!]
         : claudeRoute ? [{ provider: "openai", ledger: credits.ledger, model: openAiModel }, claudeRoute] : undefined;
     const draftsToday = async (at: Date, signal?: AbortSignal) => { signal?.throwIfAborted(); return countDraftPullRequestsToday(await store.list(owner), at, ownerKey); };
@@ -526,7 +528,9 @@ async function installed(store: Store) {
             return { proposals: linkFactoryOfficeReviews(config.owner, read.proposals, runs as any), status: read.status };
         } });
     }
-    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, provider: selected.provider,
+    // Claude spend also counts against the factory's monthly API authority (same reserve/settle path as OpenAI).
+    const anthropicApiAuthority = { store: configuredSoftwareFactoryStore, owner: () => config.owner };
+    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, provider: selected.provider, anthropicApiAuthority,
         ...("apiPrice" in selected && selected.apiPrice ? {apiPrice:selected.apiPrice}:{}),
         ...("fallback" in selected && selected.fallback ? { fallback: selected.fallback } : {}), ...("priorLedgers" in selected ? { priorLedgers: selected.priorLedgers } : {}),
         // Claude admission rows (any month) count as history even when the

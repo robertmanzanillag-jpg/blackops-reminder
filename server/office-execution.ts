@@ -85,7 +85,7 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
         openai: async () => {
           const shared = deps.sharedCredits || await loadSharedCreditRuntime(env, () => new Date(now()));
           return createCreditLimitedOfficeRun({ ...shared, factoryInvocation:deps.factoryInvocation, env, now: () => new Date(now()), fetch: deps.fetch,
-            authorizeTokens: limits => budget!.reserve(limits), recordTokens: (id, metadata) => budget!.recordUsage(id, metadata),
+            authorizeTokens: limits => budget!.reserve(limits), recordTokens: (id, metadata) => budget!.recordUsage(id, metadata), releaseTokens: id => budget!.release(id),
           })(prompt, assigned);
         } });
     }

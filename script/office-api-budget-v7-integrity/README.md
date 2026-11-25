@@ -1,7 +1,7 @@
 # Canonical API budget source integrity v7
 
 This is a **read-only integrity inventory**, not an installable backport or a deployment package.
-Its explicit 36-source boundary covers the earlier public authority/transport sources, current
+Its explicit 39-source boundary covers the earlier public authority/transport sources, current
 cache accounting helpers, the guarded Factory/Office callers and the shared monetary ledgers.
 The active SHA-256 entries are maintained in reviewed pull requests whenever those sources
 change. Adding or removing inventory entries requires review of the explicit verifier inventory;

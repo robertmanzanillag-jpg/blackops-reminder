@@ -45,3 +45,11 @@ test("missing explicit limit and malformed persisted state fail closed", async (
   const budget = createOfficeTokenBudget({ limit: 2000, transact: async fn => fn({ reservations: [{ id: "bad" }] } as any) });
   await assert.rejects(budget.reserve(input));
 });
+test("a provider-rejected (not billed) hold is released, frees capacity and cannot be accounted afterwards", async () => {
+  const f = fixture(); const budget = f.create(); const id = await budget.reserve(input);
+  await assert.rejects(budget.reserve(input), (e: any) => e.code === "token_budget_exhausted");
+  await budget.release(id); await budget.release(id);
+  assert.equal(f.state().reservations[0].status, "released");
+  await budget.reserve(input);
+  await assert.rejects(budget.recordUsage(id, result), (e: any) => e.code === "accounting_conflict");
+});

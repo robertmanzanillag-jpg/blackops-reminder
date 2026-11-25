@@ -3,6 +3,8 @@ import type { createSharedOpenAiCreditLedger } from "./shared-openai-credit-ledg
 import { createOpenAiFactoryTextProvider, type FactoryTextResult } from "./software-factory-openai";
 import { createAnthropicFactoryTextProvider, type AnthropicFactoryModelConfig } from "./software-factory-anthropic";
 import { isOpenAiRejectionCauseExhausted } from "./ai-provider-credit-cooldown";
+import { createHash } from "node:crypto";
+import { currentFactoryApiParent } from "./factory-api-context";
 
 type Ledger = ReturnType<typeof createSharedOpenAiCreditLedger>;
 type GenerateInput = Parameters<ReturnType<typeof createOpenAiFactoryTextProvider>>[0];
@@ -11,7 +13,16 @@ type OpenAiModel = Parameters<typeof createOpenAiFactoryTextProvider>[0];
  * is reserved and settled only on that route's ledger. */
 export type FactoryModelRoute =
   | { provider: "openai"; ledger: Ledger; model: OpenAiModel; historyLedgers?: readonly Ledger[] }
-  | { provider: "anthropic"; ledger: Ledger; model: AnthropicFactoryModelConfig; historyLedgers?: readonly Ledger[] };
+  | { provider: "anthropic"; ledger: Ledger; model: AnthropicFactoryModelConfig; historyLedgers?: readonly Ledger[]; apiAuthority?: FactoryAnthropicApiAuthority };
+
+/** The factory's single monthly API authority ($ cap in software_factory_api_authority).
+ * Claude calls reserve, settle and mark unknown on it exactly like OpenAI calls do,
+ * in addition to the Claude ledger, so Claude spend counts against the same cap. */
+type ApiAuthorityStore = { reserveApi(owner: string, input: { key: string; consumer: "other"; requestSha256: string; maximumMicroUsd: number; parent?: { jobId: string; fence: string } }): Promise<{ admitted: boolean }>;
+  settleApi(owner: string, key: string, input: { actualMicroUsd: number; evidenceSha256: string }): Promise<unknown>; unknownApi(owner: string, key: string): Promise<unknown> };
+export type FactoryAnthropicApiAuthority = { store: ApiAuthorityStore; owner: () => string };
+const authorityHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export const factoryAnthropicAuthorityKey = (callKey: string) => "api:" + authorityHash(["factory-anthropic", callKey]);
 /** Every ledger that may already hold this key: each route's own ledger plus
  * read-only history ledgers (e.g. the OpenAI ledger in a Claude-only run). */
 const keyLedgers = (routes: readonly FactoryModelRoute[]) => {
@@ -111,7 +122,19 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
     const generate = routeGenerator(route, call.key, () => { dispatched = true; });
     let served = route.model.model;
     try {
-      const result = await executeWithinSharedCredits(route.ledger, { key: call.key, consumer: "factory", requestSha256, maximumMicroUsd: call.input.maxCostCents * 10000 }, async () => {
+      // Claude: hold the worst case on the factory's monthly API authority first.
+      // Refused (cap reached / unknown hold / replay) = fail closed, no Claude call.
+      let authorityKey: string | undefined, authorityOwner = "";
+      if (route.provider === "anthropic" && route.apiAuthority) {
+        authorityKey = factoryAnthropicAuthorityKey(call.key); authorityOwner = route.apiAuthority.owner();
+        const parent = currentFactoryApiParent();
+        const held = await route.apiAuthority.store.reserveApi(authorityOwner, { key: authorityKey, consumer: "other", requestSha256: authorityHash(["factory-anthropic", requestSha256]), maximumMicroUsd: call.input.maxCostCents * 10000, ...(parent ? { parent: { jobId: parent.jobId, fence: parent.fence } } : {}) });
+        if (!held.admitted) throw Error("FACTORY_API_DISPATCH_ALREADY_RESERVED");
+      }
+      const authority = route.provider === "anthropic" ? route.apiAuthority : undefined;
+      let result: FactoryTextResult;
+      try {
+      result = await executeWithinSharedCredits(route.ledger, { key: call.key, consumer: "factory", requestSha256, maximumMicroUsd: call.input.maxCostCents * 10000 }, async () => {
         let generated: Awaited<ReturnType<typeof generate>>;
         try { generated = await generate(call.input); } catch (error) { sub = /^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(messageOf(error)) ? "PROVIDER_" + messageOf(error).replace(/^(?:FACTORY|CREDIT)_/, "").slice(0, 60) : "PROVIDER_THREW"; throw error; }
         if (generated.status === "unknown") { sub = /^FACTORY_[A-Z]+_EXECUTION_UNCONFIRMED:([A-Z_]{2,40})$/.exec(generated.reason)?.[1] ?? "PROVIDER_UNKNOWN"; throw Error(call.unknownError); }
@@ -119,6 +142,18 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
         if ("servedModel" in generated && typeof generated.servedModel === "string") served = generated.servedModel;
         return { value: generated, actualMicroUsd: generated.costCents * 10000, evidenceId: call.evidenceId(requestSha256) };
       }, () => dispatched);
+      } catch (error) {
+        // Not dispatched: provably unbilled, release at $0. Dispatched: unknown (fail closed).
+        if (authority && authorityKey) {
+          if (!dispatched) await authority.store.settleApi(authorityOwner, authorityKey, { actualMicroUsd: 0, evidenceSha256: authorityHash({ requestSha256, notDispatched: true }) }).catch(() => authority.store.unknownApi(authorityOwner, authorityKey!).catch(() => undefined));
+          else await authority.store.unknownApi(authorityOwner, authorityKey).catch(() => undefined);
+        }
+        throw error;
+      }
+      if (authority && authorityKey) {
+        const settled = await authority.store.settleApi(authorityOwner, authorityKey, { actualMicroUsd: result.costCents * 10000, evidenceSha256: authorityHash({ requestSha256, status: result.status, costCents: result.costCents }) }).then(r => (r as { settled?: boolean } | undefined)?.settled !== false, () => false);
+        if (!settled) { await authority.store.unknownApi(authorityOwner, authorityKey).catch(() => undefined); throw Error("CREDIT_EXECUTION_UNCONFIRMED"); }
+      }
       const exhausted = factoryModelCreditExhausted(route.provider, result);
       if (exhausted) { try { await (call.onCreditExhausted ?? processCreditHooks.onCreditExhausted)?.(route.provider, route.provider === "openai" ? "OPENAI_INSUFFICIENT_QUOTA" : "ANTHROPIC_CREDIT_EXHAUSTED"); } catch { /* diagnostics only */ } }
       else if (result.status === "completed") { try { await (call.onProviderCompleted ?? processCreditHooks.onProviderCompleted)?.(route.provider); } catch { /* diagnostics only */ } }

@@ -4,7 +4,7 @@ import { APIError } from "@anthropic-ai/sdk";
 import { createSharedOpenAiCreditLedger, type SharedCreditState } from "../server/shared-openai-credit-ledger";
 import { createAnthropicFactoryTextProvider, createFactoryAnthropicTransport, anthropicUsageNanoUsd, type AnthropicFactoryClient } from "../server/software-factory-anthropic";
 import { createAnthropicFactoryLedger, readAnthropicFactoryReservation, factoryAnthropicFallbackEnabled, factoryAnthropicMonthlyBudgetMicroUsd, loadAnthropicFactoryRuntime } from "../server/software-factory-anthropic-ledger";
-import { runFactoryModelCall, factoryModelErrorLedger, factoryModelKeyRows, type FactoryModelRoute } from "../server/software-factory-model-routes";
+import { runFactoryModelCall, factoryModelErrorLedger, factoryAnthropicAuthorityKey, factoryModelKeyRows, type FactoryModelRoute } from "../server/software-factory-model-routes";
 import { resolveFactoryModelCredits } from "../server/software-factory-asistente-operator";
 import { withFactoryApiParent } from "../server/factory-api-context";
 
@@ -481,4 +481,44 @@ test("office: OpenAI out of credit routes to Claude, records the cooldown, skips
   await assert.rejects(runWithProviderFailover({ ...base, claude: broke as any, assigned: "a4" }), /OFFICE_ALL_PROVIDERS_CREDIT_EXHAUSTED/);
   await assert.rejects(runWithProviderFailover({ ...base, assigned: "a5" }), /OFFICE_ALL_PROVIDERS_CREDIT_EXHAUSTED/);
   await assert.rejects(runWithProviderFailover({ env: {}, now, store: memoryStore(), prompt: "p", openai, assigned: "a6" }), /OFFICE_OPENAI_CREDIT_EXHAUSTED/);
+});
+
+// Factory monthly API authority ($100 cap) shared by OpenAI and Claude.
+function authorityStore(limitMicroUsd = 100_000_000, spentMicroUsd = 0) {
+  const rows = new Map<string, { maximumMicroUsd: number; status: "reserved" | "settled" | "unknown"; actualMicroUsd?: number }>();
+  const used = () => spentMicroUsd + [...rows.values()].reduce((s, r) => s + (r.status === "settled" ? r.actualMicroUsd! : r.maximumMicroUsd), 0);
+  return { rows, used, owner: () => "synthetic-owner", store: {
+    async reserveApi(_owner: string, input: { key: string; consumer: string; requestSha256: string; maximumMicroUsd: number }) {
+      assert.match(input.requestSha256, /^[a-f0-9]{64}$/); assert.equal(input.consumer, "other");
+      if (rows.has(input.key)) return { admitted: false };
+      if (used() + input.maximumMicroUsd > limitMicroUsd) throw Error("FACTORY_API_BUDGET_EXHAUSTED");
+      rows.set(input.key, { maximumMicroUsd: input.maximumMicroUsd, status: "reserved" }); return { admitted: true };
+    },
+    async settleApi(_owner: string, key: string, input: { actualMicroUsd: number }) { const r = rows.get(key)!; r.status = "settled"; r.actualMicroUsd = input.actualMicroUsd; return undefined; },
+    async unknownApi(_owner: string, key: string) { rows.get(key)!.status = "unknown"; },
+  } };
+}
+test("factory authority: Claude spend reserves and settles on the factory's monthly API cap", async () => {
+  const auth = authorityStore();
+  const m = await matrix({ request: openAiRequest("count-fails") });
+  const routes = m.routes.map(r => r.provider === "anthropic" ? { ...r, apiAuthority: { store: auth.store, owner: auth.owner } } : r) as FactoryModelRoute[];
+  const out = await runFactoryModelCall(routes, callOptions("factory:authority"));
+  assert.equal(out.provider, "anthropic"); assert.equal(out.result.status, "completed");
+  const row = auth.rows.get(factoryAnthropicAuthorityKey("factory:authority"))!;
+  assert.equal(row.status, "settled"); assert.equal(row.actualMicroUsd, 50000); // same 5 cents as the Claude ledger
+  assert.equal((await m.claudeLedger.status()).spentMicroUsd, 50000);
+});
+test("factory authority: cap reached blocks Claude before any call; a billing rejection settles $0", async () => {
+  const full = authorityStore(100_000_000, 100_000_000);
+  const m = await matrix({ request: openAiRequest("count-fails") });
+  const routes = m.routes.map(r => r.provider === "anthropic" ? { ...r, apiAuthority: { store: full.store, owner: full.owner } } : r) as FactoryModelRoute[];
+  await assert.rejects(runFactoryModelCall(routes, callOptions("factory:capped")), /FACTORY_API_BUDGET_EXHAUSTED/);
+  assert.equal(m.claude.calls.length, 0);
+  const auth = authorityStore();
+  const billing = mockClient({ streamError: new APIError(402, { type: "error", error: { type: "billing_error" } }, "billing", new Headers()) });
+  const claudeLedger = await createAnthropicFactoryLedger({ store: memoryStore(), now, capMicroUsd: 50_000_000 });
+  const out = await runFactoryModelCall([{ provider: "anthropic", ledger: claudeLedger, model: claudeConfig(billing.client), apiAuthority: { store: auth.store, owner: auth.owner } }], callOptions("factory:billed"));
+  assert.equal(out.result.status, "blocked");
+  const row = auth.rows.get(factoryAnthropicAuthorityKey("factory:billed"))!;
+  assert.equal(row.status, "settled"); assert.equal(row.actualMicroUsd, 0); assert.equal(auth.used(), 0);
 });
