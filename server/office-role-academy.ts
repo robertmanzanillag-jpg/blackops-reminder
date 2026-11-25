@@ -11,8 +11,13 @@ const LESSONS=["Cite only exact evidence identifiers present in the supplied sou
 const version=digest({curriculum:"evidence-triage-v1",graderVersion:1,lessons:LESSONS,manifest:OFFICE_CURRICULUM_ROLES.map(role=>({role,fixtures:roleFixtures(role),prompts:roleFixtures(role).map(f=>buildRolePrompt(role,f.id))}))});
 const roleSchema=z.enum(OFFICE_CURRICULUM_ROLES as [OfficeCurriculumRole,...OfficeCurriculumRole[]]);
 const resultSchema=z.object({text:z.string().max(8000),sessionId:z.string().regex(/^resp_/),completedAt:z.string().datetime(),provider:z.literal("openai"),model:z.string().min(1),usage:z.object({inputTokens:z.number().int().nonnegative(),outputTokens:z.number().int().nonnegative(),totalTokens:z.number().int().nonnegative()}).strict(),durationMs:z.number().nonnegative().finite()}).strict();
-const jobSchema=z.object({id:z.string().uuid(),fence:z.string().uuid(),role:roleSchema,generation:z.number().int().positive(),fixtureId:z.string(),curriculumVersion:z.literal(version),startedAt:z.string().datetime(),expiresAt:z.string().datetime(),status:z.enum(["running","completed","blocked","unknown"]),reason:z.string().max(160).optional(),completedAt:z.string().datetime().optional(),incumbent:resultSchema.optional(),candidate:resultSchema.optional(),artifactId:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict();
+const jobSchema=z.object({id:z.string().uuid(),fence:z.string().uuid(),role:roleSchema,generation:z.number().int().positive(),fixtureId:z.string(),curriculumVersion:z.string().regex(/^[a-f0-9]{64}$/),startedAt:z.string().datetime(),expiresAt:z.string().datetime(),status:z.enum(["running","completed","blocked","unknown"]),reason:z.string().max(160).optional(),completedAt:z.string().datetime().optional(),incumbent:resultSchema.optional(),candidate:resultSchema.optional(),artifactId:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict();
 export type RoleAcademyJob=z.infer<typeof jobSchema>;
+/** Digest of the current curriculum. Jobs recorded under an older digest are
+ * stale history: they stay parseable (a curriculum edit must never brick the
+ * office) but never count toward the current curriculum, so the role re-plans. */
+export const ROLE_ACADEMY_CURRICULUM_VERSION=version;
+export const isCurrentRoleAcademyJob=(job:Pick<RoleAcademyJob,"curriculumVersion">)=>job.curriculumVersion===version;
 export type RoleAcademyState={version:1;jobs:RoleAcademyJob[]};
 const evidence=(job:RoleAcademyJob)=>({id:job.id,role:job.role,generation:job.generation,fixtureId:job.fixtureId,curriculumVersion:job.curriculumVersion,incumbent:job.incumbent,candidate:job.candidate});
 export function parseRoleAcademy(raw:unknown):RoleAcademyState{
@@ -20,7 +25,7 @@ export function parseRoleAcademy(raw:unknown):RoleAcademyState{
  const state=z.object({version:z.literal(1),jobs:z.array(jobSchema).max(200)}).strict().parse(raw);
  const ids=new Set<string>(),sessions=new Set<string>();
  for(const job of state.jobs){
-  if(ids.has(job.id) || Date.parse(job.expiresAt)<=Date.parse(job.startedAt) || !roleFixtures(job.role).some(f=>f.id===job.fixtureId))throw Error("ROLE_ACADEMY_INVALID_ASSIGNMENT");ids.add(job.id);
+  if(ids.has(job.id) || Date.parse(job.expiresAt)<=Date.parse(job.startedAt) || (isCurrentRoleAcademyJob(job) && !roleFixtures(job.role).some(f=>f.id===job.fixtureId)))throw Error("ROLE_ACADEMY_INVALID_ASSIGNMENT");ids.add(job.id);
   for(const result of [job.incumbent,job.candidate])if(result){if(sessions.has(result.sessionId) || result.usage.totalTokens!==result.usage.inputTokens+result.usage.outputTokens || Date.parse(result.completedAt)<Date.parse(job.startedAt)-30000 || Date.parse(result.completedAt)>Date.parse(job.expiresAt))throw Error("ROLE_ACADEMY_INVALID_RESULT");sessions.add(result.sessionId);}
   if(job.candidate && !job.incumbent)throw Error("ROLE_ACADEMY_MISSING_BASELINE");
   if(job.status==="completed" && (!job.incumbent || !job.candidate || job.incumbent.model!==job.candidate.model || !job.completedAt || Date.parse(job.completedAt)>Date.parse(job.expiresAt) || Date.parse(job.completedAt)<Date.parse(job.startedAt) || job.artifactId!==digest(evidence(job))))throw Error("ROLE_ACADEMY_INVALID_EVIDENCE");
@@ -30,7 +35,7 @@ export function parseRoleAcademy(raw:unknown):RoleAcademyState{
 export function roleAcademySummary(raw:unknown){
  const {jobs}=parseRoleAcademy(raw);
  return OFFICE_CURRICULUM_ROLES.map(role=>{
-  const rows=jobs.filter(j=>j.role===role),latest=rows.at(-1),generation=latest?.generation;
+  const rows=jobs.filter(j=>j.role===role && isCurrentRoleAcademyJob(j)),latest=rows.at(-1),generation=latest?.generation;
   const completed=rows.filter(j=>j.status==="completed" && j.generation===generation);
   const comparisons=completed.map(j=>({id:j.id,fixtureId:j.fixtureId,completedAt:j.completedAt!,incumbent:gradeRoleResponse(role,j.fixtureId,j.incumbent!.text),candidate:gradeRoleResponse(role,j.fixtureId,j.candidate!.text),incumbentTokens:j.incumbent!.usage.totalTokens,candidateTokens:j.candidate!.usage.totalTokens,incumbentDurationMs:j.incumbent!.durationMs,candidateDurationMs:j.candidate!.durationMs,artifactId:j.artifactId!}));
   const qualityImproved=comparisons.length===3 && new Set(comparisons.map(c=>c.fixtureId)).size===3 && new Set(comparisons.map(c=>c.completedAt.slice(0,10))).size===3 && comparisons.every(c=>c.candidate.passed && c.candidate.quality>c.incumbent.quality && c.candidateDurationMs<=c.incumbentDurationMs);
@@ -54,9 +59,9 @@ export function createRoleAcademyRunner(options:{council:Pick<ReturnType<typeof 
    if(jobs.length>=200 || jobs.some(j=>j.status==="running") || company.academyJobs?.some(j=>j.status==="running") || state.capabilityTraining?.runs.some(r=>r.status==="running"))return next;
    if(jobs.filter(j=>start-Date.parse(j.startedAt)<86400000).length>=options.dailyPairs)return next;
    // Fair order: all roles receive their first pair before any receives a second.
-   const roles=[...OFFICE_CURRICULUM_ROLES].sort((a,b)=>jobs.filter(j=>j.role===a).length-jobs.filter(j=>j.role===b).length);
+   const roles=[...OFFICE_CURRICULUM_ROLES].sort((a,b)=>jobs.filter(j=>j.role===a && isCurrentRoleAcademyJob(j)).length-jobs.filter(j=>j.role===b && isCurrentRoleAcademyJob(j)).length);
    for(const role of roles){if(ceoRolePaused(role))continue;const career=company.careers[role];if(!career || career.inTrainingUntilGeneration)continue;
-    const previous=jobs.filter(j=>j.role===role && j.generation===career.generation);
+    const previous=jobs.filter(j=>j.role===role && j.generation===career.generation && isCurrentRoleAcademyJob(j));
     if(previous.some(j=>["unknown","blocked"].includes(j.status) || start-Date.parse(j.startedAt)<86400000))continue;
     const fixture=roleFixtures(role).find(f=>!previous.some(j=>j.fixtureId===f.id));if(!fixture)continue;
     admitted={id,fence,role,generation:career.generation,fixtureId:fixture.id,curriculumVersion:version,startedAt:new Date(start).toISOString(),expiresAt:new Date(start+6*60000).toISOString(),status:"running"};
