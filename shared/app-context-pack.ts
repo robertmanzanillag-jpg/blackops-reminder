@@ -25,6 +25,10 @@ export function fileKind(p: string): string {
 }
 
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+/** Content filter: drop secret-looking values (provider keys, JWTs, long base64/hex, key=value assignments) from comment-derived summaries. */
+const SECRET_VALUE = /\b(?:sk|pk|rk|ghp|gho|ghs|github_pat|xox[abprs]|AKIA|AIza)[-_A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|\b[A-Za-z0-9+/_-]{32,}={0,2}|\b(?:password|passwd|secret|token|api[-_]?key)\s*[:=]\s*\S+/gi;
+export const redactSecrets = (s: string) => s.replace(SECRET_VALUE, "[redacted]");
+export const MAX_PACK_FILES = 1500;
 
 /** Deterministic summary: the first leading comment (or first doc comment) plus exported names. Never includes string literals or env values. */
 export function summarizeSource(p: string, content: string): Pick<ContextPackFile, "summary" | "exports" | "routes"> {
@@ -34,7 +38,7 @@ export function summarizeSource(p: string, content: string): Pick<ContextPackFil
   const lines = content.match(/^(?:\s*\/\/[^\n]*\n)+/);
   const doc = content.match(/\/\*\*([\s\S]*?)\*\//);
   let raw = lines ? lines[0].replace(/^\s*\/\/\s?/gm, " ") : block ? block[1] : doc ? doc[1] : "";
-  raw = clean(raw.replace(/^\s*\*\s?/gm, " "));
+  raw = redactSecrets(clean(raw.replace(/^\s*\*\s?/gm, " ")));
   const summary = (raw || (exports.length ? `${fileKind(p)}: ${exports.slice(0, 5).join(", ")}` : fileKind(p))).slice(0, MAX_SUMMARY_CHARS);
   return { summary, exports: [...new Set(exports)].slice(0, 12), routes: [...new Set(routes)].slice(0, 20) };
 }
@@ -48,7 +52,7 @@ export function buildContextPack(input: {
   const prev = new Map((input.previous?.version === APP_CONTEXT_PACK_VERSION ? input.previous.files : []).map(f => [f.path, f]));
   let reused = 0, summarized = 0;
   const files: ContextPackFile[] = [];
-  for (const f of [...input.files].filter(f => isPackablePath(f.path)).sort((a, b) => a.path.localeCompare(b.path))) {
+  for (const f of [...input.files].filter(f => isPackablePath(f.path)).sort((a, b) => a.path.localeCompare(b.path)).slice(0, MAX_PACK_FILES)) {
     const old = prev.get(f.path);
     if (old && old.hash === f.hash) { files.push(old); reused++; continue; }
     files.push({ path: f.path, hash: f.hash, kind: fileKind(f.path), ...summarizeSource(f.path, f.read()) });

@@ -53,3 +53,9 @@ test("loader serves a slice only for app questions and caches by mtime", () => {
   assert.equal(appContextSliceText("¿cómo estás?", 2, root), "");
   assert.equal(appContextSliceText("error en el código del pacer", 0, root), "");
 });
+
+test("summaries redact secret-looking values from comments", async () => {
+  const { summarizeSource } = await import("../shared/app-context-pack");
+  const s = summarizeSource("server/x.ts", "// key sk-abcdefghijklmnopqrstuv and token=hunter2hunter2\nexport const a = 1;\n").summary;
+  assert.ok(!s.includes("sk-abcdefghijklmnop") && !s.includes("hunter2"), s);
+});
