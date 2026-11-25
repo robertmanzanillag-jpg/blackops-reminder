@@ -30,6 +30,10 @@ test("spend, code failures, running chains and unknown history are never retried
   assert.equal(companyOrderRetryAttempt([r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PATCH")], ownerKey, orderId, rev), 0);
   assert.equal(companyOrderRetryAttempt([r0, build(r0, "running")], ownerKey, orderId, rev), 0);
   assert.equal(companyOrderRetryAttempt([r0, build(r0, "completed")], ownerKey, orderId, rev), 0);
+  const spent = root(0, "completed", { costCents: 5 });
+  assert.equal(companyOrderRetryAttempt([spent, build(spent, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED")], ownerKey, orderId, rev), 0);
+  const b = build(r0, "completed"), review = { ...build(r0, "blocked", "PROVIDER_BLOCKED"), key: `${b.id}.next`, payload: { previousJobId: b.id } };
+  assert.equal(companyOrderRetryAttempt([r0, b, review], ownerKey, orderId, rev), 0);
   assert.equal(companyOrderRetryAttempt([], ownerKey, orderId, rev), 0);
   const blocked = root(0, "blocked", { status: "blocked", reason: "SELF_HEAL_SOURCE_TOO_LARGE", costCents: 0 });
   assert.equal(companyOrderRetryAttempt([blocked], ownerKey, orderId, rev), 0);

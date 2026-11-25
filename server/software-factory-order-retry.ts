@@ -45,6 +45,9 @@ export function companyOrderRetryAttempt(jobs: readonly FactoryJob[], ownerKey: 
   if (attempt >= FACTORY_ORDER_MAX_RETRIES) return attempt;
   const chain = own.filter(j => j.id === latest.id || rootOf(j) === latest.id || j.key === `${latest.id}.next` || j.payload?.previousJobId === latest.id);
   if (chain.some(j => j.status === "pending" || j.status === "running" || j.status === "unknown")) return attempt;
+  // Any recorded spend, or any stage past the root that completed (it may have
+  // dispatched to a provider or opened a draft PR), keeps the order settled.
+  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0) || (j.id !== latest.id && j.status === "completed"); })) return attempt;
   const stopped = chain.filter(j => j.status === "blocked" || j.status === "failed");
   // Any spend or non-infrastructure stop in the chain keeps the order settled.
   if (!stopped.length || !stopped.every(isInfrastructureStop)) return attempt;
