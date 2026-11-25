@@ -154,7 +154,7 @@ export function shapeCouncil(raw: string | null, owner: string, now: number) {
 
 const CODE_RE = /^[A-Z0-9_:]{1,120}$/;
 const ROLE_RE = /^[a-z0-9:-]{1,40}$/;
-const code = (v: unknown) => typeof v === "string" && CODE_RE.test(v) ? v : v === undefined ? undefined : "UNSPECIFIED";
+const enumCode = (v: unknown) => typeof v === "string" && CODE_RE.test(v) ? v : v === undefined ? undefined : "UNSPECIFIED";
 
 /** Self-heal ledger: statuses, roles, codes, attempt counts and dates only (no record ids, no URLs). */
 export function shapeSelfHeal(raw: unknown) {
@@ -164,12 +164,12 @@ export function shapeSelfHeal(raw: unknown) {
     present: true as const,
     entries: entries.slice(0, 40).map(e => ({
       role: typeof e.role === "string" && ROLE_RE.test(e.role) ? e.role : "UNSPECIFIED",
-      code: code(e.code), status: code(typeof e.status === "string" ? e.status.toUpperCase() : undefined), reason: code(e.reason),
+      code: enumCode(e.code), status: enumCode(typeof e.status === "string" ? e.status.toUpperCase() : undefined), reason: enumCode(e.reason),
       attempts: Array.isArray(e.attempts) ? e.attempts.length : 0,
       lastAttemptAt: Array.isArray(e.attempts) && object(e.attempts.at(-1)) ? isoOrNull((e.attempts.at(-1) as Record<string, unknown>).createdAt) : null,
       detectedAt: isoOrNull(e.detectedAt), updatedAt: isoOrNull(e.updatedAt),
     })),
-    notes: Array.isArray(raw.notes) ? raw.notes.filter(object).slice(0, 40).map(n => ({ role: typeof n.role === "string" && ROLE_RE.test(n.role) ? n.role : "UNSPECIFIED", code: code(n.code) })) : [],
+    notes: Array.isArray(raw.notes) ? raw.notes.filter(object).slice(0, 40).map(n => ({ role: typeof n.role === "string" && ROLE_RE.test(n.role) ? n.role : "UNSPECIFIED", code: enumCode(n.code) })) : [],
   };
 }
 
