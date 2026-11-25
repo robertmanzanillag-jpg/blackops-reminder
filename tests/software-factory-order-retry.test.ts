@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { companyOrderRetryAttempt, isInfrastructureStop, FACTORY_ORDER_MAX_RETRIES } from "../server/software-factory-order-retry";
 import { companyOrderJob, companyOrderRootKey } from "../server/software-factory-company";
 import { observeFactoryForSelfHeal } from "../server/office-self-heal-factory";
-import { recordSelfHealFactory, planSelfHeal } from "../server/office-self-heal";
+import { recordSelfHealFactory, selfHealTestRecordId } from "../server/office-self-heal";
 import { emptyCompanyState } from "../shared/agent-company";
 
 const owner = "owner-fixture", ownerKey = createHash("sha256").update(owner).digest("hex");
@@ -60,11 +60,10 @@ test("self-heal observes only the newest retry root and waits instead of burning
   assert.equal(obs.length, 1); assert.equal(obs[0].rootJobId, r1.id); assert.equal(obs[0].state, "running");
 
   // An ORDERED entry whose build failed PROVIDER_BLOCKED advances to needs_owner (not retry_pending).
-  const state = { version: 1, ownerKey, notes: [], entries: [{ id: "e".repeat(24), key: "k".repeat(64), episode: 1, role: "release-gate", code: "KNOWN_TEST_FAILURE", recordId: "1".repeat(16), severity: 3, testPath: "tests/x.test.ts",
+  const state = { version: 1, ownerKey, notes: [], entries: [{ id: "e".repeat(24), key: "f".repeat(64), episode: 1, role: "release-gate", code: "KNOWN_TEST_FAILURE", recordId: selfHealTestRecordId("tests/x.test.ts"), severity: 3, testPath: "tests/x.test.ts",
     detectedAt: "2026-11-25T03:00:00Z", baseline: { jobId: "j", artifactId: "a".repeat(64), completedAt: "2026-11-25T03:00:00Z", findings: [] }, status: "ordered", readyToMerge: false,
     attempts: [{ n: 1, orderId: "ord-sh-x", orderRevision: rev, createdAt: "2026-11-25T03:00:00Z" }], updatedAt: "2026-11-25T03:00:00Z" }] };
-  let parsed: any;
-  try { parsed = planSelfHeal({ state, company: emptyCompanyState(), journal: { jobs: [] }, owner, now: t, maxPerDay: 1 }).state; } catch { parsed = state; }
+  const parsed: any = state;
   const failedObs = observeFactoryForSelfHeal({ owner, jobs: [r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED")], proposals: [], proposalStatus: "complete", now: t });
   const out = recordSelfHealFactory({ state: parsed, company: emptyCompanyState(), observations: failedObs, journal: { jobs: [] }, owner, now: t });
   assert.equal(out.state.entries[0].status, "needs_owner");
