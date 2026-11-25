@@ -9,6 +9,7 @@ export interface MediaRow { id: string; contentType: string; filename: string; d
 export interface MediaStore {
   put(row: MediaRow): Promise<void>;
   get(id: string): Promise<MediaRow | null>;
+  remove?(id: string): Promise<void>;
 }
 
 export function postgresMediaStore(): MediaStore {
@@ -29,12 +30,16 @@ export function postgresMediaStore(): MediaStore {
       const row = res.rows?.[0];
       return row ? { id: row.id, contentType: row.content_type, filename: row.filename, data: Buffer.from(row.data) } : null;
     },
+    async remove(id) {
+      const { db, sql } = await connect();
+      await db.execute(sql`DELETE FROM social_hub_media WHERE id = ${id}`);
+    },
   };
 }
 
 export function memoryMediaStore(): MediaStore {
   const m = new Map<string, MediaRow>();
-  return { async put(r) { m.set(r.id, r); }, async get(id) { return m.get(id) ?? null; } };
+  return { async put(r) { m.set(r.id, r); }, async get(id) { return m.get(id) ?? null; }, async remove(id) { m.delete(id); } };
 }
 
 export class MediaRejected extends Error {}

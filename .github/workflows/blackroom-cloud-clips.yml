@@ -1,0 +1,42 @@
+name: Black Room cloud clips
+
+# Daily: Drive "Black Room - Sets para clips" -> drops -> 15/30/60 s vertical clips -> Social Hub (Facebook Black Room).
+# TikTok keeps going through Metricool until the TikTok app is approved. $0 AI. See script/blackroom-cloud-clips.ts.
+# Off by default. Enable: repository variable BLACKROOM_CLOUD_CLIPS_ENABLED = 'true'.
+# Needs repository secret SOCIAL_HUB_AGENT_TOKEN (same value as the Replit secret).
+on:
+  schedule:
+    - cron: "17 13 * * *" # ~09:17 New York
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Render only (no upload, no posts, no Drive trash)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackroom-cloud-clips
+  cancel-in-progress: false
+
+jobs:
+  clips:
+    if: github.event_name == 'workflow_dispatch' || vars.BLACKROOM_CLOUD_CLIPS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsx script/blackroom-cloud-clips.ts
+        env:
+          SOCIAL_HUB_URL: ${{ vars.SOCIAL_HUB_URL || 'https://robplanner.replit.app' }}
+          SOCIAL_HUB_AGENT_TOKEN: ${{ secrets.SOCIAL_HUB_AGENT_TOKEN }}
+          BLACKROOM_CLOUD_POSTS_PER_DAY: ${{ vars.BLACKROOM_CLOUD_POSTS_PER_DAY || '4' }}
+          BLACKROOM_CLOUD_DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
