@@ -8,7 +8,7 @@ import path from 'node:path';
 import { buildCreditCaption, captionHasCredit, parseTakedown } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
 import { DESTINATIONS, destinationKey, findDestination, exactPost, canonicalDestinationKey, canonicalAccount, valueForDestination, createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
-import { stagedAssetRemovable, parseSlots, cloudPublishConfig, wallClockToIso, nextSlot, publishGate, runCloudPublisher as runCloudPublisherImpl, clipCaption, postItem, createGithubReleaseStager, liveDescriptionCheck } from '../script/clippers-streamer-cloud-worker.mjs';
+import { stagedAssetRemovable, parseSlots, cloudPublishConfig, wallClockToIso, nextSlot, publishGate, runCloudPublisher as runCloudPublisherImpl, clipCaption, postItem, createGithubReleaseStager, liveDescriptionCheck, funnelSummary, heldByLane } from '../script/clippers-streamer-cloud-worker.mjs';
 import { selectCutWindow, wrapLines, ffmpegRenderArgs, ytDlpDownloadArgs, ytDlpInfoArgs, validateRenderProbe, childEnv, renderVerticalClip, makeWorkDir, hookText, creditText, BUNDLED_FONT } from '../script/clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor } from '../script/clippers-streamer-cloud-learning.mjs';
 
@@ -848,4 +848,17 @@ test('auto-approve on: a candidate with no approval request is judged by the sam
   assert.equal(s.candidates.find(c => c.id === 'twitch-clip:x').approval.status, 'not_requested');
   assert.ok(s.cloudPublish.autoApprovals?.some?.(e => e.candidateId === 'twitch-clip:n') ?? JSON.stringify(s.cloudPublish).includes('pa-auto-1'));
   assert.deepEqual(appr.executed.map(e => e.id), ['pa-auto-1']);
+});
+
+test('legacy account aliases in CLIPPERS_STREAMER_CLOUD_DESTINATIONS connect memes and miami lanes', () => {
+  const c = cloudPublishConfig({ CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6431685:tiktok:streamersclips,6431687:tiktok:streamersclipusa,6591612:tiktok:ynb4b6r6' });
+  assert.deepEqual(c.destinations.map(d => `${d.brandId}:${d.network}:${d.account}`), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami']);
+  assert.deepEqual(c.unknownDestinations, []);
+});
+
+test('funnel counts held clips per lane', () => {
+  const reasons = ['lane_destination_not_connected:miami', 'lane_destination_not_connected:miami', 'lane_destination_not_connected:memes', 'lane_unrouted:language_not_served:de', 'run_deadline_reached'];
+  assert.deepEqual(heldByLane(reasons), { miami: 2, memes: 1, 'unrouted:de': 1 });
+  const line = funnelSummary({ status: 'held', funnel: { candidates: 3, eligible: 3, dropped: {} }, counts: { rendered: 0, scheduled: 0 }, heldReasons: reasons, autoApproval: {} });
+  assert.match(line, /held_by_lane\[miami=2 memes=1 unrouted:de=1\]/);
 });

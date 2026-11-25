@@ -57,7 +57,9 @@ export function parseSlots(raw) {
 
 export function cloudPublishConfig(env = process.env) {
   const keys = new Set(DESTINATIONS.map(destinationKey));
-  const requested = String(env.CLIPPERS_STREAMER_CLOUD_DESTINATIONS ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  // Legacy account aliases (e.g. 6431685:tiktok:streamersclips, 6591612:tiktok:ynb4b6r6) resolve to the current key,
+  // so a repo variable written with an old account name still connects that lane instead of silently dropping it.
+  const requested = [...new Set(String(env.CLIPPERS_STREAMER_CLOUD_DESTINATIONS ?? '').split(',').map(s => canonicalDestinationKey(s.trim())).filter(Boolean))];
   // Default: the three TikTok streamer accounts. Facebook stays off until Robert lists it explicitly.
   const defaults = DESTINATIONS.filter(d => d.network === 'tiktok').map(destinationKey);
   const destinations = (requested.length ? requested.filter(k => keys.has(k)) : defaults).map(k => DESTINATIONS.find(d => destinationKey(d) === k));
@@ -479,13 +481,27 @@ export function queueFunnel(state, ledger, config, now) {
   return { candidates: (state.candidates ?? []).length, eligible, dropped };
 }
 
+/** Count of held clips per lane (every occurrence, not deduped): miami, memes, unrouted:<reason>. */
+export function heldByLane(reasons = []) {
+  const out = {};
+  for (const r of reasons ?? []) {
+    const m = /^lane_destination_not_connected:([a-z0-9_-]+)/.exec(r) ?? /^lane_unrouted:(?:language_not_served:)?([a-z0-9_-]+)/.exec(r);
+    if (!m) continue;
+    const key = r.startsWith('lane_unrouted:') ? `unrouted:${m[1]}` : m[1];
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
+}
+
 /** One safe line: candidates found -> dropped per reason -> rendered -> scheduled (so a 0 is always explained). */
 export function funnelSummary(report) {
   const f = report.funnel;
   if (!f) return `clippers funnel: status=${report.status} (no queue evaluated) rendered=${report.counts?.rendered ?? 0} scheduled=${report.counts?.scheduled ?? 0}`;
   const drops = Object.entries(f.dropped).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(' ') || 'none';
   const held = [...new Set(report.heldReasons ?? [])].slice(0, 8).join(',') || 'none';
-  return `clippers funnel: candidates=${f.candidates} -> dropped[${drops}] -> eligible=${f.eligible} -> rendered=${report.counts.rendered} -> scheduled=${report.counts.scheduled} (held: ${held}; status=${report.status}; ${autoApprovalSummary(report)})`;
+  const byLane = heldByLane(report.heldReasons);
+  const lanes = Object.keys(byLane).length ? ` held_by_lane[${Object.entries(byLane).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(' ')}]` : '';
+  return `clippers funnel: candidates=${f.candidates} -> dropped[${drops}] -> eligible=${f.eligible} -> rendered=${report.counts.rendered} -> scheduled=${report.counts.scheduled} (held: ${held}; status=${report.status}; ${autoApprovalSummary(report)})${lanes}`;
 }
 
 export async function runCloudPublisher({ env = process.env, now = Date.now(), owner, store, approvals, metricool, stager, fetch: fetchImpl = globalThis.fetch,
