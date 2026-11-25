@@ -8,6 +8,9 @@ type Backend = { read(key: string): Promise<string | null>; write(key: string, v
 const memory = new Map<string, string | null>();
 let backend: Backend | null = null;
 let chain: Promise<unknown> = Promise.resolve();
+let backendKind: "postgres" | "file" | "custom" | "none" = "none";
+let lastWriteError: { key: string; message: string; at: string } | null = null;
+let lastWriteOkAt: string | null = null;
 
 async function postgresBackend(): Promise<Backend> {
   const [{ db }, { sql }] = await Promise.all([import("../db"), import("drizzle-orm")]);
@@ -38,7 +41,9 @@ function fileBackend(dir = process.env.SOCIAL_HUB_DATA_DIR ?? "data/social-hub")
 
 /** Call once at startup, before routes serve or the scheduler runs. Uses Postgres when DATABASE_URL is set. */
 export async function hydrateSocialHub(keys: string[] = ["state", "tokens"], useBackend?: Backend): Promise<void> {
-  backend = useBackend ?? (process.env.DATABASE_URL && process.env.SOCIAL_HUB_STORAGE !== "file" ? await postgresBackend() : fileBackend());
+  const usePg = !useBackend && Boolean(process.env.DATABASE_URL) && process.env.SOCIAL_HUB_STORAGE !== "file";
+  backend = useBackend ?? (usePg ? await postgresBackend() : fileBackend());
+  backendKind = useBackend ? "custom" : usePg ? "postgres" : "file";
   for (const k of keys) memory.set(k, await backend.read(k));
 }
 
@@ -52,11 +57,27 @@ export function kvSet(key: string, value: string): void {
   memory.set(key, value);
   const b = backend;
   if (!b) throw new Error("Social Hub sin almacenamiento (hydrateSocialHub).");
-  chain = chain.then(() => b.write(key, value)).catch((e) => console.error("[social-hub persist]", e?.message ?? e));
+  chain = chain
+    .then(() => b.write(key, value))
+    .then(() => { lastWriteOkAt = new Date().toISOString(); lastWriteError = null; })
+    .catch((e) => {
+      lastWriteError = { key, message: String(e?.message ?? e).slice(0, 300), at: new Date().toISOString() };
+      console.error("[social-hub persist]", lastWriteError.message);
+    });
 }
 
 export function kvFlush(): Promise<unknown> {
   return chain;
+}
+
+/** Waits for pending writes and throws if the last one failed, so callers never confirm an unsaved change. */
+export async function kvFlushOrThrow(): Promise<void> {
+  await chain;
+  if (lastWriteError) throw new Error(`No se pudo guardar en la base de datos (${lastWriteError.key}): ${lastWriteError.message}`);
+}
+
+export function kvStatus() {
+  return { backend: backendKind, keys: Array.from(memory.entries()).map(([k, v]) => ({ key: k, bytes: v ? v.length : 0 })), lastWriteOkAt, lastWriteError };
 }
 
 export function memoryBackend(seed: Record<string, string> = {}): Backend {

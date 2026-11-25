@@ -3,8 +3,8 @@ import type { Express, Request, Response } from "express";
 import { NETWORK_CAPABILITIES, SOCIAL_NETWORKS, type SocialNetwork, type SocialPostInput, type SocialPostStatus } from "@shared/social-hub";
 import { getCurrentUserId, getSystemUserId } from "../user-context";
 import { envCredentialStore, listEnvAccounts } from "./providers";
-import { buildAuthUrl, completeOAuth, loadTokens, oauthConfigured, oauthCredentialStore, OAUTH_APPS, removeToken } from "./oauth";
-import { hydrateSocialHub, kvFlush } from "./persist";
+import { buildAuthUrl, completeOAuth, loadTokens, oauthConfigured, oauthCredentialStore, OAUTH_APPS, removeToken, tokenStoreStatus } from "./oauth";
+import { hydrateSocialHub, kvFlush, kvFlushOrThrow, kvStatus } from "./persist";
 import { persistentSocialHubStore, SocialHub, SocialHubValidationError } from "./scheduler";
 
 let hub: SocialHub | undefined;
@@ -75,6 +75,7 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
     try { tokens = loadTokens(); } catch { tokens = []; }
     return {
       apps: Object.fromEntries(SOCIAL_NETWORKS.map((n) => [n, { ready: oauthConfigured(n), needs: [OAUTH_APPS[n].clientIdEnv, OAUTH_APPS[n].clientSecretEnv] }])),
+      storage: { ...kvStatus(), tokens: tokenStoreStatus() },
       connected: tokens.map((t) => ({ network: t.network, accountId: t.accountId, label: t.label, connectedAt: t.connectedAt, expiresAt: t.expiresAt })),
     };
   }));
@@ -91,7 +92,7 @@ export function registerSocialHubRoutes(app: Pick<Express, "get" | "post">, deps
       if (req.query.error) throw new Error(String(req.query.error_description ?? req.query.error));
       await socialHubReady();
       const rows = await completeOAuth(String(req.query.state ?? ""), String(req.query.code ?? ""));
-      await kvFlush();
+      await kvFlushOrThrow();
       res.type("html").send(`<meta charset="utf-8"><h2>Conectado ✅</h2><ul>${rows.map((r) => `<li>${esc(r.network)}: ${esc(r.label)}</li>`).join("")}</ul><p>Ya puedes cerrar esta pestaña.</p>`);
     } catch (e) {
       res.status(400).type("html").send(`<meta charset="utf-8"><h2>No se pudo conectar</h2><p>${esc(e instanceof Error ? e.message : "Error")}</p>`);
