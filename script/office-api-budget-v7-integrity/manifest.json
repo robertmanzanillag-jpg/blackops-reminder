@@ -99,7 +99,7 @@
     },
     {
       "path": "server/software-factory-api-budget.ts",
-      "sha256": "b4f2c3610dee1b7104fdf37d380fc626a62584b3428a157d9900a052aa135e77"
+      "sha256": "2ca6f2aa84603d2173bcb475a74db53042a7278696c007c7a4d8a142893565cc"
     },
     {
       "path": "server/software-factory-asistente-build.ts",
@@ -123,7 +123,7 @@
     },
     {
       "path": "server/software-factory-object-store.ts",
-      "sha256": "71c1575a6751097299ed79b992227837c7a121ff5d255a505df6c2a2f2a29b8c"
+      "sha256": "dd32f5bf223bb4d4b00a37f65e1a675aaa717893939477ab6cedf693ba32f679"
     },
     {
       "path": "server/software-factory-openai-builder.ts",
@@ -159,7 +159,7 @@
     },
     {
       "path": "server/software-factory-store.ts",
-      "sha256": "f70b9beb974329f88cb008311560f9fff6a78a4f0ab1615bc97b9085ebe8cb3b"
+      "sha256": "e45d64b85c53e0c98e354d9163535c1d76e74841344306b70061bcdd0f340e78"
     },
     {
       "path": "server/software-factory-worker.ts",

@@ -43,8 +43,8 @@ attributable historical charges and open liabilities **outside** this Factory/AP
 ledger, with exact original IDs/receipts and a documented cutover coverage boundary.
 Do not reimport charges already represented in the Factory or API ledger. External
 reserved/unknown entries remain durable across months; a new checkpoint must not
-repeat those same holds and cannot clear them. Resolving such liabilities needs
-a separate reviewed exact-receipt recovery, which is intentionally not supplied here. Neither
+repeat those same holds and cannot clear them. Resolving such liabilities uses only
+the reviewed, append-only `api-unknown-resolve` action below. Neither
 CSV aggregates, missing rows, current provider balance nor absence of a request is
 proof of completeness. No automatic migration or import exists in this change.
 
@@ -98,4 +98,42 @@ new methods must fail selection rather than silently use a different budget.
   and `api_evidence` (only its SHA-256 is stored or printed). It refuses while the News hold is
   still unknown unless that hold is recorded with a nonzero external unknown count and reserved amount.
   A checkpoint with a nonzero unknown count keeps paid admission blocked (`FACTORY_API_UNKNOWN_HOLD`)
-  until a separate reviewed exact-receipt recovery exists.
+  until `api-unknown-resolve` appends a reviewed resolution receipt for that hold.
+
+## External unknown resolution (`api-unknown-resolve`)
+
+Reviewed, operator-only and append-only. Dry run by default; writes only with `confirm=APLICAR`.
+With an empty `api_hold_id` it targets every unresolved `unknown` reservation in the API authority
+ledger (rows in any other status are never touched) and the unknown Factory jobs whose spend is tied to
+them (`reservation.parent.jobId`). `api_hold_id=news` (or another id, which must match an existing hold)
+targets ONE hold: the code-owned News execution id. It looks in every place the hold can live: the shared OpenAI credit ledger
+(`agent_council_state`, Office key `office:<sha256(id)>`), the API authority reservations, and
+external-checkpoint unknowns (a checkpoint reconciled after the shared row was created that still
+has an unresolved unknown count). The amount always comes from an exact stored row, never from input.
+
+- The hold is settled CONSERVATIVELY at its full reserved amount (assumed spent). It is never
+  released, voided, refunded, replayed or settled for less; an overrun keeps its reported amount.
+- Shared ledger: the ledger's own `settle(..., reconciliation: {executionStopped: true})` path.
+- API reservation: the row is not edited; a receipt in `resolutions` makes it count as spent at
+  its full amount instead of reserved and drops it from the unknown count.
+- External checkpoint: the checkpoint stays immutable and its external reserved amount keeps
+  counting every month; the receipt only reduces the effective unknown count by one.
+- Each step first appends an immutable receipt (hold SHA-256, ledger, microUSD, evidence SHA-256
+  from `api_evidence`, timestamp, policy) to `factory-api-unknown-resolution-receipts-v1`; API
+  receipts are also stored in the authority state. Logs show digests and amounts only.
+- Idempotent: a repeat finds the receipt and writes nothing; a different receipt for the same hold
+  is `FACTORY_API_RESOLUTION_CONFLICT`. Reserved/settled (non-unknown) holds are refused.
+- Tied Factory job: resolved only when EVERY child reservation is settled or carries a resolution
+  receipt, at the conservative cost `ceil(sum of children microUSD / 10000)` cents (never more than the
+  job's own reservation). It goes through the existing stopped reconciliation (`reconcile`, terminal
+  `failed`, `executionStopped: true`), which also pauses the factory: resuming is a separate operator
+  step (`factory-resume`). A job with any unconfirmed child refuses the whole plan (`JOB_CHILD_UNCONFIRMED`).
+- Admission uses the effective unknown count (`effectiveFactoryApiUnknown`), which excludes
+  resolved holds. Factory jobs in `unknown` still block. Code that predates `resolutions`
+  rejects the new state (fails closed); external store adapters must add `resolveApiUnknown`.
+
+## Resume (`factory-resume`)
+
+Dry run by default; `confirm=APLICAR` clears the pause through `store.setPaused(owner, false)`, the same
+path as the owner web UI. Refuses (`FACTORY_JOB_UNKNOWN` / `FACTORY_API_UNKNOWN_HOLD`) while any job is
+`unknown` or the API authority reports an unknown hold. Logs booleans and counts only.

@@ -25,6 +25,17 @@ name: Factory operations (manual)
 #                    evidence SHA-256 only, never the evidence text) and any refusal; with
 #                    confirm=APLICAR writes it. Refuses if the quarantined News hold is still unknown
 #                    and not recorded as an external unknown. See docs/factory-api-budget-authority.md.
+#   api-unknown-resolve dry run by default. Empty api_hold_id: every unresolved `unknown` API-ledger
+#                    reservation plus the unknown Factory jobs tied to it (reservation.parent.jobId).
+#                    api_hold_id=news (or a validated id): that one hold across shared credit ledger /
+#                    API authority / external checkpoint. Prints the plan (ledgers, microUSD, digests only).
+#                    Tied jobs go to terminal `failed` at ceil(children microUSD) cents via the
+#                    existing stopped reconciliation (which pauses the factory, as reconcile always does).
+#   factory-resume   dry run by default; with confirm=APLICAR clears the factory pause through
+#                    store.setPaused(owner,false) (same path as the owner web UI). Refuses while any
+#                    job is unknown or the API authority reports an unknown hold. With
+#                    confirm=APLICAR it settles it CONSERVATIVELY at its full reserved amount and appends
+#                    an immutable receipt (evidence SHA-256 + timestamp). Never releases or replays.
 #
 # This repository is public, so job logs are public: the scripts print only static JSON
 # (table presence, pause flag, budget/job counts) and static error codes, never connection
@@ -35,7 +46,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "status | migrate-dry-run | migrate-apply | office-status | office-credit-audit | sources-migrate-dry-run | sources-migrate-apply | credit-new | credit-reconcile | api-month-init | api-checkpoint"
+        description: "status | migrate-dry-run | migrate-apply | office-status | office-credit-audit | sources-migrate-dry-run | sources-migrate-apply | credit-new | credit-reconcile | api-month-init | api-checkpoint | api-unknown-resolve | factory-resume"
         required: true
         type: choice
         default: status
@@ -51,6 +62,8 @@ on:
           - credit-reconcile
           - api-month-init
           - api-checkpoint
+          - api-unknown-resolve
+          - factory-resume
       confirm:
         description: "Type APLICAR to allow migrate-apply, sources-migrate-apply, credit-new or credit-reconcile apply (without it credit-reconcile is a dry run)"
         required: false
@@ -81,8 +94,13 @@ on:
         required: false
         type: string
         default: ""
+      api_hold_id:
+        description: "api-unknown-resolve: empty = all unknown API-ledger reservations (+ tied unknown jobs); news = quarantined News hold"
+        required: false
+        type: string
+        default: ""
       api_evidence:
-        description: "api-checkpoint: evidence note (only its SHA-256 is stored/printed)"
+        description: "api-checkpoint/api-unknown-resolve: evidence note (only its SHA-256 is stored/printed)"
         required: false
         type: string
         default: ""
@@ -133,6 +151,8 @@ jobs:
             sources-migrate-dry-run|sources-migrate-apply) test -f script/office-source-documents-migrate.ts ;;
             credit-new|credit-reconcile) test -f script/shared-credit-grant.ts ;;
             api-month-init|api-checkpoint) test -f script/factory-api-authority.ts && test -f script/factory-api-authority-cli.ts ;;
+            api-unknown-resolve) test -f script/factory-api-unknown-resolve.ts ;;
+            factory-resume) test -f script/factory-resume.ts ;;
             *) echo "unknown action" >&2; exit 1 ;;
           esac
 
@@ -263,3 +283,35 @@ jobs:
             node --import tsx script/factory-api-authority.ts checkpoint --month="$API_MONTH" --external-spent-usd="$API_SPENT" \
               --external-reserved-usd="$API_RESERVED" --external-unknown-count="$API_UNKNOWN" "${apply[@]}"
           fi
+
+      - name: Factory API unknown resolution (api-unknown-resolve)
+        if: inputs.action == 'api-unknown-resolve'
+        env:
+          NODE_ENV: production
+          AGENT_COUNCIL_STORAGE: postgres
+          # The shared credit ledger and the Factory authority must be the same database.
+          DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL || secrets.OFFICE_DATABASE_URL }}
+          SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
+          SHARED_CREDIT_SCOPE: ${{ vars.OFFICE_SHARED_CREDIT_SCOPE || 'openai-2026-11-19' }}
+          CONFIRM: ${{ inputs.confirm }}
+          HOLD_ID: ${{ inputs.api_hold_id }}
+          FACTORY_API_EVIDENCE: ${{ inputs.api_evidence }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$HOLD_ID" ]; then args+=("--hold-id=$HOLD_ID"); fi
+          if [ "$CONFIRM" = "APLICAR" ]; then args+=(--apply); fi
+          node --import tsx script/factory-api-unknown-resolve.ts "${args[@]}"
+
+      - name: Factory resume (factory-resume)
+        if: inputs.action == 'factory-resume'
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL || secrets.OFFICE_DATABASE_URL }}
+          SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$CONFIRM" = "APLICAR" ]; then args+=(--apply); fi
+          node --import tsx script/factory-resume.ts "${args[@]}"
