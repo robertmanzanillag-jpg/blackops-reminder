@@ -45,7 +45,8 @@ export function SoftwareFactoryAgentsBoard() {
       <div className="rounded border border-white/10 p-2"><dt className="text-muted-foreground">API</dt><dd className="font-medium">{d.api.text}</dd></div>
       {d.provider && <div className="col-span-2 rounded border border-white/10 p-2" data-testid="factory-ai-provider" data-provider={d.provider.active ?? "none"}><dt className="text-muted-foreground">Proveedor IA</dt>
         <dd className="font-medium">{!d.provider.readable ? "No se pudo leer el estado de crédito." : d.provider.active === "anthropic" ? "Claude (Anthropic)" : d.provider.active === "openai" ? "OpenAI" : "Ninguno disponible"}</dd>
-        {d.provider.readable && <dd className="text-muted-foreground">{d.provider.reason}</dd>}</div>}
+        {d.provider.readable && <dd className="text-muted-foreground">{d.provider.reason}</dd>}
+        {d.models && <dd className="text-muted-foreground" data-testid="factory-ai-model">Modelo de código: {d.provider.active === "anthropic" ? d.models.anthropic : d.provider.active === "openai" ? d.models.openai : `${d.models.openai} / ${d.models.anthropic}`}</dd>}</div>}
       <div className="rounded border border-white/10 p-2"><dt className="text-muted-foreground">Presupuesto {d.budget.month}</dt><dd className="font-medium">{d.budget.configured ? `${money(d.budget.usedCents)} usado · ${money(d.budget.remainingCents)} libre` : "Sin registrar"}</dd></div>
       <div className="rounded border border-white/10 p-2"><dt className="text-muted-foreground">Admisiones hoy</dt><dd className="font-medium">{d.admissions.today} / {d.admissions.cap ?? "límite sin confirmar"}</dd></div>
       <div className="col-span-2 rounded border border-white/10 p-2"><dt className="text-muted-foreground">Órdenes abiertas{d.openOrders.readable ? ` (${d.openOrders.total})` : ""}</dt>

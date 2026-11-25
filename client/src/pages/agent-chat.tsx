@@ -5,7 +5,7 @@ import { ArrowLeft, Inbox, Loader2, MessageSquarePlus, Send, Share2 } from "luci
 import { apiRequest } from "@/lib/queryClient";
 import { ChatMarkdown } from "@/components/agent-chat/chat-markdown";
 
-type AgentRow = { id: string; name: string; job: string; group?: string; groupLabel?: string; legacyIds?: string[]; status: { state: string; label: string } | null; fresh: boolean; mode: string; openOrders: number };
+type AgentRow = { id: string; name: string; job: string; group?: string; groupLabel?: string; legacyIds?: string[]; status: { state: string; label: string } | null; fresh: boolean; mode: string; openOrders: number; aiModel?: { tier: string; tierLabel: string; openai: string; anthropic: string } };
 type Thread = { id: string; agentId: string; title: string; createdAt: string; inbox: boolean };
 type Message = { id: string; threadId: string; role: "user" | "agent" | "handoff" | "peer"; agentId: string; fromAgentId?: string; text: string; at: string; handoffTo?: string };
 type Handoff = { orderId: string; at: string; fromAgentId: string; toAgentIds: string[]; text: string; status: string; approvalRequired: boolean };
@@ -113,6 +113,7 @@ export default function AgentChatPage() {
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">{a.name}{a.openOrders ? <span className="ml-1 rounded bg-amber-400/20 px-1 text-[10px] text-amber-200">{a.openOrders}</span> : null}</span>
               <span className="block truncate text-xs text-zinc-500">{a.status?.label || a.job}</span>
+              {a.aiModel && <span className="block truncate text-[10px] text-zinc-600" data-testid={`agent-ai-model-${a.id}`} title={a.aiModel.tierLabel}>IA: {a.aiModel.openai} · {a.aiModel.anthropic}</span>}
             </span>
           </button>
           ))}

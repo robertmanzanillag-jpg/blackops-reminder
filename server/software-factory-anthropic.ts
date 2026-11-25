@@ -17,6 +17,9 @@ export const ANTHROPIC_FACTORY_PRICES: Readonly<Record<string, Readonly<{ input:
   "claude-opus-5-5": Object.freeze({ input: 4000, output: 20000, cacheRead: 200, cacheWrite: 5000 }),
   "claude-opus-5": Object.freeze({ input: 5000, output: 25000, cacheRead: 500, cacheWrite: 6250 }),
   "claude-opus-4-8": Object.freeze({ input: 5000, output: 25000, cacheRead: 500, cacheWrite: 6250 }),
+  // Optional factory override (AI_MODEL_CODE_ANTHROPIC); list price verified 2026-11-25.
+  // Haiku 5.5 is NOT listed: its >100K-token tier would be under-counted on large builds.
+  "claude-sonnet-5-5": Object.freeze({ input: 2000, output: 10000, cacheRead: 100, cacheWrite: 2500 }),
 });
 /** Smallest max_tokens the factory accepts when clamping to the reservation. */
 export const ANTHROPIC_FACTORY_MIN_OUTPUT_TOKENS = 8192;

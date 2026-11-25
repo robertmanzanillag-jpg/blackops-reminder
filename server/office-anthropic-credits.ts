@@ -9,7 +9,9 @@ import { isProviderCreditExhausted } from "./ai-provider-credit-cooldown";
 export type OfficeAnthropicResult = { text: string; sessionId: string; completedAt: string; provider: "anthropic"; model: string;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number } };
 type Ledger = Pick<ReturnType<typeof createSharedOpenAiCreditLedger>, "reserve" | "settle" | "markUnknown" | "executionWindow">;
-type Pricing = { model: string; inputNanoUsdPerToken: number; outputNanoUsdPerToken: number; validUntil: string };
+type Pricing = { model: string; inputNanoUsdPerToken: number; outputNanoUsdPerToken: number; validUntil: string;
+  /** Tiered models (Claude Haiku 5.5 > 100K input tokens): the whole request bills at `above`. */
+  tierAboveInputTokens?: number; above?: { inputNanoUsdPerToken: number; outputNanoUsdPerToken: number } };
 
 const API = "https://api.anthropic.com/v1/messages";
 const readJson = async (response: Response) => {
@@ -44,7 +46,9 @@ export function createCreditLimitedOfficeClaudeRun(options: { ledger: Ledger; pr
     const body = JSON.stringify({ model: pricing.model, max_tokens: maxOutputTokens, messages: [{ role: "user", content: prompt }] });
     // Worst case without a paid count call: every prompt byte is a token (+ framing).
     const maxInput = Buffer.byteLength(body) + 1024;
-    const maximumMicroUsd = Math.max(1, Math.ceil((maxInput * pricing.inputNanoUsdPerToken + maxOutputTokens * pricing.outputNanoUsdPerToken) / 1000));
+    const rate = (inputTokens: number) => pricing.above && pricing.tierAboveInputTokens !== undefined && !(inputTokens <= pricing.tierAboveInputTokens) ? pricing.above : pricing;
+    const reserveRate = rate(maxInput);
+    const maximumMicroUsd = Math.max(1, Math.ceil((maxInput * reserveRate.inputNanoUsdPerToken + maxOutputTokens * reserveRate.outputNanoUsdPerToken) / 1000));
     const key = `office-claude:${createHash("sha256").update(executionId).digest("hex")}`;
     const requestSha256 = createHash("sha256").update(JSON.stringify([pricing, body])).digest("hex");
     const apiKey = "api:" + createHash("sha256").update(JSON.stringify(["office-anthropic", key])).digest("hex");
@@ -90,7 +94,8 @@ export function createCreditLimitedOfficeClaudeRun(options: { ledger: Ledger; pr
     }
     // Cache reads billed conservatively at the full input rate; cache writes at
     // 2x input (the 1-hour write rate, the highest documented multiplier).
-    const actualMicroUsd = Math.ceil(((input + cacheRead + 2 * cacheWrite) * pricing.inputNanoUsdPerToken + output * pricing.outputNanoUsdPerToken) / 1000);
+    const settleRate = rate(input + cacheRead + cacheWrite);
+    const actualMicroUsd = Math.ceil(((input + cacheRead + 2 * cacheWrite) * settleRate.inputNanoUsdPerToken + output * settleRate.outputNanoUsdPerToken) / 1000);
     await ledger.settle({ key, actualMicroUsd, evidenceId: parsed.id }); await release(actualMicroUsd, parsed.id);
     const text = Array.isArray(parsed.content) ? parsed.content.filter((b: any) => b?.type === "text" && typeof b.text === "string").map((b: any) => b.text).join("") : "";
     if (parsed.stop_reason !== "end_turn" || !text.trim()) throw Error("OFFICE_ANTHROPIC_INCOMPLETE_RESULT");

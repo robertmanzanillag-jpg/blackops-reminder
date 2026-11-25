@@ -13,6 +13,8 @@ import { createCreditLimitedOfficeRun } from "./office-shared-credits";
 import { loadSharedCreditRuntime } from "./shared-openai-credit-runtime";
 import type { OfficeOpenAIResult } from "./office-openai";
 import type { OfficeAnthropicResult } from "./office-anthropic-credits";
+import { resolveAiModel, type AiTaskKind } from "../shared/ai-model-policy";
+import { policyOpenAiPrice } from "./ai-model-pricing";
 import { markProviderCreditExhausted, clearProviderCooldown, readProviderCooldowns, providerCooldownMs, refreshExpiredOpenAiCooldown } from "./ai-provider-credit-cooldown";
 
 type CooldownStore = Parameters<typeof markProviderCreditExhausted>[0];
@@ -22,6 +24,8 @@ const codeOf = (error: unknown) => (error instanceof Error ? error.message : "")
  * Both out of credit, or Claude not configured: fail closed with a code. */
 export async function runWithProviderFailover(input: { env: NodeJS.ProcessEnv; now: () => Date; store?: CooldownStore; assigned: string; prompt: string;
     openai: () => Promise<OfficeOpenAIResult>; claude?: (prompt: string, executionId: string) => Promise<OfficeAnthropicResult>;
+    /** Policy Claude model for this job (CEO stays on the strong model on Claude too). */
+    claudeModel?: string;
     /** Tests: zero-cost OpenAI credit probe injection. */
     probe?: () => Promise<import("./ai-provider-credit-cooldown").OpenAiCreditProbe> }): Promise<OfficeOpenAIResult | OfficeAnthropicResult> {
   const { env, now } = input;
@@ -47,7 +51,7 @@ export async function runWithProviderFailover(input: { env: NodeJS.ProcessEnv; n
   if (active.anthropic) throw Error("OFFICE_ALL_PROVIDERS_CREDIT_EXHAUSTED");
   const claude = input.claude ?? await (async () => {
     const [{ loadAnthropicOfficeRuntime }, { createCreditLimitedOfficeClaudeRun, defaultOfficeClaudeApiAuthority }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./office-anthropic-credits")]);
-    const runtime = await loadAnthropicOfficeRuntime(env, now, store as any);
+    const runtime = await loadAnthropicOfficeRuntime(env, now, store as any, input.claudeModel);
     // Claude office spend also counts against the single monthly API authority cap.
     return createCreditLimitedOfficeClaudeRun({ ...runtime, apiKey: env.ANTHROPIC_API_KEY?.trim() || "", now, maxOutputTokens: Number(env.OFFICE_OPENAI_MAX_OUTPUT_TOKENS) || 1024, authority: await defaultOfficeClaudeApiAuthority() });
   })();
@@ -80,25 +84,37 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
     }); }, now: () => new Date(now()),
   }) : undefined;
   let activeExecutionId: string | undefined;
-  const run = async (prompt: string, executionId?: string) => {
+  /** One AI call. `route` names the agent and task so the central model policy
+   * (shared/ai-model-policy.ts) picks the tier: CEO strong, everyone else small. */
+  const run = async (prompt: string, executionId?: string, route: { agentId?: string; task?: AiTaskKind } = {}) => {
     if (!openai) return runOfficeClaude(prompt);
+    const task = route.task ?? "role_job";
+    const openAiChoice = resolveAiModel({ provider: "openai", task, agentId: route.agentId, env }).model;
+    const claudeModel = resolveAiModel({ provider: "anthropic", task, agentId: route.agentId, env }).model;
     if (deps.sharedCredits || env.OPENAI_SHARED_CREDIT_CONFIG || env.OPENAI_SHARED_CREDITS_REQUIRED === "true") {
       const assigned = executionId || activeExecutionId;
       if (!assigned) throw Error("OFFICE_CREDIT_ASSIGNMENT_REQUIRED");
       return runWithProviderFailover({ env, now: () => new Date(now()), store: deps.cooldownStore, assigned, prompt,
-        claude: deps.claudeRun,
+        claude: deps.claudeRun, claudeModel,
         openai: async () => {
-          const shared = deps.sharedCredits || await loadSharedCreditRuntime(env, () => new Date(now()));
-          return createCreditLimitedOfficeRun({ ...shared, factoryInvocation:deps.factoryInvocation, env, now: () => new Date(now()), fetch: deps.fetch,
+          const loaded = deps.sharedCredits || await loadSharedCreditRuntime(env, () => new Date(now()));
+          // Policy model on the same shared ledger, priced exactly (catalog row or code-owned
+          // list price); unpriced -> keep the ledger's configured, already-priced model.
+          const tierPrice = openAiChoice !== loaded.pricing.model ? policyOpenAiPrice(openAiChoice, env) : null;
+          const shared = tierPrice ? { ...loaded, pricing: tierPrice } : loaded;
+          const runEnv = tierPrice ? { ...env, OFFICE_OPENAI_MODEL: tierPrice.model } : env;
+          return createCreditLimitedOfficeRun({ ...shared, factoryInvocation:deps.factoryInvocation, env: runEnv, now: () => new Date(now()), fetch: deps.fetch,
             authorizeTokens: limits => budget!.reserve(limits), recordTokens: (id, metadata) => budget!.recordUsage(id, metadata), releaseTokens: id => budget!.release(id),
           })(prompt, assigned);
         } });
     }
-    const factoryPrice=configuredFactoryApiPrice("openai",env.OFFICE_OPENAI_MODEL??"",env.FACTORY_API_PRICING_CONFIG);
+    const tierPrice=policyOpenAiPrice(openAiChoice,env);
+    const callEnv=tierPrice?{...env,OFFICE_OPENAI_MODEL:tierPrice.model}:env;
+    const factoryPrice=tierPrice??configuredFactoryApiPrice("openai",env.OFFICE_OPENAI_MODEL??"",env.FACTORY_API_PRICING_CONFIG);
     const monetary=deps.factoryInvocation??await defaultFactoryApiInvocation();
     await monetary.preflight();
     let reservation: string | undefined;
-    const provider = createOfficeOpenAI({ env, fetch: guardFactoryOpenAiFetch(deps.fetch??fetch,{executionId:executionId||activeExecutionId,consumer:"office",env,price:factoryPrice,invoke:monetary}),
+    const provider = createOfficeOpenAI({ env: callEnv, fetch: guardFactoryOpenAiFetch(deps.fetch??fetch,{executionId:executionId||activeExecutionId,consumer:"office",env:callEnv,price:factoryPrice,invoke:monetary}),
       authorize: async limits => { reservation = await budget!.reserve(limits); },
       recordUsage: async metadata => { if (!reservation) throw new Error("Missing budget reservation"); await budget!.recordUsage(reservation, metadata); },
     });

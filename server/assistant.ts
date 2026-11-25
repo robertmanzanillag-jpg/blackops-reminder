@@ -24,6 +24,10 @@ import { aiRouterConfig, createRoutedOpenAI, deepSeekRouted, routedText } from "
 import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
+import { catalogPricedPolicyModel } from "./ai-model-pricing";
+// Central model policy: the web assistant is a non-CEO chat -> small model when it has a catalog
+// price row; an explicit OPENAI_ASSISTANT_MODEL keeps winning.
+const ASSISTANT_CHAT_MODEL = process.env.OPENAI_ASSISTANT_MODEL?.trim() ? OPENAI_ASSISTANT_MODEL : catalogPricedPolicyModel("assistant", OPENAI_ASSISTANT_MODEL);
 import { toFile } from "openai";
 import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
@@ -1786,12 +1790,12 @@ export function registerAssistantRoutes(app: Express): void {
         const maxCompletionTokens = getOpenAiMaxCompletionTokens();
         const previewCostUsd = estimateTokenApiCostUsd({
           provider: "openai",
-          model: OPENAI_ASSISTANT_MODEL,
+          model: ASSISTANT_CHAT_MODEL,
           inputTokens: estimateTokensFromText(JSON.stringify(openAiMessages)),
           outputTokens: maxCompletionTokens,
         });
         res.write(`data: ${JSON.stringify({
-          content: `${formatAiApiCostPreview("openai", OPENAI_ASSISTANT_MODEL, "respuesta fuerte del chat", previewCostUsd)}\n\n`,
+          content: `${formatAiApiCostPreview("openai", ASSISTANT_CHAT_MODEL, "respuesta fuerte del chat", previewCostUsd)}\n\n`,
           apiCostPreview: true,
           estimatedApiCostUsd: previewCostUsd,
           modelRoute,
@@ -1804,7 +1808,7 @@ export function registerAssistantRoutes(app: Express): void {
               onRoute: (e) => { if (e.outcome === "ok") streamProvider = e.provider === "deepseek" ? "deepseek" : "openai"; } })
           : getOpenAIClient();
         const stream: AsyncIterable<any> = await strongClient.chat.completions.create({
-          model: OPENAI_ASSISTANT_MODEL,
+          model: ASSISTANT_CHAT_MODEL,
           messages: openAiMessages,
           stream: true as const,
           max_completion_tokens: maxCompletionTokens,
@@ -1812,7 +1816,7 @@ export function registerAssistantRoutes(app: Express): void {
         });
 
         let openAiUsage: any = null;
-        let streamModel = OPENAI_ASSISTANT_MODEL;
+        let streamModel = ASSISTANT_CHAT_MODEL;
         for await (const chunk of stream) {
           if (typeof (chunk as any).model === "string" && (chunk as any).model) streamModel = (chunk as any).model;
           if ((chunk as any).usage) {

@@ -1,3 +1,4 @@
+import { catalogPricedPolicyModel } from "./ai-model-pricing";
 import {guardFactoryOpenAiClient} from "./factory-api-sdk";
 import path from "node:path";
 import OpenAI from "openai";
@@ -54,7 +55,8 @@ const REVISION_BY_DIRECTION: Record<LocalNewsTranslationDirection, string> = {
   "es-en": "eadfd7c658a9d8929ac3b8e996b68a68e2c7d480",
 };
 
-const DEFAULT_OPENAI_TRANSLATION_MODEL = "gpt-5.4-nano";
+// Clippers helper (non-CEO): small model from the central policy.
+const DEFAULT_OPENAI_TRANSLATION_MODEL = catalogPricedPolicyModel("translation", "gpt-5.4-nano");
 const OPENAI_TRANSLATION_TIMEOUT_MS = 5_000;
 
 type OpenAiTranslationClient = Pick<OpenAI, "chat">;

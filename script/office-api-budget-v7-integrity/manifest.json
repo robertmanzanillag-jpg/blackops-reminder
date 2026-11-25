@@ -27,7 +27,7 @@
     },
     {
       "path": "server/ai-model-router.ts",
-      "sha256": "3468a213bcf27c90923e9cf09efaa8912a4e2ff8e3feacbfc99cbb04e3cb1b49"
+      "sha256": "b67a8589be3a7565ba3891d710124d7fe779005a7f2e38cc708408a8f80e2c54"
     },
     {
       "path": "server/ai-provider-credit-cooldown.ts",
@@ -35,7 +35,7 @@
     },
     {
       "path": "server/clippers-local-news-translation.ts",
-      "sha256": "56e86cad0c8b03672a2df9f1cbbc623c3531d25aa8fe48255705c67716cda03c"
+      "sha256": "e1b3ee3ea3288395bc4fe3bb842303fa13374af92d7f31089cd09ed47d33fd94"
     },
     {
       "path": "server/factory-api-cache-usage.ts",
@@ -63,11 +63,11 @@
     },
     {
       "path": "server/office-anthropic-credits.ts",
-      "sha256": "e6eb479d56023134c623975b1d71bb41fff264eb3924108e02209ec938b57ac1"
+      "sha256": "5a3b14421630cf9477884c18df48729869836226f64ef22e185906775280e97a"
     },
     {
       "path": "server/office-execution.ts",
-      "sha256": "f54ce77563d333d5666546dfe463b4a9d2a3a8344a38275089f2a252ccbee722"
+      "sha256": "5617dc762b8bcfe792c3924d5503dfe7ac7a8ece0a0cb4538b5a693865d3b852"
     },
     {
       "path": "server/office-openai.ts",
@@ -103,11 +103,11 @@
     },
     {
       "path": "server/software-factory-anthropic-ledger.ts",
-      "sha256": "60ae3500cb183566d3bb6172ef0461d12c0b890e65f4f51ec00914bc170f7363"
+      "sha256": "4c65bb68058b1d9139dc91d38c6deb793d508525fdaf6913e45ad857a324c082"
     },
     {
       "path": "server/software-factory-anthropic.ts",
-      "sha256": "c81bc133b72788f631cb1cd4414e8f5a52a77f4606d34c708856572f73e03bf1"
+      "sha256": "bb0d55ba8ec77440ad8f7cf32c08e70cec184596018c1010e56df738ac8015e8"
     },
     {
       "path": "server/software-factory-api-budget.ts",

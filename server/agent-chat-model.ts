@@ -19,7 +19,7 @@ export function officeTokensUsed(state: CouncilState, now: Date) {
 }
 
 export function createAgentChatModel(council: Council, env: NodeJS.ProcessEnv = process.env, deps: {
-  now?: () => number; run?: (prompt: string, executionId: string) => Promise<{ text: string }>;
+  now?: () => number; run?: (prompt: string, executionId: string, route?: { agentId?: string; task?: "chat" }) => Promise<{ text: string }>;
 } = {}): AgentChatModel | undefined {
   if (!agentChatModelEnabled(env)) return undefined;
   const now = deps.now || Date.now;
@@ -27,7 +27,7 @@ export function createAgentChatModel(council: Council, env: NodeJS.ProcessEnv = 
   const scopedEnv = { ...env, OFFICE_OPENAI_MAX_OUTPUT_TOKENS: String(maxOutput) };
   let runner = deps.run;
   return {
-    async ask(prompt, requestId) {
+    async ask(prompt, requestId, agentId) {
       const limit = Number(env.OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT);
       if (!Number.isSafeInteger(limit) || limit < 1) throw new AgentChatModelError("disabled");
       // Honest pre-check against the persisted budget, before any provider call.
@@ -37,7 +37,7 @@ export function createAgentChatModel(council: Council, env: NodeJS.ProcessEnv = 
         const { createOfficeExecution } = await import("./office-execution");
         runner = createOfficeExecution(council, scopedEnv, now).run as NonNullable<typeof runner>;
       }
-      try { return (await runner(prompt, `agent-chat:${requestId}`)).text; }
+      try { return (await runner(prompt, `agent-chat:${requestId}`, { agentId, task: "chat" })).text; }
       catch (error) {
         const code = (error as { code?: string })?.code;
         throw new AgentChatModelError(code === "token_budget_exhausted" ? "budget_exhausted" : "unavailable");
