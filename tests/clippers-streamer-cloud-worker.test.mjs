@@ -827,3 +827,25 @@ test('raw housekeeping preserves derivative/unknown reservations and never recon
  await runCloudPublisher({env:ON,now:NOW,owner:'o',store,approvals:approvals({}),metricool,stager:fakeStager(),fetch:okFetch});
  assert.ok(store.state.cloudPublish.posts.some(p=>p.id==='reviewed-unknown'));assert.equal(metricool.calls.confirm.some(p=>p.id==='reviewed-unknown'),false);assert.equal(store.state.cloudPublish.reviewedDerivativeClaims.length,1);
 });
+
+test('auto-approve on: a candidate with no approval request is judged by the same policy, gets one audited approved row; off: unchanged', async () => {
+  const mk = () => baseState([candidate('n', 'twitch:100', 'thegrefg', { approval: { status: 'not_requested', pendingActionId: null } }),
+    candidate('x', 'twitch:200', 'rubius', { score: 9, approval: { status: 'not_requested', pendingActionId: null } })]);
+  const withInsert = () => { const a = approvals({}); a.inserted = []; a.insertAutoApproved = async (o, c, rule) => { a.inserted.push({ id: c.id, rule }); return `pa-auto-${a.inserted.length}`; }; a.autoApprove = async () => true; return a; };
+  // Disabled: dropped as approval_not_requested, nothing inserted or downloaded.
+  { const store = memoryStore(mk()), m = fakeMetricool(), media = fakeMedia(), appr = withInsert();
+    const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: appr, metricool: m, stager: fakeStager(), fetch: okFetch, ...media });
+    assert.equal(report.funnel.dropped.approval_not_requested, 2); assert.equal(appr.inserted.length, 0); assert.equal(media.calls.download.length, 0); }
+  // Enabled: allowed creator approved by policy (row created, audit + grant), prohibited creator never.
+  const store = memoryStore(mk()), m = fakeMetricool(), media = fakeMedia(), appr = withInsert();
+  const { report } = await runCloudPublisher({ env: { ...ON, CLIPPERS_AUTO_APPROVE_ENABLED: 'true' }, now: NOW, owner: 'o', store, approvals: appr, metricool: m, stager: fakeStager(), fetch: okFetch, ...media });
+  assert.equal(report.funnel.dropped.approval_not_requested ?? 0, 0, JSON.stringify(report.funnel));
+  assert.deepEqual(appr.inserted.map(i => i.id), ['twitch-clip:n'], JSON.stringify(report.autoApproval));
+  assert.equal(report.autoApproval.approved, 1);
+  assert.deepEqual(media.calls.download, ['twitch-clip:n']);
+  const s = store.state;
+  assert.equal(s.candidates.find(c => c.id === 'twitch-clip:n').approval.pendingActionId, 'pa-auto-1');
+  assert.equal(s.candidates.find(c => c.id === 'twitch-clip:x').approval.status, 'not_requested');
+  assert.ok(s.cloudPublish.autoApprovals?.some?.(e => e.candidateId === 'twitch-clip:n') ?? JSON.stringify(s.cloudPublish).includes('pa-auto-1'));
+  assert.deepEqual(appr.executed.map(e => e.id), ['pa-auto-1']);
+});

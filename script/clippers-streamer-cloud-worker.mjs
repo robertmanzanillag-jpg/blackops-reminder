@@ -429,6 +429,27 @@ export function createApprovalLedger(query) {
         WHERE user_id=$1 AND action_type=$2 AND id=$3 AND status='pending' RETURNING id`, [owner, STREAMER_APPROVAL_ACTION, id, `CLIPPERS_AUTO_APPROVE_ENABLED policy:${rule}`]);
       return (r?.rows?.length ?? 0) > 0;
     },
+    // Policy auto-approval for a candidate no request was ever queued for: one approved row, idempotent per
+    // candidate (an existing live row is reused; a still-pending one is moved by autoApprove, never a rejected one).
+    async insertAutoApproved(owner, candidate, rule) {
+      const r = await query(`WITH existing AS (
+          SELECT id, status FROM pending_actions WHERE user_id=$1 AND action_type=$2 AND resource_id=$3 AND status NOT IN ('rejected','failed') ORDER BY created_at LIMIT 1
+        ), inserted AS (
+          INSERT INTO pending_actions (user_id, created_by_actor_type, created_by_actor_id, origin, action_type, resource_type, resource_id, title, description, risk_level, permission_level_required, status, input, approved_by, approved_at, approval_reason)
+          SELECT $1,'scheduler','clippers-streamers','scheduler',$2,'clippers_streamer_candidate',$3,$4,$5,'medium','execute_after_approval','approved',$6::jsonb,'clippers-auto-approve-policy',CURRENT_TIMESTAMP,$7
+          WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id, status
+        ) SELECT id, status FROM inserted UNION ALL SELECT id, status FROM existing LIMIT 1`,
+        [owner, STREAMER_APPROVAL_ACTION, candidate.id, `Clip de @${String(candidate.handle).slice(0, 40)}: ${String(candidate.title).slice(0, 80)}`,
+          'Auto-aprobado por política (el streamer no prohíbe clips). Publicación sólo por la ruta Metricool existente.',
+          JSON.stringify({ candidateId: candidate.id, platform: candidate.platform, sourceUrl: candidate.sourceUrl, handle: candidate.handle, approvalMode: 'auto_approve_policy' }),
+          `CLIPPERS_AUTO_APPROVE_ENABLED policy:${rule}`]);
+      const row = r?.rows?.[0];
+      if (!row) return null;
+      const id = String(row.id), status = String(row.status);
+      if (['approved', 'executed'].includes(status)) return id;
+      if (status === 'pending' && await this.autoApprove(owner, id, rule)) return id;
+      return null;
+    },
   };
 }
 
@@ -437,6 +458,8 @@ export function createApprovalLedger(query) {
  * deps: { store, approvals, metricool (createPortfolioMetricool-like), stager, fetch, download, render, outputDir }
  */
 /** Why the work queue is what it is: every discovered candidate lands in exactly one bucket (counts only, no URLs). */
+// With CLIPPERS_AUTO_APPROVE_ENABLED, both a pending request and a candidate never queued are judged by the policy.
+const AUTO_APPROVABLE = new Set(['pending', 'not_requested']);
 export function queueFunnel(state, ledger, config, now) {
   const dropped = {};
   const drop = r => { dropped[r] = (dropped[r] ?? 0) + 1; };
@@ -445,7 +468,7 @@ export function queueFunnel(state, ledger, config, now) {
   for (const c of state.candidates ?? []) {
     const clip = ledger.clips?.[c.id];
     if (!config.platforms.includes(c.platform)) drop(`platform_not_served:${c.platform}`);
-    else if (c.approval?.status !== 'approved' && !(config.autoApprove?.enabled && c.approval?.status === 'pending')) drop(`approval_${c.approval?.status ?? 'missing'}`);
+    else if (c.approval?.status !== 'approved' && !(config.autoApprove?.enabled && AUTO_APPROVABLE.has(c.approval?.status ?? 'not_requested'))) drop(`approval_${c.approval?.status ?? 'missing'}`);
     else if (!workIds.has(c.id) && !(config.autoApprove?.enabled && autoApprovalDecision(state, c, { now, config: config.autoApprove, maxSourceAgeHours: config.maxSourceAgeHours, ledger }).approve)) drop('policy_or_takedown');
     else if (clip && !(['failed', 'deferred'].includes(clip.status) && (clip.attempts ?? 0) < config.maxAttempts))
       drop(['failed', 'deferred'].includes(clip.status) ? `attempts_exhausted:${clip.status}` : `already_${String(clip.status ?? 'done').split(':')[0]}`);
@@ -715,7 +738,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   const ledger = cloudPublishOf(state);
   const holdAuto = r => { report.autoApproval.held[r] = (report.autoApproval.held[r] ?? 0) + 1; };
   const autoIds = new Set(), autoPicked = new Map();
-  if (config.autoApprove.enabled) for (const c of state.candidates) if (c.approval?.status === 'pending') {
+  if (config.autoApprove.enabled) for (const c of state.candidates) if (AUTO_APPROVABLE.has(c.approval?.status ?? 'not_requested')) {
     const d = autoApprovalDecision(state, c, { now, config: config.autoApprove, maxSourceAgeHours: config.maxSourceAgeHours, ledger });
     if (d.approve && c.download?.mode === 'needs_local_download') autoIds.add(c.id); else if (!d.approve) holdAuto(d.reason);
   }
@@ -746,7 +769,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const setClip = (patch) => update((s, c) => { c.clips[candidate.id] = { ...(c.clips[candidate.id] ?? { attempts: 0 }), ...patch, updatedAt: iso(clock()) }; });
     // Approval gate (live): only approved/executed rows publish. AUTO_PUBLISH rows are inserted as approved.
     let approval = live.get(candidate.approval?.pendingActionId);
-    if (approval === 'pending' && autoIds.has(candidate.id)) {
+    const unrequested = !candidate.approval?.pendingActionId && AUTO_APPROVABLE.has(candidate.approval?.status ?? 'not_requested');
+    if (autoIds.has(candidate.id) && (approval === 'pending' || (unrequested && !approval))) {
       // Policy auto-approval: re-check every signal on the freshest state + a fresh description read.
       const freshState = parseStreamerStateStrict(await store.read(ns));
       const freshLedger = cloudPublishOf(freshState);
@@ -763,7 +787,14 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       }
       if (usedToday >= config.autoApprove.dailyCapPerAccount * Math.max(1, config.destinations.length)) { holdAuto('auto_approve_daily_cap'); continue; }
       if (!config.dryRun) {
-        const ok = approvals?.autoApprove ? await approvals.autoApprove(owner, candidate.approval.pendingActionId, decision.rule).catch(() => false) : false;
+        let ok;
+        if (unrequested) {
+          const id = approvals?.insertAutoApproved ? await approvals.insertAutoApproved(owner, candidate, decision.rule).catch(() => null) : null;
+          if (!id) { holdAuto('auto_approve_row_not_created'); continue; }
+          const approvalState = { status: 'approved', pendingActionId: id, requestedAt: iso(clock()), mode: 'auto_approve_policy' };
+          await update(s => { const sc = s.candidates.find(x => x.id === candidate.id); if (sc) sc.approval = approvalState; });
+          candidate = { ...candidate, approval: approvalState }; ok = true;
+        } else ok = approvals?.autoApprove ? await approvals.autoApprove(owner, candidate.approval.pendingActionId, decision.rule).catch(() => false) : false;
         if (!ok) { holdAuto('auto_approve_row_not_pending'); continue; }
         const grant = ownerDefaultPolicyGrant(candidate, decision.evidence, { now: clock(), destinations: config.destinations.map(destinationKey) });
         await update((s, c) => { const granted = recordOwnerDefaultGrant(s, grant); recordAutoApproval(c, { grant: granted ? { basis: grant.basis, policyVersion: grant.policy.version, evidenceSha256: grant.evidence.sha256 } : null, candidateId: candidate.id, creatorKey: candidate.creatorKey, pendingActionId: candidate.approval.pendingActionId, rule: decision.rule,
