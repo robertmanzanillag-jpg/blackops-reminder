@@ -139,3 +139,16 @@ test("academy runner passes distinct stable assignment phases to the credit-limi
   await runner(reserved.state, reserved.job!); await runner(reserved.state, reserved.job!);
   assert.deepEqual(ids, ["academy:stable-job:incumbent", "academy:stable-job:candidate", "academy:stable-job:incumbent", "academy:stable-job:candidate"]);
 });
+
+test("office run: AI_MODEL_TIERING switch picks CEO strong / others small, off keeps OFFICE_OPENAI_MODEL", async () => {
+  const models: string[] = [];
+  const fetchStub = (async (_url: any, options: any) => { const body = JSON.parse(String(options?.body)); models.push(body.model);
+    return new Response(JSON.stringify({ id: "resp_tier", model: body.model, status: "completed", usage: { input_tokens_details:{cached_tokens:0,cache_write_tokens:0}, input_tokens: 20, output_tokens: 10, total_tokens: 30 },
+      output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "ok" }] }] })); }) as typeof fetch;
+  const on = createOfficeExecution(fixture().make(), { ...env, AI_MODEL_TIERING: "on" }, () => NOW, { fetch: fetchStub });
+  await on.run("hola", "agent-chat:tier-ceo", { agentId: "ceo", task: "chat" });
+  await on.run("hola", "agent-chat:tier-clip", { agentId: "clippers", task: "chat" });
+  const off = createOfficeExecution(fixture().make(), env, () => NOW, { fetch: fetchStub });
+  await off.run("hola", "agent-chat:tier-off", { agentId: "ceo", task: "chat" });
+  assert.deepEqual(models, ["gpt-6.2-sol", "gpt-6-luna", "test-model"]);
+});
