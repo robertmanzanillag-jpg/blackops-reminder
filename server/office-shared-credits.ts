@@ -1,5 +1,5 @@
 import {guardFactoryOpenAiFetch,selectFactoryApiTextPrice} from "./factory-api-sdk";
-import {defaultFactoryApiInvocation,apiEvidenceHash} from "./factory-api-invocation";
+import {defaultFactoryApiInvocation,apiEvidenceHash,FactoryApiBudgetError} from "./factory-api-invocation";
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd} from "./factory-api-token-cost";
 import {readOpenAiCacheUsage,isFactoryOpenAiRequestRejected} from "./factory-api-cache-usage";
 import { isOpenAiRejectionCauseExhausted } from "./ai-provider-credit-cooldown";
@@ -60,7 +60,12 @@ export function createCreditLimitedOfficeRun(options: {
         let response: Response;
         try { response = await guardFactoryOpenAiFetch(transport,{executionId,consumer:"office",env,
           price:profile,invoke:monetary})(url, { ...init, signal }); }
-        catch (error) { if (isFactoryOpenAiRequestRejected(error)) rejected = error.message; throw error; }
+        catch (error) {
+          // The monetary authority settles a not-billed rejection at $0 and re-raises it as
+          // FactoryApiBudgetError("FACTORY_OPENAI_REQUEST_REJECTED:<status>:<code>"); accept both shapes.
+          const message = error instanceof Error ? error.message : "";
+          if (isFactoryOpenAiRequestRejected(error) || (error instanceof FactoryApiBudgetError && /^FACTORY_OPENAI_REQUEST_REJECTED:\d{3}:[a-z0-9_]{1,64}$/.test(message))) rejected = message;
+          throw error; }
         // The monetary guard has already bounded and validated this response. Cache details
         // stay private to this execution; the Office token/result protocol remains unchanged.
         const raw = await response.clone().json(), usage = raw?.usage;

@@ -79,7 +79,7 @@
     },
     {
       "path": "server/office-shared-credits.ts",
-      "sha256": "ee12aac562f63ca9d045aa6a91a1bb472c5b73085cea06aa9a0f31ddb827bd68"
+      "sha256": "70740224e526d2f99fe5b62e61b758485afa13df998c75738547fe160bb2d0c3"
     },
     {
       "path": "server/office-token-budget.ts",
