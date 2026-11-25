@@ -186,6 +186,7 @@ const DIAGNOSTIC_HINTS: Record<string, string> = {
   STALE_REPOSITORY: "revisar los repositorios sin actividad", SOURCE_STALE: "refrescar su fuente de datos", SOURCE_MISSING: "conectar su fuente de datos",
   NO_SOURCE_RECORDS: "cargar los registros que audita", RECORDED_FAILURE: "corregir la causa de los fallos registrados", RECORDED_BLOCKS: "desbloquear lo que queda bloqueado",
   PLANS_NOT_EXECUTION: "convertir planes en ejecución verificable", COLLECTED_METRICS_ONLY: "cerrar el ciclo de métricas a decisiones", DOCUMENT_REVIEW_REQUIRED: "completar la revisión documental",
+  SCHEDULE_DISABLED: "encender su horario de trabajo", NEEDS_SETUP: "completar su configuración",
 };
 export const MAX_OPEN_SELF_IMPROVEMENT = 3;
 export const SELF_IMPROVEMENT_PREFIX = "automejora:";
@@ -314,12 +315,14 @@ const REASON_HINTS: Record<string, string> = {
   web_export_unverified: "revalida la exportación web (firma y fecha) antes de usarla",
   expired_no_automatic_retry: "divide el trabajo para terminar dentro del plazo",
   lease_or_generation_changed: "no inicies trabajo si el puesto está en relevo",
+  source_stale: "refresca la fuente de datos antes de la revisión diaria",
+  schedule_disabled: "pide a Robert que encienda el horario del agente (flag de configuración)",
 };
 
 /** Normalizes persisted jobs (role work, internal work, factory ledger) into outcome samples. Invalid rows are dropped (fail closed). */
-export function collectOutcomeSamples(input: { roleWorkJobs?: unknown; internalWorkJobs?: unknown; factoryLedger?: unknown }): OutcomeSample[] {
+export function collectOutcomeSamples(input: { roleWorkJobs?: unknown; internalWorkJobs?: unknown; deskWorkJobs?: unknown; factoryLedger?: unknown }): OutcomeSample[] {
   const out: OutcomeSample[] = [];
-  for (const list of [input.roleWorkJobs, input.internalWorkJobs]) {
+  for (const list of [input.roleWorkJobs, input.internalWorkJobs, input.deskWorkJobs]) {
     for (const job of Array.isArray(list) ? list as Array<RoleWorkLike & { reason?: unknown }> : []) {
       if (!isObj(job) || typeof job.role !== "string" || typeof job.id !== "string" || !["completed", "blocked"].includes(String(job.status))) continue;
       const start = ms(job.startedAt), end = ms(job.completedAt) || (job.status === "blocked" ? start : 0);

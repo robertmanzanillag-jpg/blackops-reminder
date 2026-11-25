@@ -40,17 +40,24 @@ const ROLE_WORK_REASONS: Record<string, string> = {
   expired_no_automatic_retry: "El trabajo expiró sin terminar; no se reintenta solo.",
   web_export_missing: "Falta la exportación web de la fuente.",
   web_export_unverified: "La exportación web no se pudo verificar.",
+  source_stale: "La fuente de datos del rol está desactualizada.",
+  schedule_disabled: "El horario del agente está apagado por configuración.",
 };
 
 type Job = { role?: unknown; status?: unknown; startedAt?: unknown; expiresAt?: unknown; completedAt?: unknown; reason?: unknown; slot?: unknown };
 type RosterInput = Pick<CouncilState, "company" | "kongCompany" | "kongLastStatuses"> & Partial<Pick<CouncilState, "lastStatuses" | "agentStates" | "lastCycleAt" | "officeExecution">>;
 
+/** Office role work + the daily Black Room/KONG desk reviews (server/office-desk-work.ts). */
+function recordedJobs(state: RosterInput): Job[] {
+  const list = (value: unknown) => { const jobs = (value as { jobs?: unknown } | undefined)?.jobs; return Array.isArray(jobs) ? jobs as Job[] : []; };
+  return [...list(state.officeExecution?.roleWork), ...list((state.officeExecution as { deskWork?: unknown } | undefined)?.deskWork)];
+}
 const time = (value: unknown) => (typeof value === "string" ? Date.parse(value) : NaN);
 const iso = (ms: number) => (Number.isFinite(ms) ? new Date(ms).toISOString() : null);
 const latestOf = (...values: number[]) => { const ok = values.filter(Number.isFinite); return ok.length ? Math.max(...ok) : NaN; };
 
 export function deriveAgentStatus(id: string, state: RosterInput, now: number, windowMs = ROSTER_WORKING_WINDOW_MS): Pick<RosterEntry, "state" | "label" | "lastActivityAt" | "doing" | "reason"> {
-  const rawJobs = (state.officeExecution?.roleWork as { jobs?: unknown } | undefined)?.jobs;
+  const rawJobs = recordedJobs(state);
   const jobs = (Array.isArray(rawJobs) ? rawJobs as Job[] : []).filter(job => job && job.role === id && Number.isFinite(time(job.startedAt)));
   const job = jobs.sort((a, b) => time(b.startedAt) - time(a.startedAt))[0];
   const jobAt = job ? latestOf(time(job.completedAt), time(job.startedAt)) : NaN;
@@ -91,7 +98,7 @@ export function buildOfficeRoster(state: RosterInput, now: number, windowMs = RO
   for (const entry of directory) add({ id: entry.id, name: entry.name, group: AGENT_CHAT_GROUP_LABELS[entry.group] || entry.group, job: entry.job });
   for (const agent of CLIPPERS_AGENTS) add({ id: agent.id, name: `Clippers · ${agent.name}`, group: "Clippers", job: agent.role });
   // Any role with persisted work that no registry lists still shows (never hidden).
-  const rawJobs = (state.officeExecution?.roleWork as { jobs?: unknown } | undefined)?.jobs;
+  const rawJobs = recordedJobs(state);
   for (const job of Array.isArray(rawJobs) ? rawJobs as Job[] : []) {
     if (job && typeof job.role === "string") add({ id: job.role, name: job.role, group: "BlackOps", job: "Rol de oficina con trabajo registrado." });
   }
