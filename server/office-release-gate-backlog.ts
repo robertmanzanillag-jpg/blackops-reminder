@@ -51,13 +51,13 @@ export function releaseGateSelfHealAudits(raw: string | null, completedAt: strin
   const known = parsed?.knownFailures;
   if (!known || typeof known !== "object" || Array.isArray(known)) return [];
   const findings: SelfHealObservedAudit["findings"] = [], records: SelfHealObservedAudit["records"] = {};
-  const skippedOversizePaths: string[] = [], skippedUnfixable: string[] = [];
+  const skippedOversizePaths: string[] = [], skippedUnfixable: string[] = [], outOfScope: Record<string, string> = {};
   for (const [testPath, entry] of Object.entries<any>(known).sort(([a], [b]) => a.localeCompare(b))) {
     if (findings.length >= RELEASE_GATE_MAX_FINDINGS) break;
     if (!SELF_HEAL_TEST_PATH.test(testPath) || /kong/i.test(testPath) || !isFactoryWritePathAllowed(testPath)) continue;
     if (!entry || typeof entry !== "object" || entry.flaky === true || typeof entry.reason !== "string" || MAC_ONLY.test(entry.reason)) continue;
-    if (FACTORY_UNFIXABLE.test(entry.reason)) { skippedUnfixable.push(testPath); continue; }
-    if (sizes) { const size = sizes.get(testPath); if (!(typeof size === "number" && size <= RELEASE_GATE_MAX_TEST_BYTES)) { skippedOversizePaths.push(testPath); continue; } }
+    if (FACTORY_UNFIXABLE.test(entry.reason)) { skippedUnfixable.push(testPath); outOfScope[selfHealTestRecordId(testPath)] = "SELF_HEAL_OUT_OF_SCOPE_UNFIXABLE"; continue; }
+    if (sizes) { const size = sizes.get(testPath); if (!(typeof size === "number" && size <= RELEASE_GATE_MAX_TEST_BYTES)) { skippedOversizePaths.push(testPath); outOfScope[selfHealTestRecordId(testPath)] = "SELF_HEAL_OUT_OF_SCOPE_OVERSIZE"; continue; } }
     const id = selfHealTestRecordId(testPath);
     findings.push({ code: "KNOWN_TEST_FAILURE", recordId: id });
     records[id] = { repo: SELF_HEAL_REPOSITORY, testPath };
@@ -65,7 +65,7 @@ export function releaseGateSelfHealAudits(raw: string | null, completedAt: strin
   const digest = createHash("sha256").update(raw).digest("hex");
   // One audit per UTC day of the same file content: stable job id, so replays and repeated ticks are idempotent.
   return [{ role: RELEASE_GATE_ROLE, jobId: `release-gate:${completedAt.slice(0, 10)}:${digest.slice(0, 16)}`, completedAt, status: "completed",
-    completeCoverage: true, artifactId: digest, findings, records,
+    completeCoverage: true, artifactId: digest, findings, records, outOfScope,
     skippedOversize: skippedOversizePaths.length, skippedOversizePaths, skippedUnfixable }];
 }
 

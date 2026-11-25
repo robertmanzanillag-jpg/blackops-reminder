@@ -340,6 +340,19 @@ test("release gate skips oversize test files and factory-unfixable reasons; unre
   assert.deepEqual(audit.skippedOversizePaths, ["tests/clippers-agent.test.ts"]);
   assert.deepEqual(audit.skippedUnfixable.sort(), ["tests/legacy-publication-containment.test.ts", "tests/revenue-engine.test.ts"]);
   assert.deepEqual(releaseGateSelfHealAudits(raw, iso(T0), null), []);
+  // An entry ordered before the skip existed must escalate to Robert, never "cleared" (no false "Resuelto").
+  const [before] = releaseGateSelfHealAudits(raw, iso(T0));
+  const ordered = planSelfHeal({ state: undefined, company: company(), journal: { jobs: [] }, owner, now: T0 + 1000, maxPerDay: 5, extraAudits: [before] });
+  const later = releaseGateSelfHealAudits(raw, iso(T0 + HOUR), sizes);
+  const next = planSelfHeal({ state: ordered.state, company: ordered.company, journal: { jobs: [] }, owner, now: T0 + HOUR + 1000, maxPerDay: 5, extraAudits: later });
+  const by = Object.fromEntries(next.state.entries.map(e => [e.testPath, `${e.status}:${e.reason ?? ""}`]));
+  assert.equal(by["tests/clippers-agent.test.ts"], "escalated:SELF_HEAL_OUT_OF_SCOPE_OVERSIZE");
+  assert.ok(!Object.values(by).some(v => v.startsWith("cleared")));
+  const view = selfHealToCeoView(next.state.entries);
+  assert.equal(view.resolved.size, 0);
+  assert.ok(view.problems.some(p => p.kind === "owner" && /demasiado grande/.test(p.ownerAction ?? "")));
+  const again = planSelfHeal({ state: next.state, company: next.company, journal: { jobs: [] }, owner, now: T0 + 2 * HOUR, maxPerDay: 5, extraAudits: releaseGateSelfHealAudits(raw, iso(T0 + 2 * HOUR), sizes) });
+  assert.equal(again.state.entries.find(e => e.testPath === "tests/clippers-agent.test.ts")!.status, "escalated");
   const { readReleaseGateSelfHealAudits } = await import("../server/office-release-gate-backlog");
   const fake = async (url: string) => url.includes("/contents/tests?")
     ? new Response(JSON.stringify([{ type: "file", path: "tests/clippers-agent.test.ts", size: 624_000 }, { type: "file", path: "tests/office-internal-work.test.ts", size: 9_000 }]))
@@ -351,6 +364,7 @@ test("release gate skips oversize test files and factory-unfixable reasons; unre
 });
 
 import { releaseGateSelfHealAudits } from "../server/office-release-gate-backlog";
+import { selfHealToCeoView } from "../server/ceo-alert-gate";
 import { selfHealTestRecordId } from "../server/office-self-heal";
 import { isFactoryWritePathAllowed, validateFactoryOrderPaths } from "../server/software-factory-write-scope";
 
