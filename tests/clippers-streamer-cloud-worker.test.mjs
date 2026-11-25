@@ -642,7 +642,8 @@ test('rights: destination or public staging denial never uploads a public asset'
     const stager = fakeStager(), m = fakeMetricool();
     const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store: memoryStore(state), approvals: approvals({ [`pa-deny-${denial}`]: 'approved' }), metricool: m, stager, fetch: okFetch, ...fakeMedia() });
     assert.equal(stager.uploaded.length, 0); assert.equal(m.calls.schedule.length, 0);
-    assert.ok(report.heldReasons.includes(denial === 'destination' ? 'rights_destination_mismatch' : 'rights_scope_incomplete'));
+    if (denial === 'destination') assert.ok(report.heldReasons.some(r => /^rights_destination_mismatch:basis=permission;expected=6431687:tiktok:streamersclipusa;routed=\d+:tiktok:/.test(r)), report.heldReasons.join());
+    else assert.ok(report.heldReasons.includes('rights_scope_incomplete'));
   }
 });
 

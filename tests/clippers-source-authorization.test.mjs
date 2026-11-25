@@ -32,3 +32,17 @@ test('rights expire at the boundary, cannot be future dated, and must cover the 
   grant.validFrom = '2026-11-22T11:00:00Z'; assert.equal(sourceRightsGate(s, c, { now }), 'rights_outside_validity');
   grant.validFrom = '2026-11-21T00:00:00'; assert.equal(sourceRightsGate(s, c, { now }), 'rights_outside_validity');
 });
+
+test('owner_default_policy grants cover every owner-configured destination; real grants stay strict', async () => {
+  const { ownerDefaultPolicyGrant } = await import('../shared/clippers-auto-approval.mjs');
+  const { rightsDestinationDetail } = await import('../shared/clippers-source-authorization.mjs');
+  const old = '6431687:tiktok:streamersclipusa', routed = '6591612:tiktok:news305miami';
+  const owners = [key, old, routed];
+  const s = { candidates: [c], sourceAuthorizations: { [c.id]: ownerDefaultPolicyGrant(c, {}, { now: now - 1000, destinations: [old] }) } };
+  assert.equal(sourceRightsGate(s, c, { now, destinationKey: routed }), 'rights_destination_mismatch');
+  assert.equal(sourceRightsGate(s, c, { now, destinationKey: routed, ownerDestinations: owners }), null);
+  assert.equal(sourceRightsGate(s, c, { now, destinationKey: '999:tiktok:other', ownerDestinations: owners }), 'rights_destination_mismatch');
+  assert.equal(rightsDestinationDetail(s, c.id, routed), `rights_destination_mismatch:basis=owner_default_policy;expected=${old};routed=${routed}`);
+  const real = state(); real.sourceAuthorizations[c.id].destinations = [old];
+  assert.equal(sourceRightsGate(real, c, { now, destinationKey: key, ownerDestinations: [key, old] }), 'rights_destination_mismatch');
+});

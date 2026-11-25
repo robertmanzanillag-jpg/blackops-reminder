@@ -23,7 +23,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createTwitchClient, createYoutubeClient, createPendingActionsQueue } from './clippers-streamer-discovery.mjs';
 import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption, clipLengthAllowed, detectClipProhibition, STREAMER_CLIP_MAX_SECONDS } from '../shared/clippers-streamer-policy.mjs';
-import { sourceRightsGate } from '../shared/clippers-source-authorization.mjs';
+import { sourceRightsGate, rightsDestinationDetail } from '../shared/clippers-source-authorization.mjs';
 import { autoApproveConfig, autoApprovalDecision, applyStreamerRequirements, blocklistFromTakedowns, autoApprovedToday, recordAutoApproval, autoApprovalSummary, detectStreamerRequirements, ownerDefaultPolicyGrant, recordOwnerDefaultGrant, revokeOwnerDefaultGrants } from '../shared/clippers-auto-approval.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
@@ -509,6 +509,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   // A growth-only pass (read-only analytics) runs even while publishing is off; the kill switch still stops it.
   const config = { ...cloudPublishConfig(env), ...(growthOnly ? { enabled: true } : {}), autoApprove: autoApproveConfig(env) };
   const ns = STREAMER_STATE_NAMESPACE(owner);
+  const ownerKeys = config.destinations.map(destinationKey); // owner standing-policy grants cover all of Robert's configured accounts
+  const rightsWhy = (r, st, id, routed) => r === 'rights_destination_mismatch' ? rightsDestinationDetail(st, id, routed) : r;
   const report = { at: iso(now), status: 'completed', heldReasons: [], errors: [], counts: { rendered: 0, scheduled: 0, heldQueued: 0, heldReleased: 0, verificationPending: 0, deferred: 0, blocked: 0, failed: 0, reconciled: 0, observed: 0, assetsRemoved: 0 }, dryRun: config.dryRun, paidSpendUsd: 0, aiSpendUsd: 0 };
   if (!config.enabled) return { report: { ...report, status: 'disabled' }, skipped: true };
   if (config.killSwitch) return { report: { ...report, status: 'kill_switch' }, skipped: true };
@@ -631,9 +633,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         if (fresh.clips[q.candidateId]?.status === 'held_media_review') { report.heldReasons.push('held_release_gate:rights_media_binding_unverified'); continue; }
         const sourceState = parseStreamerStateStrict(await store.read(ns));
         const source = { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl };
-        const rights = sourceRightsGate(sourceState, source, { now: clock(), destinationKey: destinationKey(destination) });
+        const rights = sourceRightsGate(sourceState, source, { now: clock(), ownerDestinations: ownerKeys, destinationKey: destinationKey(destination) });
         if (!rights) { await drop(); report.heldReasons.push('held_release:authorized_rerender_required'); }
-        else report.heldReasons.push(`held_release_gate:${rights}`);
+        else report.heldReasons.push(`held_release_gate:${rightsWhy(rights, sourceState, q.candidateId, destinationKey(destination))}`);
         continue; // a fresh render is required; never send a removed public asset
       }
       if (!mediaUrl || !await verifyPublicMedia(mediaUrl, fetchImpl)) { await drop(); report.heldReasons.push('held_release:media_unavailable'); continue; }
@@ -650,7 +652,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const blocked = await update((s, c) => {
         const cand = s.candidates.find(x => x.id === q.candidateId);
         const queuedSource = cand ? { ...cand, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl } : null;
-        const reason = cand ? publishGate(s, queuedSource, { now: clock(), destinationKey: destinationKey(destination), scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 }) : 'candidate_missing';
+        const reason = cand ? publishGate(s, queuedSource, { now: clock(), ownerDestinations: ownerKeys, destinationKey: destinationKey(destination), scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 }) : 'candidate_missing';
         if (reason) { if (!reason.startsWith('rights_')) c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return reason; }
         if (q.autoApproval && autoApprovedToday(c.posts, item.destinationKey, localDay(new Date(scheduledAt)), localDay) >= config.autoApprove.dailyCapPerAccount) return 'auto_approve_daily_cap';
         const prior = c.posts.find(x => x.id === item.id);
@@ -680,8 +682,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       try {
         const current = parseStreamerStateStrict(await store.read(ns));
         const queuedCandidate = current?.candidates.find(x => x.id === q.candidateId);
-        const rights = publishGate(current, queuedCandidate ? { ...queuedCandidate, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl, caption: q.caption } : null, { now: clock(), destinationKey: destinationKey(destination), scheduledAt:item.scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 });
-        if (rights) { await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); }); report.heldReasons.push(`held_release_gate:${rights}`); continue; }
+        const rights = publishGate(current, queuedCandidate ? { ...queuedCandidate, id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl, caption: q.caption } : null, { now: clock(), ownerDestinations: ownerKeys, destinationKey: destinationKey(destination), scheduledAt:item.scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 });
+        if (rights) { await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); }); report.heldReasons.push(`held_release_gate:${rightsWhy(rights, current, q.candidateId, destinationKey(destination))}`); continue; }
         const found = await metricool.schedule(destination, item); status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null; }
       catch (e) { reason = code(e); status = PRE_WRITE_ERRORS.has(reason) ? 'deferred' : 'verification_pending'; }
       await update((s, c) => {
@@ -700,7 +702,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       // which temporary public assets to retain, even when the release loop skipped that destination.
       await update((s, c) => {
         for (const q of c.heldQueue) {
-          const reason = sourceRightsGate(s, { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl }, { now: clock(), destinationKey: canonicalDestinationKey(q.destinationKey) });
+          const reason = sourceRightsGate(s, { id: q.candidateId, creatorKey: q.creatorKey, sourceUrl: q.sourceUrl }, { now: clock(), ownerDestinations: ownerKeys, destinationKey: canonicalDestinationKey(q.destinationKey) });
           if (reason) {
             q.status = 'held_rights'; q.rightsHoldReason = reason;
             const activePost = c.posts.some(p => p.candidateId === q.candidateId && !['deferred', 'not_found', 'blocked'].includes(p.status));
@@ -996,8 +998,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       // Temporary release media is public too: it needs explicit staging rights and a permitted target.
       const stageTarget = plan[0] ?? heldTargets[0];
       const stageState = parseStreamerStateStrict(await store.read(ns));
-      const stageRights = sourceRightsGate(stageState, candidate, { now: clock(), destinationKey: destinationKey(stageTarget.destination), scheduledAt: stageTarget.scheduledAt ?? null });
-      if (stageRights) { report.heldReasons.push(stageRights); report.counts.deferred++; await setClip({ ...base, attempts: priorAttempts, status: 'deferred', reason: stageRights }); continue; }
+      const stageRights = sourceRightsGate(stageState, candidate, { now: clock(), ownerDestinations: ownerKeys, destinationKey: destinationKey(stageTarget.destination), scheduledAt: stageTarget.scheduledAt ?? null });
+      if (stageRights) { report.heldReasons.push(rightsWhy(stageRights, stageState, candidate.id, destinationKey(stageTarget.destination))); report.counts.deferred++; await setClip({ ...base, attempts: priorAttempts, status: 'deferred', reason: stageRights }); continue; }
       asset = await stager.upload(rendered.file, `stc-${rendered.sha256.slice(0, 24)}.mp4`);
       await setClip({ ...base, status: 'staged', mediaAsset: asset });
       // A fresh render cannot revive an old queue binding on a different account or with another hash.
@@ -1019,7 +1021,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           if (!lanePick) item.draft = true; // lanes off: single account, owner approves every post
           // Fresh gate + durable "pending_write" BEFORE the write (a crash can never authorise a resend).
           const blocked = await update((s, c) => {
-            const reason = publishGate(s, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt:at,segment:item.segment,mediaSha256:item.mediaSha256 });
+            const reason = publishGate(s, candidate, { now: clock(), ownerDestinations: ownerKeys, destinationKey: destinationKey(p.destination), scheduledAt:at,segment:item.segment,mediaSha256:item.mediaSha256 });
             if (reason) return reason;
             if (autoInfo && autoApprovedToday(c.posts, item.destinationKey, localDay(new Date(at)), localDay) >= config.autoApprove.dailyCapPerAccount) return 'auto_approve_daily_cap';
             const prior = c.posts.find(x => x.id === item.id);
@@ -1034,7 +1036,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             c.posts.push({ ...item, attemptedAt: iso(clock()) });
             return null;
           });
-          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') report.counts[blocked.startsWith('rights_') ? 'deferred' : 'blocked']++; gateBlocked = blocked; at = null; break; }
+          if (blocked) { report.heldReasons.push(`publish_gate:${blocked === 'rights_destination_mismatch' ? rightsWhy(blocked, parseStreamerStateStrict(await store.read(ns)), candidate.id, destinationKey(p.destination)) : blocked}`); if (blocked !== 'already_attempted') report.counts[blocked.startsWith('rights_') ? 'deferred' : 'blocked']++; gateBlocked = blocked; at = null; break; }
           let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
           try {
             await metricool.preflight(p.destination, item);
@@ -1066,7 +1068,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           }
           try {
             const current = parseStreamerStateStrict(await store.read(ns));
-            const rights = publishGate(current, candidate, { now: clock(), destinationKey: destinationKey(p.destination), scheduledAt:item.scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 });
+            const rights = publishGate(current, candidate, { now: clock(), ownerDestinations: ownerKeys, destinationKey: destinationKey(p.destination), scheduledAt:item.scheduledAt,segment:item.segment,mediaSha256:item.mediaSha256 });
             if (rights) {
               await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
               report.heldReasons.push(rights); report.counts[rights.startsWith('rights_') ? 'deferred' : 'blocked']++;
