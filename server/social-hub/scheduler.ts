@@ -166,6 +166,19 @@ export class SocialHub {
     return { collected: snapshots.length, errors };
   }
 
+  /** Raw metric snapshots (newest per post) for agents that learn from results. */
+  metricsSince(days = 30): SocialMetricSnapshot[] {
+    const since = new Date(this.now().getTime() - days * 86_400_000).toISOString();
+    const latest = new Map<string, SocialMetricSnapshot>();
+    for (const m of this.opts.store.load().metrics) {
+      if (!m.externalId || m.capturedAt < since) continue;
+      const k = `${m.network}:${m.externalId}`;
+      const prev = latest.get(k);
+      if (!prev || prev.capturedAt < m.capturedAt) latest.set(k, m);
+    }
+    return Array.from(latest.values());
+  }
+
   analytics(days = 30) {
     const since = new Date(this.now().getTime() - days * 86_400_000).toISOString();
     return summarizeMetrics(this.opts.store.load().metrics, since);
