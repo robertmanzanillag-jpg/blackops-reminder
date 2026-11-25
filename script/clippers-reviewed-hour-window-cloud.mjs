@@ -25,6 +25,10 @@ function maintenanceCount(state,owner){
   return !d.writeStartedAt&&!!(d.asset||d.stageIntent||['pending_stage','cleanup_fenced'].includes(d.status));
  }).length;
 }
+// Owner-review backlog for the stall diagnosis: proposals by this owner still waiting for approval (count only).
+function pendingReviewCount(state,owner){
+ return Object.values(state.reviewedDerivatives?.records??{}).slice(0,500).filter(r=>r?.proposedBy===owner&&r.status==='proposed').length;
+}
 /** Read-only content check: existing council read performs SELECT, with no schema creation or provider clients. */
 export async function reviewedHourWindowReadiness({env=process.env,store,getStore=loadStore,clock=Date.now,dueRecords=loadDue}={}){
  const config=cloudPublishConfig(env),reason=unavailable(env,config);
@@ -35,7 +39,10 @@ export async function reviewedHourWindowReadiness({env=process.env,store,getStor
   const due=await dueRecords(state,{now:clock()});
   if(!Array.isArray(due)||due.length>500||due.some(id=>typeof id!=='string'||id.length>160))throw Error('hour_window_due_state_invalid');
   const maintenance=maintenanceCount(state,env.DEFAULT_USER_ID.trim());
-  return {status:due.length?'due':maintenance?'maintenance':'idle',dueCount:due.length,maintenanceCount:maintenance};
+  if(due.length||maintenance)return {status:due.length?'due':'maintenance',dueCount:due.length,maintenanceCount:maintenance};
+  // Idle means this final-only lane publishes nothing (the raw publisher is replaced while the opt-in is on).
+  const pending=pendingReviewCount(state,env.DEFAULT_USER_ID.trim());
+  return {status:'idle',dueCount:0,maintenanceCount:0,pendingReviewCount:pending,stallReason:pending?'awaiting_owner_review':'no_reviewed_finals'};
  }catch(error){return {status:'held',dueCount:0,reason:safeReason(error)};}
 }
 /** Dependencies are injected in tests. Only the worker owns rights/slot/write fences. */

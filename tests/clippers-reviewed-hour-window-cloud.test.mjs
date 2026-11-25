@@ -66,7 +66,7 @@ test('no-new-due records still receive bounded known-copy and controlled-stage m
  assert.deepEqual(await reviewedHourWindowReadiness(options),{status:'maintenance',dueCount:0,maintenanceCount:6});let called=0;
  const result=await runReviewedHourWindowCloud({...options,createMetricool:()=>({}),createStager:()=>({}),runWorker:async args=>{called++;assert.equal(args.dispatchMode,'owner_hour_window');return{status:'completed',scheduled:0};}});assert.equal(called,1);assert.equal(result.scheduled,0);assert.equal(result.maintenanceCount,6);
  const negative={...state,reviewedDerivatives:{records:Object.fromEntries(Object.entries(state.reviewedDerivatives.records).filter(([id])=>['noIdentity','unknownBeforeWrite','unapproved','otherOwner','completed'].includes(id)))}};
- assert.deepEqual(await reviewedHourWindowReadiness({...options,store:backend(JSON.stringify(negative))}),{status:'idle',dueCount:0,maintenanceCount:0});
+ assert.deepEqual(await reviewedHourWindowReadiness({...options,store:backend(JSON.stringify(negative))}),{status:'idle',dueCount:0,maintenanceCount:0,pendingReviewCount:1,stallReason:'awaiting_owner_review'});
 });
 
 // Reproduces the production npm configuration that omitted the tsx loader before due-check.
@@ -92,4 +92,12 @@ test('production hour-window install explicitly includes the locked TypeScript r
   assert.ok(config('omit',oldFlags).includes('dev'),'production default omits the locked tsx devDependency without the fix');
   assert.equal(config('include',oldFlags).includes('dev'),false,'the old install has no inclusion override for that omission');
  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('idle due check explains the stall: owner review backlog vs no reviewed finals at all (counts only)',async()=>{
+ const idle=await reviewedHourWindowReadiness({env:env(),store:backend(),dueRecords:async()=>[]});
+ assert.deepEqual(idle,{status:'idle',dueCount:0,maintenanceCount:0,pendingReviewCount:0,stallReason:'no_reviewed_finals'});
+ const text=await readFile(new URL('../.github/workflows/clippers-streamers-publish.yml',import.meta.url),'utf8');
+ const hour=text.split('  reviewed-hour-window:\n')[1].split('\n  publish:\n')[0];
+ assert.match(hour,/::warning::STREAMER_PUBLISH_STALLED/);
 });

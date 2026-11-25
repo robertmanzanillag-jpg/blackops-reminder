@@ -92,6 +92,8 @@ jobs:
           printf '%s\n' "$result"
           due="$(printf '%s' "$result" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const r=JSON.parse(s);process.stdout.write(["due","maintenance"].includes(r.status)&&Number.isSafeInteger(r.dueCount)&&Number.isSafeInteger(r.maintenanceCount)&&r.dueCount+r.maintenanceCount>0?"true":"false")})')"
           echo "run=$due" >> "$GITHUB_OUTPUT"
+          # While this opt-in is on, the raw publisher job is skipped: an idle check means nothing is published.
+          printf '%s' "$result" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const r=JSON.parse(s);if(r.status==="idle")console.log(`::warning::STREAMER_PUBLISH_STALLED reviewed-hour-window idle (${String(r.stallReason??"unknown").replace(/[^a-z_]/g,"")}; pending owner reviews: ${Number.isSafeInteger(r.pendingReviewCount)?r.pendingReviewCount:"unknown"}). The raw publisher is off while CLIPPERS_REVIEWED_HOUR_WINDOW_ENABLED=true.`)})'
       - name: Install final-file verification tools only when due
         if: steps.due.outputs.run == 'true'
         run: |
