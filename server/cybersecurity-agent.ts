@@ -2,6 +2,7 @@ import type { AppIncident, AppProject, MonitoredProject } from "@shared/schema";
 import { isGitHubConnected, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import { escapeTelegramHtml, sendTelegramMessage } from "./telegram";
+import { defaultCeoAlertGateDeps, runCeoAlertGate, type CeoProblem } from "./ceo-alert-gate";
 import { hasRealValue } from "./ceo-doctor-cli";
 
 const AUTO_ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
@@ -687,7 +688,20 @@ export async function runCybersecurityScan(
     skills: recommendSkills(threats),
   };
 
-  if (scanOptions.notify || (scanOptions.allowAutomaticAlert && shouldSendAutomaticAlert(userId, result))) {
+  // Automatic scans: CEO alert gate (silence when healthy, one message per new threat, one
+  // "resuelto" when it disappears). Manual scans (notify) still send the full report.
+  if (!scanOptions.notify && scanOptions.allowAutomaticAlert) {
+    try {
+      const deps = await defaultCeoAlertGateDeps(userId);
+      if (deps) {
+        const outcome = await runCeoAlertGate({ problems: cyberCeoProblems(result), scope: githubError ? [] : ["cybersecurity"] }, deps);
+        result.telegramSent = outcome.sent > 0;
+      }
+    } catch (error) {
+      console.warn("[cybersecurity] CEO alert gate:", error instanceof Error ? error.message : error);
+    }
+  }
+  if (scanOptions.notify) {
     const telegramConfig = await storage.getTelegramConfig(userId);
     const botToken = getTelegramBotToken();
     if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
@@ -696,6 +710,19 @@ export async function runCybersecurityScan(
   }
 
   return result;
+}
+
+/** Automatic-alert threats (critical/high on live signals) as CEO problems for Robert to act on. */
+export function cyberCeoProblems(result: Pick<CybersecurityScanResult, "threats">): CeoProblem[] {
+  return result.threats
+    .filter((threat) => (threat.severity === "critical" || threat.severity === "high") && AUTOMATIC_ALERT_SIGNALS.has(threat.signal))
+    .map((threat) => ({
+      key: `${threat.appName}:${threat.signal}:${threat.title}`,
+      source: "cybersecurity",
+      title: `${threat.appName}: ${threat.title}`,
+      kind: "owner" as const,
+      ownerAction: threat.recommendation,
+    }));
 }
 
 export function startCybersecurityScheduler(): void {

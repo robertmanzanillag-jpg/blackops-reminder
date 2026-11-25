@@ -7,6 +7,7 @@ import { hasRealValue } from "./ceo-doctor-cli";
 import { isGitHubConnected, listRepositories } from "./github-client";
 import { getDateKeyFromClock, getZonedClock } from "./scheduler-time";
 import { escapeTelegramHtml, sendTelegramMessage, sendTelegramPhoto } from "./telegram";
+import { defaultCeoAlertGateDeps, runCeoAlertGate, type CeoProblem } from "./ceo-alert-gate";
 
 export type AppQaSeverity = "critical" | "high" | "medium" | "low" | "info";
 export type AppQaStatus = "pass" | "warn" | "fail";
@@ -1935,8 +1936,12 @@ export async function runAppQaScan(
     improvementIdeas,
   };
 
-  // Passive status scans must neither send alerts nor consume alert cooldown.
-  if (notify || (recordHistory && shouldSendAutomaticAlert(userId, result))) {
+  // Automatic scans go through the CEO alert gate: silence when healthy, one message per new
+  // problem, one "resuelto" when it disappears. Passive status scans never alert.
+  if (!notify && recordHistory) {
+    await notifyAppQaThroughCeoGate(userId, result).catch((error) => console.warn("[app-qa] CEO alert gate:", error instanceof Error ? error.message : error));
+  }
+  if (notify) {
     const telegramConfig = await storage.getTelegramConfig(userId);
     const botToken = getTelegramBotToken();
     if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
@@ -1947,7 +1952,8 @@ export async function runAppQaScan(
     }
   }
 
-  if (allowDailyDigest && shouldSendDailyDigest(userId)) {
+  // Daily digest only on explicit opt-in (APP_QA_DAILY_DIGEST=true): no "todo bien" messages.
+  if (allowDailyDigest && process.env.APP_QA_DAILY_DIGEST?.trim().toLowerCase() === "true" && shouldSendDailyDigest(userId)) {
     const telegramConfig = await storage.getTelegramConfig(userId);
     const botToken = getTelegramBotToken();
     if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
@@ -2007,6 +2013,33 @@ async function recordAppQaHistory(userId: string, result: AppQaScanResult, start
   } catch (error) {
     console.error("App QA history error:", error);
   }
+}
+
+/** Critical/high App QA findings as CEO problems. Bug Patrol handoff => factory (PR-first) path. */
+export function appQaCeoProblems(result: Pick<AppQaScanResult, "findings" | "bugPatrol">): CeoProblem[] {
+  const handoffs = new Map((result.bugPatrol?.handoffs || []).map((handoff) => [handoff.findingId, handoff]));
+  return result.findings
+    .filter((finding) => finding.severity === "critical" || finding.severity === "high")
+    .map((finding) => {
+      const handoff = handoffs.get(finding.id);
+      const routed = handoff && (handoff.status === "created" || handoff.status === "codex_dispatched");
+      return {
+        key: `${finding.appName}:${finding.sourceAgent}:${finding.title}`,
+        source: "app-qa",
+        title: `${finding.appName}: ${finding.title}`,
+        kind: routed ? "factory" as const : "owner" as const,
+        ownerAction: finding.recommendation,
+        ...(handoff?.issueUrl ? { prUrl: handoff.issueUrl } : {}),
+      };
+    });
+}
+
+async function notifyAppQaThroughCeoGate(userId: string, result: AppQaScanResult): Promise<void> {
+  const deps = await defaultCeoAlertGateDeps(userId);
+  if (!deps) return; // fail closed: no durable ledger, no automatic messages
+  // Storage-unavailable scans return earlier and never reach here, so this scan is complete.
+  const outcome = await runCeoAlertGate({ problems: appQaCeoProblems(result), scope: ["app-qa"] }, deps);
+  result.telegramSent = outcome.sent > 0;
 }
 
 export function startAppQaScheduler(): void {
