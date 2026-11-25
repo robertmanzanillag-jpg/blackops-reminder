@@ -56,6 +56,16 @@ export function registerOfficeRoutes(app: Express, dependencies: {
       return res.json(report);
     } catch { return res.status(503).json({ error: "No se pudo verificar la evidencia de mejora. No se iniciaron nuevas tareas." }); }
   });
+  // Full roster + status from persisted council records only (cheap read, no AI calls).
+  app.get("/api/agents-office/roster-status", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!owner(req, res)) return;
+    try {
+      const { getAgentCouncil } = await import("./agent-council");
+      const { buildOfficeRoster } = await import("./office-roster-status");
+      return res.json(buildOfficeRoster(await getAgentCouncil().load(), now()));
+    } catch { return res.status(503).json({ error: "No se pudo leer el estado de los agentes." }); }
+  });
   app.post("/api/agents-office/contact-action", async (req, res) => {
     const userId = owner(req, res);
     if (!userId) return;

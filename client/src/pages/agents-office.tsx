@@ -32,6 +32,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { OfficeConnectionsPanel } from "@/components/office-connections-panel";
 import { OfficeVerificationPanel } from "@/components/office-verification-panel";
+import { OfficeRosterPanel } from "@/components/office-roster-panel";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
@@ -1361,6 +1362,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
         <OfficeConnectionsPanel />
         <SoftwareFactoryPanel />
         {workspace.isOwner && <OfficeVerificationPanel ownerId={ownerId} />}
+        {workspace.isOwner && <OfficeRosterPanel />}
         <div className="absolute left-5 top-5 z-[95]">
           <Link href="/">
             <Button variant="ghost" size="icon" className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03]" data-testid="button-back-home">
