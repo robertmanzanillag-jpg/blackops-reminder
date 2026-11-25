@@ -54,7 +54,12 @@ test("server pricing: code-owned rows carry evidence; catalog row wins; unpriced
   assert.equal(luna.inputNanoUsdPerToken, 100); assert.equal(luna.maxInputTokens, 272000); assert.match(luna.evidenceSha256, /^[a-f0-9]{64}$/);
   assert.equal(policyOpenAiPrice("gpt-unknown", {} as NodeJS.ProcessEnv), null);
   const catalog = JSON.stringify({ version: 1, prices: [{ provider: "openai", model: "gpt-6-luna", inputNanoUsdPerToken: 150, outputNanoUsdPerToken: 600, validUntil: "2027-01-01T00:00:00.000Z", evidenceSha256: "a".repeat(64) }] });
-  assert.equal(policyOpenAiPrice("gpt-6-luna", { FACTORY_API_PRICING_CONFIG: catalog } as NodeJS.ProcessEnv)!.inputNanoUsdPerToken, 150);
+  // Incomplete catalog row (no cache-write rates / input bound) is not dispatchable: code-owned row.
+  assert.equal(policyOpenAiPrice("gpt-6-luna", { FACTORY_API_PRICING_CONFIG: catalog } as NodeJS.ProcessEnv)!.inputNanoUsdPerToken, 100);
+  const full = JSON.stringify({ version: 1, prices: [{ provider: "openai", model: "gpt-6-luna", inputNanoUsdPerToken: 150, outputNanoUsdPerToken: 600, cachedInputNanoUsdPerToken: 15, cacheWrite30mNanoUsdPerToken: 190, cacheWrite12hNanoUsdPerToken: 380, maxInputTokens: 272000, validUntil: "2027-01-01T00:00:00.000Z", evidenceSha256: "a".repeat(64) }] });
+  assert.equal(policyOpenAiPrice("gpt-6-luna", { FACTORY_API_PRICING_CONFIG: full } as NodeJS.ProcessEnv)!.inputNanoUsdPerToken, 150);
+  // Untiered strong model still carries an input bound, so the guarded fetch can dispatch it.
+  assert.equal(policyOpenAiPrice("gpt-6.2-sol", {} as NodeJS.ProcessEnv)!.maxInputTokens, 272000);
   assert.equal(catalogPricedPolicyModel("translation", "gpt-5.4-nano", {} as NodeJS.ProcessEnv), "gpt-5.4-nano");
   assert.equal(catalogPricedPolicyModel("translation", "gpt-5.4-nano", { FACTORY_API_PRICING_CONFIG: catalog } as NodeJS.ProcessEnv), "gpt-6-luna");
   const haiku = policyAnthropicPricing("claude-haiku-5-5")!;

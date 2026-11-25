@@ -145,10 +145,19 @@ test("office run: AI_MODEL_TIERING switch picks CEO strong / others small, off k
   const fetchStub = (async (_url: any, options: any) => { const body = JSON.parse(String(options?.body)); models.push(body.model);
     return new Response(JSON.stringify({ id: "resp_tier", model: body.model, status: "completed", usage: { input_tokens_details:{cached_tokens:0,cache_write_tokens:0}, input_tokens: 20, output_tokens: 10, total_tokens: 30 },
       output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "ok" }] }] })); }) as typeof fetch;
+  const { aiModelPrice } = await import("../shared/ai-model-policy");
   const on = createOfficeExecution(fixture().make(), { ...env, AI_MODEL_TIERING: "on" }, () => NOW, { fetch: fetchStub });
-  await on.run("hola", "agent-chat:tier-ceo", { agentId: "ceo", task: "chat" }).catch(() => undefined); // model choice is what this test pins
-  await on.run("hola", "agent-chat:tier-clip", { agentId: "clippers", task: "chat" }).catch(() => undefined); // model choice is what this test pins
+  // Real path: both tiered (non-catalog, code-owned priced) calls must execute through the ledger.
+  const ceo = await on.run("hola", "agent-chat:tier-ceo", { agentId: "ceo", task: "chat" });
+  const clip = await on.run("hola", "agent-chat:tier-clip", { agentId: "clippers", task: "chat" });
+  assert.equal(ceo.model, "gpt-6.2-sol"); assert.equal(clip.model, "gpt-6-luna");
+  for (const r of [ceo, clip]) { assert.equal(r.text, "ok"); assert.ok(aiModelPrice("openai", r.model), `${r.model} recorded without a price`); }
   const off = createOfficeExecution(fixture().make(), env, () => NOW, { fetch: fetchStub });
-  await off.run("hola", "agent-chat:tier-off", { agentId: "ceo", task: "chat" }).catch(() => undefined); // model choice is what this test pins
+  const legacy = await off.run("hola", "agent-chat:tier-off", { agentId: "ceo", task: "chat" });
+  assert.equal(legacy.model, "test-model");
   assert.deepEqual(models, ["gpt-6.2-sol", "gpt-6-luna", "test-model"]);
+  // Unpriced override never goes out unpriced: it falls back to the configured, priced model.
+  const unpriced = createOfficeExecution(fixture().make(), { ...env, AI_MODEL_TIERING: "on", AI_MODEL_CEO_OPENAI: "gpt-unpriced-x" }, () => NOW, { fetch: fetchStub });
+  await unpriced.run("hola", "agent-chat:tier-unpriced", { agentId: "ceo", task: "chat" });
+  assert.notEqual(models.at(-1), "gpt-unpriced-x"); assert.ok(aiModelPrice("openai", models.at(-1)!) || models.at(-1) === "test-model");
 });

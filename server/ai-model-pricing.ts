@@ -1,3 +1,4 @@
+import { requireFactoryCacheWritePrice } from "./factory-api-token-cost";
 import { apiEvidenceHash, configuredFactoryApiPrice, type FactoryApiPrice } from "./factory-api-invocation";
 import { AI_MODEL_PRICING_EVIDENCE, AI_MODEL_PRICING_VALID_UNTIL, AI_MODEL_PRICING_VERIFIED_AT, aiModelPrice, resolveAiModel } from "../shared/ai-model-policy";
 
@@ -6,12 +7,22 @@ import { AI_MODEL_PRICING_EVIDENCE, AI_MODEL_PRICING_VALID_UNTIL, AI_MODEL_PRICI
  * null when neither exists (caller keeps its already-priced model). Lower-tier rates are only
  * returned with maxInputTokens bounding the request to that tier. */
 export function policyOpenAiPrice(model: string, env: NodeJS.ProcessEnv): FactoryApiPrice | null {
-  if (env.FACTORY_API_PRICING_CONFIG) { try { return configuredFactoryApiPrice("openai", model, env.FACTORY_API_PRICING_CONFIG); } catch { /* fall through to code-owned */ } }
+  // The guarded fetch (factory-api-sdk) only dispatches rows with full cache-write pricing and an
+  // input bound. A catalog row it would refuse falls back to the code-owned row; if neither is
+  // dispatchable the model is unpriced (null) and callers keep their legacy, priced model.
+  const usable = (price: FactoryApiPrice | null) => { if (!price) return null; try { requireFactoryCacheWritePrice(price); return price; } catch { return null; } };
+  if (env.FACTORY_API_PRICING_CONFIG) { try { const row = usable(configuredFactoryApiPrice("openai", model, env.FACTORY_API_PRICING_CONFIG)); if (row) return row; } catch { /* no catalog row */ } }
+  return usable(codeOwnedOpenAiPrice(model));
+}
+/** Input bound for code-owned rows without a documented higher tier: the gpt-6.x long-context
+ * threshold, so every admitted request is billed at the listed (lower-context) rate. */
+const DEFAULT_MAX_INPUT_TOKENS = 272000;
+function codeOwnedOpenAiPrice(model: string): FactoryApiPrice | null {
   const p = aiModelPrice("openai", model);
   if (!p) return null;
   const base = { model, inputNanoUsdPerToken: p.input, outputNanoUsdPerToken: p.output, cachedInputNanoUsdPerToken: p.cachedInput,
     cacheWrite30mNanoUsdPerToken: p.cacheWrite30m, cacheWrite12hNanoUsdPerToken: p.cacheWrite12h,
-    ...(p.tierAboveInputTokens ? { maxInputTokens: p.tierAboveInputTokens } : {}), validUntil: AI_MODEL_PRICING_VALID_UNTIL };
+    maxInputTokens: p.tierAboveInputTokens ?? DEFAULT_MAX_INPUT_TOKENS, validUntil: AI_MODEL_PRICING_VALID_UNTIL };
   return { ...base, evidenceSha256: apiEvidenceHash({ ...base, source: AI_MODEL_PRICING_EVIDENCE.openai, verifiedAt: AI_MODEL_PRICING_VERIFIED_AT }) };
 }
 
