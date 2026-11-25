@@ -5,7 +5,10 @@ type Ledger = ReturnType<typeof createSharedOpenAiCreditLedger>;
  * inside execute; repository/model code must never receive this ledger. */
 export async function executeWithinSharedCredits<T>(ledger: Ledger, input: {
   key: string; consumer: "office" | "factory"; requestSha256: string; maximumMicroUsd: number;
-}, execute: () => Promise<{ value: T; actualMicroUsd: number; evidenceId: string }>): Promise<T> {
+}, execute: () => Promise<{ value: T; actualMicroUsd: number; evidenceId: string }>,
+  /** Optional: true once a provider request may have left the process. When it is
+   * still false after a failure, the hold is released instead of marked unknown. */
+  dispatched?: () => boolean): Promise<T> {
   const request = structuredClone(input);
   const receipt = await ledger.reserve(request);
   if (!receipt.admitted) throw Error("CREDIT_EXECUTION_ALREADY_ADMITTED");
@@ -14,6 +17,12 @@ export async function executeWithinSharedCredits<T>(ledger: Ledger, input: {
     await ledger.settle({ key: request.key, actualMicroUsd: result.actualMicroUsd, evidenceId: result.evidenceId });
     return result.value;
   } catch {
+    // Proven pre-dispatch failure (e.g. execution window refused): no provider
+    // call happened, so the hold is dropped and the shared ledger stays usable.
+    if (dispatched && !dispatched()) {
+      const released = await ledger.releaseUndispatched(request.key, receipt.reservation.createdAt).then(r => r.released, () => false);
+      if (released) throw Error("CREDIT_EXECUTION_NOT_DISPATCHED");
+    }
     // Includes unknown network outcomes and lost settlement acknowledgement.
     // Never clear a hold or repeat a billed call on the basis of an exception.
     await ledger.markUnknown(request.key, `execution:${request.requestSha256}`).catch(() => undefined);

@@ -230,11 +230,25 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         // An admission already recorded on another provider's ledger is never
         // admitted again here: settled -> return that job; held -> unconfirmed.
         const elsewhere = await otherAdmission(key);
-        const reservation = elsewhere ? { admitted: false as const, reservation: elsewhere } : await credits.ledger.reserve({ key, consumer: "factory", requestSha256, maximumMicroUsd });
+        // An admission hold never calls a provider. Its fate is decided from the
+        // queue alone: job present -> settle at 0; job absent -> release the hold.
+        const queued = async () => (await store.list(owner)).filter(j => j.ownerKey === ownerKey && j.key === expected.key && j.projectId === config.projectId && j.kind === "discover");
+        const noProviderEvidence = `factory-admission-no-provider:${hash([owner, expected.key])}`;
+        let reservation = elsewhere ? { admitted: false as const, reservation: elsewhere } : await credits.ledger.reserve({ key, consumer: "factory", requestSha256, maximumMicroUsd });
+        if (!elsewhere && !reservation.admitted && reservation.reservation.status === "reserved"
+            && now().getTime() - Date.parse((reservation.reservation as { createdAt?: string }).createdAt ?? "") >= STALE_ADMISSION_HOLD_MS) {
+            // A hold left by an earlier interrupted admission on THIS ledger (old
+            // enough that no concurrent admission can still be enqueuing it).
+            const found = await queued();
+            if (found.length === 1) { await credits.ledger.settle({ key, actualMicroUsd: 0, evidenceId: noProviderEvidence }); return found[0]; }
+            if (found.length !== 0) throw Error("FACTORY_OPERATOR_ADMISSION_RECEIPT_UNAVAILABLE");
+            await credits.ledger.releaseUndispatched(key, (reservation.reservation as { createdAt: string }).createdAt);
+            reservation = await credits.ledger.reserve({ key, consumer: "factory", requestSha256, maximumMicroUsd });
+        }
         if (!reservation.admitted) {
             if (reservation.reservation.status !== "settled")
                 throw Error("FACTORY_OPERATOR_ADMISSION_UNCONFIRMED");
-            const matches = (await store.list(owner)).filter(j => j.ownerKey === ownerKey && j.key === expected.key && j.projectId === config.projectId && j.kind === "discover");
+            const matches = await queued();
             if (matches.length !== 1)
                 throw Error("FACTORY_OPERATOR_ADMISSION_RECEIPT_UNAVAILABLE");
             return matches[0];
@@ -245,12 +259,19 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             const job = await store.enqueue(owner, expected);
             if (job.ownerKey !== ownerKey || job.key !== expected.key || job.projectId !== config.projectId || job.kind !== "discover")
                 throw Error("FACTORY_OPERATOR_ADMISSION_UNVERIFIED");
-            await credits.ledger.settle({ key, actualMicroUsd: 0, evidenceId: `factory-admission-no-provider:${hash([owner, expected.key])}` });
+            await credits.ledger.settle({ key, actualMicroUsd: 0, evidenceId: noProviderEvidence });
             return job;
         } catch {
-            // Unknown refers to queue/settlement acknowledgement, never a fabricated
-            // provider call. A settled receipt cannot be overwritten by markUnknown.
-            await credits.ledger.markUnknown(key, `factory-admission-no-provider-unconfirmed:${hash([owner, expected.key])}`).catch(() => undefined);
+            // No provider call is ever made here, so this hold must NOT become
+            // `unknown` (that blocks every Office and factory admission). Decide it
+            // from the queue: present -> settle at 0; absent -> release. If the queue
+            // is unreadable the hold stays `reserved` (it only blocks this order and
+            // is resolved by the branch above on the next sweep).
+            try {
+                const found = await queued();
+                if (found.length === 1) await credits.ledger.settle({ key, actualMicroUsd: 0, evidenceId: noProviderEvidence });
+                else if (found.length === 0) await credits.ledger.releaseUndispatched(key, (reservation.reservation as { createdAt: string }).createdAt);
+            } catch { /* leave the exact hold `reserved`; never fabricate a receipt */ }
             throw Error("FACTORY_OPERATOR_ADMISSION_UNCONFIRMED");
         }
     };
@@ -331,6 +352,9 @@ const OPENAI_STARTUP_FALLBACK_CODES = new Set([
     "FACTORY_OPERATOR_CREDIT_OVERRUN", "FACTORY_OPERATOR_CREDIT_INSUFFICIENT", "FACTORY_OPERATOR_PRICING_EXPIRED",
     "CREDIT_RUNTIME_CONFIGURATION_REQUIRED", "CREDIT_NOT_INITIALIZED", "CREDIT_EXPIRED", "FACTORY_OPENAI_CREDENTIAL_REQUIRED",
 ]);
+/** An admission reserve -> enqueue -> settle takes seconds; a `reserved`
+ * admission hold older than this belongs to an interrupted run. */
+export const STALE_ADMISSION_HOLD_MS = 15 * 60 * 1000;
 const errorCode = (error: unknown) => { try { const m = error instanceof Error ? Object.getOwnPropertyDescriptor(error, "message")?.value : undefined; return typeof m === "string" && /^[A-Z][A-Z0-9_]{2,99}$/.test(m) ? m : undefined; } catch { return undefined; } };
 /** Provider selection at startup. OpenAI stays first whenever its shared
  * credit admits the job's worst case; on a fallback condition Claude runs the

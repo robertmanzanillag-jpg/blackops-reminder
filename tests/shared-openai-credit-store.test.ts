@@ -39,3 +39,21 @@ test("provider uncertainty keeps credit and blocks subsequent Office/factory wor
   assert.equal((await ledger.status()).reservedMicroUsd, 20);
   await assert.rejects(ledger.reserve({ ...input, key: "factory:1", consumer: "factory" }), /RECONCILIATION_REQUIRED/);
 });
+
+test("execution failing before dispatch releases the hold; failing after dispatch stays unknown", async () => {
+  let state: any = { version: 1, grant: null, lastObservedAt: null, reservations: [] };
+  const transact = async (fn: (s: any) => any) => { const copy = structuredClone(state), result = fn(copy); state = copy; return result; };
+  const at = new Date("2026-11-25T03:00:00Z");
+  const ledger = createSharedOpenAiCreditLedger({ grant: { id: "g", accountScope: "s", availableMicroUsd: 1000, observedAt: at.toISOString(), expiresAt: "2026-12-19T00:00:00Z", verificationEvidenceId: "e" },
+    transact: transact as any, now: () => at, maximumGrantObservationAgeMs: 60000 });
+  await ledger.initialize();
+  const input = { key: "factory:stage1", consumer: "factory" as const, requestSha256: "a".repeat(64), maximumMicroUsd: 70 };
+  await assert.rejects(executeWithinSharedCredits(ledger, input, async () => { throw Error("WINDOW_REFUSED"); }, () => false), /NOT_DISPATCHED/);
+  let status = await ledger.status();
+  assert.equal(status.uncertain, false); assert.equal(status.reservedMicroUsd, 0); assert.equal(await ledger.reservation(input.key), null);
+  await assert.rejects(executeWithinSharedCredits(ledger, input, async () => { throw Error("NETWORK"); }, () => true), /UNCONFIRMED/);
+  status = await ledger.status();
+  assert.equal(status.uncertain, true); assert.equal(status.reservedMicroUsd, 70);
+  // Without the dispatch probe the earlier conservative behavior is unchanged.
+  await assert.rejects(executeWithinSharedCredits(ledger, { ...input, key: "factory:stage2" }, async () => { throw Error("X"); }), /RECONCILIATION_REQUIRED|UNCONFIRMED/);
+});

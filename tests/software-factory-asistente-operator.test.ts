@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createAsistenteOperatorComposition, validateAsistenteOperatorConfig, type AsistenteOperatorConfig } from "../server/software-factory-asistente-operator";
+import { createAsistenteOperatorComposition, STALE_ADMISSION_HOLD_MS, validateAsistenteOperatorConfig, type AsistenteOperatorConfig } from "../server/software-factory-asistente-operator";
 import { createSharedOpenAiCreditLedger, type SharedCreditState, type CreditTransaction } from "../server/shared-openai-credit-ledger";
 import { companyOrderJob } from "../server/software-factory-company";
 import { validateFactoryWorkerOptions } from "../server/software-factory-runtime";
@@ -38,14 +38,43 @@ test("operator composes real four-stage proposal runtime and zero-provider guard
     assert.deepEqual(await createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input), first);
     assert.equal(f.calls(), 1);
 });
-test("lost enqueue acknowledgment retains admission hold and restart cannot replay it", async () => {
+test("lost enqueue acknowledgment with the job queued settles the zero-provider hold and never replays", async () => {
     const f = await fixture();
     f.lose();
     await assert.rejects(createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input), /UNCONFIRMED/);
-    assert.equal((await f.ledger.status()).reservedMicroUsd, 40000);
-    assert.equal((await f.ledger.status()).uncertain, true);
-    await assert.rejects(createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input), /UNCONFIRMED/);
+    const status = await f.ledger.status();
+    assert.equal(status.reservedMicroUsd, 0); assert.equal(status.spentMicroUsd, 0); assert.equal(status.uncertain, false);
+    assert.equal((await createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input)).id, "job");
     assert.equal(f.calls(), 1);
+});
+test("enqueue that throws before queueing releases the hold: ledger never becomes unknown and the order retries", async () => {
+    const f = await fixture(), original = f.store.enqueue;
+    let fail = true;
+    f.store.enqueue = async (o: string, i: any) => { if (fail) throw Error("DB_DOWN"); return original(o, i); };
+    await assert.rejects(createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input), /UNCONFIRMED/);
+    const status = await f.ledger.status();
+    assert.equal(status.uncertain, false); assert.equal(status.reservedMicroUsd, 0); assert.equal(status.spentMicroUsd, 0);
+    // Office admissions are not blocked by the failed factory admission.
+    assert.equal((await f.ledger.reserve({ key: "office-after", consumer: "office", maximumMicroUsd: 1, requestSha256: "e".repeat(64) })).admitted, true);
+    await f.ledger.releaseUndispatched("office-after");
+    fail = false;
+    assert.equal((await createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input)).id, "job");
+});
+test("unreadable queue after a failed enqueue keeps the hold reserved (not unknown); a later sweep resolves it", async () => {
+    const f = await fixture(), list = f.store.list, enqueue = f.store.enqueue;
+    f.store.enqueue = async () => { throw Error("DB_DOWN"); };
+    f.store.list = async () => { throw Error("DB_DOWN"); };
+    await assert.rejects(createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input), /UNCONFIRMED/);
+    let status = await f.ledger.status();
+    assert.equal(status.uncertain, false); assert.equal(status.reservedMicroUsd, 40000);
+    f.store.list = list; f.store.enqueue = enqueue;
+    // A fresh hold may still be an in-flight concurrent admission: not touched.
+    await assert.rejects(createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input), /UNCONFIRMED/);
+    assert.equal(f.calls(), 0);
+    const later = { ...f.deps, now: () => new Date(at.getTime() + STALE_ADMISSION_HOLD_MS) };
+    assert.equal((await createAsistenteOperatorComposition(f.config, later).admitWithinCredits(owner, f.input)).id, "job");
+    status = await f.ledger.status();
+    assert.equal(status.uncertain, false); assert.equal(status.reservedMicroUsd, 0); assert.equal(f.calls(), 1);
 });
 test("operator blocks wrong owner, unmapped revision, paused factory and protected source configuration", async () => {
     const f = await fixture(), operator = createAsistenteOperatorComposition(f.config, f.deps);
