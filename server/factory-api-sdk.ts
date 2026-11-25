@@ -1,3 +1,4 @@
+import {failFactoryOpenAiHttpResponse} from './factory-api-cache-usage';
 import {consumeFactoryOpenAiInputCount} from './software-factory-openai-count';
 import {requireFactoryCacheWritePrice} from './factory-api-token-cost';
 import {readOpenAiCacheUsage,validateTextOutputTokenDetails} from './factory-api-cache-usage';
@@ -167,7 +168,7 @@ export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:i
   const output=await invoke({...(countedInput?{countedInput}:{}),executionId:options.executionId,consumer:options.consumer??'office',requestSha256:apiEvidenceHash(body),price,...bounded,cacheWriteCoverage:true,signal,
    call:async limits=>{
     const response=await transport(url,{...request,redirect:'error',signal:limits.signal});
-    if(!response.ok){await response.body?.cancel();throw Error('HTTP_ERROR');}
+    if(!response.ok)await failFactoryOpenAiHttpResponse('factory-api-sdk',response,body);
     const clone=response.clone(),reader=clone.body?.getReader();if(!reader)throw Error('empty');
     const chunks:Uint8Array[]=[];let bytes=0;
     for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>2_097_152){await reader.cancel();throw Error('RESPONSE_TOO_LARGE');}chunks.push(part.value);}

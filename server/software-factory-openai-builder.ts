@@ -1,3 +1,4 @@
+import { FACTORY_OPENAI_REQUEST_REJECTED_PATTERN } from "./factory-api-cache-usage";
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { FactoryBuilderDependencies, FactoryPatchDiagnostic } from "./software-factory-builder";
@@ -164,7 +165,7 @@ export function createOpenAiFactoryPatchGenerator(options: {
         // price profile, e.g. FACTORY_API_PRICING_CONFIG missing cache rates.
         result.status === "blocked" && (reason === "FACTORY_OPENAI_CACHE_PRICING_REQUIRED" || reason === "FACTORY_OPENAI_PRICING_EXPIRED") ? "PROVIDER_PRICING_UNVERIFIED" :
         result.status === "blocked" ? (BLOCKED_DIAGNOSTICS[reason] ?? "PROVIDER_BLOCKED") : "PROVIDER_FAILED";
-      const cause = result.status === "blocked" && typeof result.cause === "string" && /^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(result.cause) ? result.cause : undefined;
+      const cause = result.status === "blocked" && typeof result.cause === "string" && (/^(?:FACTORY|CREDIT)_[A-Z0-9_]{2,80}$/.test(result.cause) || FACTORY_OPENAI_REQUEST_REJECTED_PATTERN.test(result.cause)) ? result.cause : undefined;
       return { patch: "", costCents: result.costCents, diagnostic, ...(cause ? { cause } : {}) };
     }
     const text = result.text;

@@ -78,3 +78,40 @@ export function factoryResponseShape(body:unknown){
 export function logFactoryResponseShape(stage:string,subCause:string,body:unknown){
  try{console.warn(`[factory-openai-shape] ${JSON.stringify({stage,subCause,...factoryResponseShape(body)})}`);}catch{/* logging never changes the outcome */}
 }
+
+/** OpenAI HTTP statuses that reject a request before generation: validation
+ * (400/404/422), authentication/permission (401/403) and 429 quota/rate limits.
+ * They return an error object and no usage, so no tokens were generated or
+ * billed; 5xx, timeouts and transport failures stay unconfirmed (unknown). */
+export const factoryOpenAiRejectedStatuses=new Set([400,401,403,404,422,429]);
+const enumLike=(v:unknown)=>typeof v==='string'?(v.replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||null):null;
+/** Error code: FACTORY_OPENAI_REQUEST_REJECTED:<status>:<code|type|none>. */
+export const FACTORY_OPENAI_REQUEST_REJECTED_PATTERN=/^FACTORY_OPENAI_REQUEST_REJECTED:(?:400|401|403|404|422|429):[A-Za-z0-9_.-]{1,80}$/;
+export class FactoryOpenAiRequestRejectedError extends Error{
+ readonly notBilled=true as const;
+ constructor(readonly status:number,readonly code:string){super(`FACTORY_OPENAI_REQUEST_REJECTED:${status}:${code}`);}
+}
+export const isFactoryOpenAiRequestRejected=(error:unknown):error is FactoryOpenAiRequestRejectedError=>{
+ try{return error instanceof FactoryOpenAiRequestRejectedError&&FACTORY_OPENAI_REQUEST_REJECTED_PATTERN.test(error.message);}catch{return false;}
+};
+/** Safe summary of an OpenAI error body plus the request's model and top-level
+ * keys. Only enum-like fields (type/code/param), never message or content. */
+export function factoryOpenAiHttpErrorSummary(status:number,errorBody:unknown,request:unknown){
+ const e=errorBody&&typeof errorBody==='object'&&!Array.isArray(errorBody)?(errorBody as any).error:undefined;
+ const err=e&&typeof e==='object'&&!Array.isArray(e)?e:undefined;
+ const r=request&&typeof request==='object'&&!Array.isArray(request)?request as Record<string,unknown>:undefined;
+ return {status:Number.isSafeInteger(status)?status:0,type:enumLike(err?.type),code:enumLike(err?.code),param:enumLike(err?.param),
+  model:enumLike(r?.model),request_keys:r?Object.keys(r).filter(k=>/^[a-z][a-z0-9_]{0,40}$/.test(k)).sort().slice(0,40):null};
+}
+/** Reads at most 16 KiB of the error body, logs ONE safe line, then throws:
+ * FactoryOpenAiRequestRejectedError for not-billed rejections, else HTTP_ERROR. */
+export async function failFactoryOpenAiHttpResponse(stage:string,response:Response,request:unknown):Promise<never>{
+ let parsed:unknown;
+ try{const reader=response.body?.getReader();const chunks:Uint8Array[]=[];let size=0;
+  if(reader)for(;;){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;chunks.push(part.value);if(size>16384){await reader.cancel().catch(()=>undefined);break;}}
+  parsed=size<=16384?JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks))):undefined;}catch{parsed=undefined;}
+ const summary=factoryOpenAiHttpErrorSummary(response.status,parsed,request);
+ try{console.warn(`[factory-openai-http-error] ${JSON.stringify({stage,...summary})}`);}catch{/* logging never changes the outcome */}
+ if(factoryOpenAiRejectedStatuses.has(response.status))throw new FactoryOpenAiRequestRejectedError(response.status,summary.code??summary.type??'none');
+ throw Error('HTTP_ERROR');
+}
