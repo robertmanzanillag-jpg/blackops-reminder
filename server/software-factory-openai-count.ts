@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { currentFactoryApiParent } from "./factory-api-context";
+import { FactoryApiBudgetError } from "./factory-api-invocation";
 
 const COUNT_URL = "https://api.openai.com/v1/responses/input_tokens";
 const GENERATE_URL = "https://api.openai.com/v1/responses";
@@ -92,7 +93,8 @@ export function routeFactoryOpenAiRequests(gated:(url:string,init:RequestInit)=>
       return response;
     }
     if(url!==GENERATE_URL)return gated(url,init);
-    if(init.signal?.aborted || currentFactoryApiParent()?.signal?.aborted)throw Error("FACTORY_OPENAI_COUNT_CANCELLED");
+    // Pre-dispatch: typed so the caller releases its credit hold.
+    if(init.signal?.aborted || currentFactoryApiParent()?.signal?.aborted)throw new FactoryApiBudgetError("FACTORY_OPENAI_COUNT_CANCELLED",false);
     let body:unknown;try{body=typeof init.body==="string"?JSON.parse(init.body):undefined;}catch{body=undefined;}
     const promptDigest=promptSha256(body,true), at=now();
     for(let index=receipts.length-1;index>=0;index--){const receipt=receipts[index];if(!Number.isFinite(at)||at<receipt.obtainedAt||at-receipt.obtainedAt>RECEIPT_TTL)receipts.splice(index,1);}

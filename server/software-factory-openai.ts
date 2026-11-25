@@ -113,6 +113,10 @@ export function createOpenAiFactoryTextProvider(config:{
    // pricing, parent fence, reconciliation): nothing executed or billed.
    const cause=factoryBlockCause(error),held=(reason:string):FactoryTextResult=>cause?{status:"blocked",reason,costCents:0,cause}:blocked(reason);
    if(error instanceof FactoryApiBudgetError&&!error.dispatched&&error.message!=="FACTORY_API_EXECUTION_UNCONFIRMED")return held("FACTORY_OPENAI_ADMISSION_UNAVAILABLE");
+   // Reserved by the monetary gate but failed before the provider request was
+   // dispatched (execution window, clock, cancellation): nothing was sent or
+   // billed, so the shared credit hold is released, never left unknown.
+   if(error instanceof FactoryApiBudgetError&&error.dispatched===false)return blocked("FACTORY_OPENAI_NOT_DISPATCHED");
    return submitted?{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0}:held("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
   finally{clearTimeout(timer);input.signal.removeEventListener("abort",abort);}
  };
