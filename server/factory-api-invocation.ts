@@ -1,11 +1,12 @@
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,FactoryTokenCostError} from './factory-api-token-cost';
 import {currentFactoryApiParent} from "./factory-api-context";
+import {factoryResponseModelMatches,factoryUnconfirmedSubCause,type FactoryUnconfirmedSubCause} from './factory-api-cache-usage';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import type {FactoryApiReservation} from './software-factory-api-budget';
 import type {softwareFactoryStore} from './software-factory-store';
 export class FactoryApiBudgetError extends Error {
- constructor(code:string,readonly dispatched=false){super(code);}
+ constructor(code:string,readonly dispatched=false,readonly subCause?:FactoryUnconfirmedSubCause){super(code);}
 }
 const admissionCodes=new Set(["FACTORY_API_RECONCILIATION_REQUIRED","FACTORY_API_UNKNOWN_HOLD","FACTORY_API_BUDGET_EXHAUSTED","FACTORY_API_IDEMPOTENCY_CONFLICT","FACTORY_API_PARENT_FENCE_REQUIRED","FACTORY_API_PARENT_ESCROW_EXHAUSTED","FACTORY_API_DISPATCH_WINDOW_EXPIRED","FACTORY_API_EXECUTION_NOT_RESERVED","FACTORY_API_AUTHORITY_UNAVAILABLE","FACTORY_MONTH_UNINITIALIZED","FACTORY_API_EXECUTION_CANCELLED","FACTORY_API_PARENT_OWNER_MISMATCH"]);
 export function factoryApiAdmissionError(error:unknown){
@@ -69,17 +70,19 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    const timeout=Math.floor(Math.min(120000,deadline)),signal=sourceSignal?AbortSignal.any([sourceSignal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout);
    signal.throwIfAborted();
    dispatched=true;
-   const result=await input.call({signal,maxRetries:0,timeout});
-   signal.throwIfAborted();if(now().getTime()>=Date.parse(price.validUntil))throw Error("expired");
-   const usage=input.usage(result);
-   if((counted?usage.inputTokens!==maximumInputTokens:usage.inputTokens>maximumInputTokens)||usage.outputTokens>input.maxOutputTokens)throw Error('usage bounds');
-   if(usage.model!==price.model||typeof usage.responseId!=='string'||!usage.responseId||usage.responseId.length>300)throw Error('unverified');
-   if(usage.inputTokenDetailsSha256!==undefined)sha.parse(usage.inputTokenDetailsSha256);
-   const actualMicroUsd=factoryTextActualMicroUsd(price,{...usage,cachedTokens:usage.cachedInputTokens},coverage);
-   const settled=await options.store.settleApi(owner,key,{actualMicroUsd,evidenceSha256:apiEvidenceHash({requestSha256,price,usage})});
-   if(settled?.settled===false)throw Error('overrun');
+   let result:T;
+   try{result=await input.call({signal,maxRetries:0,timeout});}catch(error){throw Error(factoryUnconfirmedSubCause(error)??(signal.aborted?'CANCELLED':'TRANSPORT'));}
+   if(signal.aborted)throw Error('CANCELLED');if(now().getTime()>=Date.parse(price.validUntil))throw Error("PRICING_EXPIRED");
+   let usage:FactoryApiUsage;try{usage=input.usage(result);}catch(error){throw Error(factoryUnconfirmedSubCause(error)??'USAGE_INVALID');}
+   if(!factoryResponseModelMatches(price.model,usage.model))throw Error('MODEL_MISMATCH');
+   if((counted?usage.inputTokens!==maximumInputTokens:usage.inputTokens>maximumInputTokens)||usage.outputTokens>input.maxOutputTokens)throw Error('USAGE_BOUNDS');
+   if(typeof usage.responseId!=='string'||!usage.responseId||usage.responseId.length>300)throw Error('RESPONSE_ID_INVALID');
+   if(usage.inputTokenDetailsSha256!==undefined&&!sha.safeParse(usage.inputTokenDetailsSha256).success)throw Error('USAGE_INVALID');
+   let actualMicroUsd:number;try{actualMicroUsd=factoryTextActualMicroUsd(price,{...usage,cachedTokens:usage.cachedInputTokens},coverage);}catch{throw Error('COST_INVALID');}
+   const settled=await options.store.settleApi(owner,key,{actualMicroUsd,evidenceSha256:apiEvidenceHash({requestSha256,price,usage})}).catch(()=>{throw Error('SETTLE_FAILED');});
+   if(settled?.settled===false)throw Error('SETTLE_FAILED');
    return result;
-  }catch{
+  }catch(error){
    // Provably undispatched (failed before input.call): release the hold at $0
    // so the API ledger never reports FACTORY_API_UNKNOWN_HOLD for unsent work.
    if(!dispatched){
@@ -88,7 +91,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
     throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',false);
    }
    await options.store.unknownApi(owner,key).catch(()=>undefined);
-   throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',dispatched);
+   throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',dispatched,factoryUnconfirmedSubCause(error)??'UNKNOWN');
   }
  };
  return Object.assign(invoke,{async preflight(){try{const owner=options.owner(),context=currentFactoryApiParent();if(context?.signal?.aborted)throw new FactoryApiBudgetError("FACTORY_API_EXECUTION_CANCELLED");if(context&&createHash("sha256").update(owner).digest("hex")!==context.ownerKey)throw new FactoryApiBudgetError("FACTORY_API_PARENT_OWNER_MISMATCH");const status=await options.store.apiBudgetStatus(owner);const withinParent=context&&status.configured&&!status.unknown&&status.fixedMicroUsd+status.spentMicroUsd+status.reservedMicroUsd<=status.limitMicroUsd;if(!status.paidAdmissionReady&&!withinParent)throw new FactoryApiBudgetError(status.reason);}catch(error){throw factoryApiAdmissionError(error);}}});

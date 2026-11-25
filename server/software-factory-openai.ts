@@ -1,6 +1,6 @@
 import {FactoryApiBudgetError,factoryApiPriceSchema,type FactoryApiPrice} from "./factory-api-invocation";
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,requireFactoryCacheWritePrice} from "./factory-api-token-cost";
-import {readOpenAiCacheUsage,validateTextOutputTokenDetails} from "./factory-api-cache-usage";
+import {readOpenAiCacheUsage,validateTextOutputTokenDetails,factoryResponseModelMatches,factoryUnconfirmedSubCause} from "./factory-api-cache-usage";
 /** Stateless text only. Trusted request must authenticate, honor AbortSignal,
  * and perform zero retries. Caller must durably reserve maxCostCents first and
  * retain that reservation on unknown; credits never discount ledger charges. */
@@ -63,12 +63,12 @@ export function createOpenAiFactoryTextProvider(config:{
   async function post(endpoint:string,payload:unknown,limit:number){
    if(controller.signal.aborted)throw Error("cancelled");
    const response=await c.request("https://api.openai.com/v1/responses"+endpoint,{method:"POST",redirect:"error",signal:controller.signal,headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-   if(!response.ok){await response.body?.cancel();throw Error("http");}
+   if(!response.ok){await response.body?.cancel();throw Error("HTTP_ERROR");}
    const reader=response.body?.getReader();if(!reader)throw Error("empty");
    const chunks:Uint8Array[]=[];let size=0;
-   for(;;){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>limit){await reader.cancel();throw Error("size");}chunks.push(part.value);}
-   if(controller.signal.aborted)throw Error("cancelled");
-   return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks)));
+   for(;;){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>limit){await reader.cancel();throw Error("RESPONSE_TOO_LARGE");}chunks.push(part.value);}
+   if(controller.signal.aborted)throw Error("CANCELLED");
+   try{return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks)));}catch{throw Error("BODY_UNPARSEABLE");}
   }
   try {
    // Both calls receive the exact same model/instructions/text. No conversation,
@@ -87,25 +87,27 @@ export function createOpenAiFactoryTextProvider(config:{
    // and the Factory monetary gate prices only its reviewed field allow-list.
    const response=await post("",{...prompt,max_output_tokens:input.maxOutputTokens,store:false,tools:[],stream:false,service_tier:"default"},byteLimit);
    const usage=response?.usage;
-   if(response?.service_tier!==undefined&&response.service_tier!=="default")throw Error("unpriced returned service tier");
-   if(response?.object!=="response"||response.model!==c.model||!usage||!nonnegative(usage.input_tokens)||!nonnegative(usage.output_tokens)||!nonnegative(usage.total_tokens)||usage.total_tokens!==usage.input_tokens+usage.output_tokens)throw Error("usage");
-   validateTextOutputTokenDetails(usage.output_tokens_details,usage.output_tokens);
-   const cache=readOpenAiCacheUsage(usage.input_tokens_details);
+   if(response?.service_tier!==undefined&&response.service_tier!=="default")throw Error("SERVICE_TIER_UNPRICED");
+   if(response?.object!=="response"||!usage||!nonnegative(usage.input_tokens)||!nonnegative(usage.output_tokens)||!nonnegative(usage.total_tokens)||usage.total_tokens!==usage.input_tokens+usage.output_tokens)throw Error("USAGE_INVALID");
+   // Responses may echo a dated snapshot of the pinned alias (gpt-6.1-sol-2026-09-29).
+   if(!factoryResponseModelMatches(c.model,response.model))throw Error("MODEL_MISMATCH");
+   let cache:ReturnType<typeof readOpenAiCacheUsage>;
+   try{validateTextOutputTokenDetails(usage.output_tokens_details,usage.output_tokens);cache=readOpenAiCacheUsage(usage.input_tokens_details);}catch{throw Error("USAGE_INVALID");}
    const costCents=cents(factoryTextActualMicroUsd(apiPrice!,{inputTokens:usage.input_tokens,outputTokens:usage.output_tokens,cachedTokens:cache.cachedInputTokens,...cache},true));
-   if(!Number.isSafeInteger(costCents)||usage.input_tokens!==counted.input_tokens||usage.output_tokens>input.maxOutputTokens||costCents>input.maxCostCents)throw Error("usage bounds");
-   if(!["completed","failed","incomplete","cancelled"].includes(response.status))throw Error("execution still active");
+   if(!Number.isSafeInteger(costCents)||usage.input_tokens!==counted.input_tokens||usage.output_tokens>input.maxOutputTokens||costCents>input.maxCostCents)throw Error("USAGE_BOUNDS");
+   if(!["completed","failed","incomplete","cancelled"].includes(response.status))throw Error("STATUS_ACTIVE");
    if(response.status!=="completed"||response.error||response.incomplete_details){
     const reason=response.status==="incomplete" ? (response.incomplete_details?.reason==="max_output_tokens" ? "FACTORY_OPENAI_OUTPUT_LIMIT" : "FACTORY_OPENAI_INCOMPLETE") : response.status==="cancelled" ? "FACTORY_OPENAI_RESPONSE_CANCELLED" : response.status==="failed" ? "FACTORY_OPENAI_RESPONSE_FAILED" : "FACTORY_OPENAI_NOT_COMPLETED";
     return {status:"failed",reason,costCents};
    }
-   if(!Array.isArray(response.output))throw Error("output");
+   if(!Array.isArray(response.output))throw Error("OUTPUT_UNPARSEABLE");
    let text="";
    for(const item of response.output){
     if(item.type==="reasoning")continue;
-    if(item.type!=="message"||item.role!=="assistant"||item.status!=="completed"||!Array.isArray(item.content))throw Error("output type");
+    if(item.type!=="message"||item.role!=="assistant"||item.status!=="completed"||!Array.isArray(item.content))throw Error("OUTPUT_UNPARSEABLE");
     for(const part of item.content){
      if(part.type==="refusal")return {status:"failed",reason:"FACTORY_OPENAI_REFUSAL",costCents};
-     if(part.type!=="output_text"||typeof part.text!=="string")throw Error("content");
+     if(part.type!=="output_text"||typeof part.text!=="string")throw Error("OUTPUT_UNPARSEABLE");
      text+=part.text;
     }
    }
@@ -120,7 +122,9 @@ export function createOpenAiFactoryTextProvider(config:{
    // dispatched (execution window, clock, cancellation): nothing was sent or
    // billed, so the shared credit hold is released, never left unknown.
    if(error instanceof FactoryApiBudgetError&&error.dispatched===false)return blocked("FACTORY_OPENAI_NOT_DISPATCHED");
-   return submitted?{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0}:held("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
+   // Post-dispatch: append only a code-owned sub-cause so logs show why (never provider text).
+   const sub=error instanceof FactoryApiBudgetError?error.subCause:factoryUnconfirmedSubCause(error);
+   return submitted?{status:"unknown",reason:`FACTORY_OPENAI_EXECUTION_UNCONFIRMED:${sub??"UNKNOWN"}`,costCents:0}:held("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
   finally{clearTimeout(timer);input.signal.removeEventListener("abort",abort);}
  };
 }

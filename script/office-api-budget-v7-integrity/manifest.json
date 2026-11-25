@@ -35,7 +35,7 @@
     },
     {
       "path": "server/factory-api-cache-usage.ts",
-      "sha256": "cdc5a27d4747a0d0c1b7cfa43a736a6ccf63f0b29114d611ac841e8e33a46311"
+      "sha256": "3ac61069a18d3f48a1a86c432662256da0c0fad4de2ea62ddb0775729d8d9313"
     },
     {
       "path": "server/factory-api-context.ts",
@@ -43,11 +43,11 @@
     },
     {
       "path": "server/factory-api-invocation.ts",
-      "sha256": "6bad1ea5222e30302ac28a967fba8db51e2a2aa571454fb356d6b9e5b06f30f9"
+      "sha256": "9f94ce8cf3e7cac2875c3f29a271036cb6a80b3d387f7785d7cb7cc9be220453"
     },
     {
       "path": "server/factory-api-sdk.ts",
-      "sha256": "ca1293189fc1fc6f033daf2c39a3662dca6371331a6faaf9e3fa48239289d958"
+      "sha256": "eed84a7e8deee5b5ac22d8406c0dca2d214d943b50cdae41e83b49c1d5990a5d"
     },
     {
       "path": "server/factory-api-token-cost.ts",
@@ -127,7 +127,7 @@
     },
     {
       "path": "server/software-factory-openai-builder.ts",
-      "sha256": "8629d5e058882cce5bccd85659cfbd770ec55e22c32e1c1db725a25590949536"
+      "sha256": "351db8f3205fc877f34e7d97ced1d19f791ff7f575d4a1837bf4d453c0e43601"
     },
     {
       "path": "server/software-factory-openai-count.ts",
@@ -139,7 +139,7 @@
     },
     {
       "path": "server/software-factory-openai.ts",
-      "sha256": "d5773532b052709aaaa96eadb4aec481683da47a84cd165d29cd5e632812f480"
+      "sha256": "7e7d39bb3365ab20fc44436dc6c8599878ef013fcc4c441569ef653b74c6c53f"
     },
     {
       "path": "server/software-factory-pilot-review.ts",
