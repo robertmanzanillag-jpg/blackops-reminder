@@ -116,7 +116,7 @@ export type SelfHealAuditRecord = { repo: string; number?: number; draft?: boole
 /** Agent head branches whose non-draft PRs may receive a PR_FAILING_CHECKS order. */
 export const SELF_HEAL_AGENT_HEAD = /^(?:claude|codex)\/[A-Za-z0-9._\/-]{1,180}$/;
 /** A release-gate test file the factory may be asked to fix (inside the tests/ write root). */
-export const SELF_HEAL_TEST_PATH = /^tests\/[A-Za-z0-9._-]{1,120}\.test\.(?:ts|mjs)$/;
+export const SELF_HEAL_TEST_PATH = /^tests\/[A-Za-z0-9._-]{1,36}\.test\.(?:ts|mjs)$/;
 /** Record id of a known failing test file; the order marker carries the path and must hash to it. */
 export const selfHealTestRecordId = (testPath: string) => digest(["release-gate-known-failure", SELF_HEAL_REPOSITORY, testPath]);
 export type SelfHealObservedAudit = {
@@ -237,7 +237,7 @@ export function selfHealOrderText(marker: Pick<SelfHealOrderMarker, "role" | "co
     : marker.code === "STREAMER_PUBLISH_FAILING"
     ? ` Falla script/clippers-streamer-cloud-worker.mjs (publicación, 3+ ejecuciones).`
     : marker.code === "KNOWN_TEST_FAILURE"
-    ? ` En main falla ${marker.testPath} (allowlist del release gate). Haz que pase y quita su entrada de script/release-gate/known-failures.json en el mismo PR.`
+    ? ` Main: falla ${marker.testPath}; arréglalo y quita su entrada en known-failures.json.`
     : ` Checks fallidos en el PR #${marker.prNumber} de ${SELF_HEAL_REPOSITORY}.`;
   return `${head}${what} Reproduce el fallo con las pruebas existentes, corrige la causa mínima dentro del alcance de escritura y añade una prueba de regresión. No cambies workflows, dependencias, secretos, permisos ni presupuestos. Termina en PR borrador; fusionar es decisión del dueño.`;
 }
