@@ -61,7 +61,7 @@ export function summarizeOwnerOrderAdmission(orders: readonly CompanyOrder[] | u
   // Role ids (never order text) held by orders rejected for lacking an engineering assignee.
   const rejectedAssigneeAgentIds: Record<string, number> = {};
   for (const order of open) if (classifyCompanyOrderAdmission(order, auto) === "no_active_engineering_assignee") {
-    for (const id of new Set(order.assignees.map(a => typeof a?.agentId === "string" ? (a.agentId.startsWith("specialist:") ? "specialist" : a.agentId) : "invalid"))) rejectedAssigneeAgentIds[id] = (rejectedAssigneeAgentIds[id] ?? 0) + 1;
+    for (const id of new Set<string>((order.assignees as Array<{ agentId?: unknown }>).map((a): string => typeof a?.agentId === "string" ? (a.agentId.startsWith("specialist:") ? "specialist" : a.agentId) : "invalid"))) rejectedAssigneeAgentIds[id] = (rejectedAssigneeAgentIds[id] ?? 0) + 1;
     if (!order.assignees.length) rejectedAssigneeAgentIds["(none)"] = (rejectedAssigneeAgentIds["(none)"] ?? 0) + 1;
   }
   for (const order of open) { const classified = classifyCompanyOrderAdmission(order, auto), reason = !auto && classified === "auto_admit_disabled" ? "passes_code_filters_config_unknown" : classified; reasons[reason] = (reasons[reason] ?? 0) + 1; }
