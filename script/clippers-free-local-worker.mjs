@@ -4,6 +4,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CLIPPERS_ALLOWED_ENV_KEYS, loadClipperSelectedEnv } from "./clippers-selected-env.mjs";
+import { sendClipperOfficeBridge } from "./clippers-office-bridge.mjs";
 
 const SAFE_ENV_KEYS = ["HOME", "LANG", "LC_ALL", "NODE_ENV", "PATH", "SHELL", "TMPDIR", "USER"];
 const DEFAULT_PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -288,6 +289,8 @@ export async function runClipperFreeLocalWorker(options = {}) {
         ? "Metricool delivery runs only for proof-backed, unique queue items with public HTTPS media and required campaign hashtags."
         : "Metricool delivery did not run because explicit authorization is missing. Set CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED=true in a selected project environment file and retry.",
     };
+    // Office bridge: best-effort, fail-closed (no token -> skipped, never invented).
+    report.officeBridge = await (options.sendOfficeBridge || sendClipperOfficeBridge)({ workspaceRoot, workerReport: report, env: workerEnv });
     await writeReport(reportPath, report);
     return { ...report, reportPath };
   } finally {

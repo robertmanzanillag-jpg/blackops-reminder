@@ -30,6 +30,8 @@ const PUBLIC_API_PATHS = [
   "/api/blackroom-agent/remote",
   "/api/blackroom-agent/analytics/import",
   "/api/blackroom-agent/metricool/schedule",
+  // Bearer CLIPPERS_OFFICE_INGEST_TOKEN checked in the handler (server/clippers-office-ingest.ts).
+  "/api/clippers/office-ingest",
 ];
 
 // These device endpoints remain protected by the BlackRoom bearer token in
