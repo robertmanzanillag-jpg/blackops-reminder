@@ -24,7 +24,7 @@ export const auditRows={
  legal:z.object({id:s,name:s,publicUrl:s.nullable(),repoOwner:s.nullable(),repoName:s.nullable(),environment:s}).strict(),
  github:z.object({id:s,repo:githubRepo,readable:z.boolean(),archived:z.boolean().nullable(),defaultBranch:s.nullable(),pushedAt:githubDate.nullable(),openIssues:count.nullable(),runsReadable:z.boolean(),latestRun:z.object({status:githubState,conclusion:githubState.nullable(),createdAt:githubDate}).strict().nullable()}).strict(),
  code:z.discriminatedUnion("kind",[
-  z.object({id:s,kind:z.literal("pull_request"),repo:githubRepo,number:z.number().int().positive(),draft:z.boolean(),createdAt:githubDate,updatedAt:githubDate,mergeableState:githubState.nullable(),requestedReviewers:count,checks:z.object({total:count,failing:count,pending:count,passing:count}).strict().nullable()}).strict(),
+  z.object({id:s,kind:z.literal("pull_request"),repo:githubRepo,number:z.number().int().positive(),draft:z.boolean(),headRef:z.string().regex(/^[A-Za-z0-9._\/-]{1,200}$/).nullable().optional(),createdAt:githubDate,updatedAt:githubDate,mergeableState:githubState.nullable(),requestedReviewers:count,checks:z.object({total:count,failing:count,pending:count,passing:count}).strict().nullable()}).strict(),
   z.object({id:s,kind:z.literal("repository"),repo:githubRepo,readable:z.literal(false)}).strict(),
  ]),
 };

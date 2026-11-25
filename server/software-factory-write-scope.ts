@@ -39,8 +39,13 @@ export function validateFactoryWriteRoots(roots: unknown): string[] {
   return result;
 }
 
+/** Exact files outside the roots the factory may edit. The release-gate allowlist must shrink in the same PR that
+ * fixes a listed test; CI (script/release-gate/diff-hygiene.mjs) rejects any new or changed entry without the
+ * owner-only label gate-justified, so the factory can only remove entries. */
+export const FACTORY_EXTRA_WRITE_FILES = Object.freeze(["script/release-gate/known-failures.json"] as const);
+
 export function isFactoryWritePathAllowed(path: unknown, roots: readonly string[] = FACTORY_DEFAULT_WRITE_ROOTS): path is string {
-  return typeof path === "string" && !isFactoryWritePathDenied(path) && roots.some(root => path.startsWith(root) && path.length > root.length);
+  return typeof path === "string" && !isFactoryWritePathDenied(path) && ((FACTORY_EXTRA_WRITE_FILES as readonly string[]).includes(path) || roots.some(root => path.startsWith(root) && path.length > root.length));
 }
 
 /** Validates one order's explicit, persisted file list. Fails closed. */

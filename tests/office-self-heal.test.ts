@@ -324,3 +324,71 @@ test("credit room counts orders in the factory that have not reached a built PR"
   assert.equal(planSelfHeal({ state: inFactory, company: first.company, journal: { jobs }, owner, now: T0 + HOUR, maxPerDay: Number.POSITIVE_INFINITY, fundableOrders: 1 }).created.length, 0);
   assert.equal(planSelfHeal({ state: inFactory, company: first.company, journal: { jobs }, owner, now: T0 + HOUR, maxPerDay: Number.POSITIVE_INFINITY, fundableOrders: 2 }).created.length, 1);
 });
+
+// ---------- factory backlog: agent-branch PRs and release-gate known failures ----------
+import { releaseGateSelfHealAudits } from "../server/office-release-gate-backlog";
+import { selfHealTestRecordId } from "../server/office-self-heal";
+import { isFactoryWritePathAllowed, validateFactoryOrderPaths } from "../server/software-factory-write-scope";
+
+const admitted = (order: CompanyOrder) => {
+  // Same predicates as the factory operator's autoEligible + resolve for system orders.
+  assert.ok(isValidSelfHealOrder(order));
+  assert.doesNotThrow(() => companyOrderJob(order, { id: "asistente", repo: SELF_HEAL_REPOSITORY } as any, 1));
+};
+
+test("PR_FAILING_CHECKS: non-draft PRs on claude/ or codex/ heads become orders; other non-draft PRs never do", () => {
+  const job = { id: `job-${++seq}`, role: "code", status: "completed", completedAt: iso(T0), artifactId: "b".repeat(64),
+    audit: { completeCoverage: true, findings: [11, 12, 13, 14].map(n => ({ code: "PR_FAILING_CHECKS", recordIds: [prId(n)], detail: "x" })) },
+    source: { rows: [
+      { id: prId(11), kind: "pull_request", repo: SELF_HEAL_REPOSITORY, number: 11, draft: false, headRef: "claude/fix-x" },
+      { id: prId(12), kind: "pull_request", repo: SELF_HEAL_REPOSITORY, number: 12, draft: false, headRef: "codex/y" },
+      { id: prId(13), kind: "pull_request", repo: SELF_HEAL_REPOSITORY, number: 13, draft: false, headRef: "feature/z" },
+      { id: prId(14), kind: "pull_request", repo: SELF_HEAL_REPOSITORY, number: 14, draft: false },
+    ] } };
+  const out = planSelfHeal({ state: undefined, company: company(), journal: { jobs: [job] }, owner, now: T0 + 1000, maxPerDay: 5 });
+  assert.deepEqual(out.created.map(o => o.selfHeal!.prNumber).sort(), [11, 12]);
+  for (const o of out.created) admitted(o);
+});
+
+const allowlist = JSON.stringify({ knownFailures: {
+  "tests/app-qa-agent.test.ts": { reason: "route inventory drift", failing: ["x"] },
+  "tests/office-internal-work.test.ts": { reason: "returns undefined", failing: ["y"] },
+  "tests/agents-office-local-qa.test.mjs": { reason: "headless timeout", failing: ["<timeout>"], flaky: true },
+  "tests/clippers-render-campaign-drafts.test.mjs": { reason: "operator Mac toolchain only", failing: ["z"] },
+  "tests/kong-company-routes.test.ts": { reason: "500 instead of 403", failing: ["k"] },
+  "../etc/passwd": { reason: "hostile key", failing: [] },
+} });
+
+test("release gate: one KNOWN_TEST_FAILURE per eligible allowlisted file; flaky, Mac-only, KONG and bad paths excluded; fail closed", () => {
+  const [audit] = releaseGateSelfHealAudits(allowlist, iso(T0));
+  assert.equal(audit.role, "release-gate");
+  assert.deepEqual(Object.values(audit.records).map(r => r.testPath).sort(), ["tests/app-qa-agent.test.ts", "tests/office-internal-work.test.ts"]);
+  for (const f of audit.findings) assert.equal(f.recordId, selfHealTestRecordId(audit.records[f.recordId!].testPath!));
+  assert.deepEqual(releaseGateSelfHealAudits("not json", iso(T0)), []);
+  assert.deepEqual(releaseGateSelfHealAudits(null, iso(T0)), []);
+});
+
+test("release gate finding becomes an admitted factory order; within caps; allowlist file is in write scope; fixed allowlist clears it", () => {
+  const extra = releaseGateSelfHealAudits(allowlist, iso(T0));
+  const out = planSelfHeal({ state: undefined, company: company(), journal: { jobs: [] }, owner, now: T0 + 1000, maxPerDay: 5, extraAudits: extra });
+  assert.equal(out.created.length, 2);
+  for (const o of out.created) {
+    assert.equal(o.selfHeal!.code, "KNOWN_TEST_FAILURE"); assert.equal(o.assignees[0].agentId, "code");
+    assert.match(o.text, /known-failures\.json/); assert.ok(o.text.includes(o.selfHeal!.testPath!)); admitted(o);
+    // Tampered path (hash mismatch) is rejected at admission.
+    assert.equal(isValidSelfHealOrder({ ...o, selfHeal: { ...o.selfHeal!, testPath: "tests/other.test.ts" } }), false);
+    const { testPath: _t, ...noPath } = o.selfHeal!;
+    assert.equal(isValidSelfHealOrder({ ...o, selfHeal: noPath }), false);
+    assert.deepEqual(validateFactoryOrderPaths([o.selfHeal!.testPath!, "server/x.ts", "script/release-gate/known-failures.json"], { roots: ["server/", "client/", "shared/", "tests/"], maxFiles: 6 }).length, 3);
+  }
+  assert.equal(isFactoryWritePathAllowed("script/release-gate/run-tests.mjs"), false);
+  // Idempotent next tick, and the open cap still holds (maxOpenOrders 1 => no more).
+  const again = planSelfHeal({ state: out.state, company: out.company, journal: { jobs: [] }, owner, now: T0 + 2000, maxPerDay: 5, extraAudits: extra });
+  assert.equal(again.created.length, 0);
+  const capped = planSelfHeal({ state: undefined, company: company(), journal: { jobs: [] }, owner, now: T0 + 1000, maxPerDay: 5, maxOpenOrders: 1, extraAudits: extra });
+  assert.equal(capped.created.length, 1);
+  // Entry removed from the allowlist on main before any proposal => cleared.
+  const fixed = releaseGateSelfHealAudits(JSON.stringify({ knownFailures: { "tests/office-internal-work.test.ts": { reason: "returns undefined", failing: ["y"] } } }), iso(T0 + HOUR));
+  const later = planSelfHeal({ state: out.state, company: out.company, journal: { jobs: [] }, owner, now: T0 + HOUR + 1000, maxPerDay: 5, extraAudits: fixed });
+  assert.deepEqual(later.state.entries.map(e => `${e.testPath}:${e.status}`).sort(), ["tests/app-qa-agent.test.ts:cleared", "tests/office-internal-work.test.ts:ordered"]);
+});
