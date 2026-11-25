@@ -447,6 +447,11 @@ app.use((req, res, next) => {
       void startOfficeWebSourceExporter().catch(()=>log("Office source exporter unavailable; saved sources must not be treated as fresh.","scheduler"));
       startReminderScheduler();
       startHealthCheckScheduler();
+      // CEO alerts from the office self-heal ledger: only new failures and "resuelto" messages.
+      void Promise.all([import("./ceo-alert-gate"), import("./user-context")]).then(([gate, users]) => {
+        const started = gate.startCeoSelfHealAlertScheduler(() => users.getSystemUserId());
+        log(started ? "CEO self-heal alerts started" : "CEO self-heal alerts disabled (needs AGENT_COUNCIL_STORAGE=postgres)", "scheduler");
+      }).catch((error) => log(`Failed to start CEO self-heal alerts: ${error instanceof Error ? error.message : String(error)}`, "scheduler"));
       startMarketNewsScheduler();
       // Zero-cost peer review between agents (no AI calls). Disable with AGENT_COUNCIL_ENABLED=false.
       void import("./agent-council").then((council) => council.startAgentCouncilScheduler()).catch((error) => {
