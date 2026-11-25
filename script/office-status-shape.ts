@@ -147,6 +147,43 @@ export function shapeCouncil(raw: string | null, owner: string, now: number) {
     reviewerAcademy: shapeReviewerAcademy(state.company),
     tokens: shapeTokens(execution?.tokens, now),
     creditPacer: shapeCreditPacer(execution?.creditPacer, now),
+    selfHeal: shapeSelfHeal(execution?.selfHeal),
+    companyOrders: shapeCompanyOrders(state.company, now),
+  };
+}
+
+const CODE_RE = /^[A-Z0-9_:]{1,120}$/;
+const ROLE_RE = /^[a-z0-9:-]{1,40}$/;
+const code = (v: unknown) => typeof v === "string" && CODE_RE.test(v) ? v : v === undefined ? undefined : "UNSPECIFIED";
+
+/** Self-heal ledger: statuses, roles, codes, attempt counts and dates only (no record ids, no URLs). */
+export function shapeSelfHeal(raw: unknown) {
+  if (!object(raw)) return { present: false as const };
+  const entries = Array.isArray(raw.entries) ? raw.entries.filter(object) : [];
+  return {
+    present: true as const,
+    entries: entries.slice(0, 40).map(e => ({
+      role: typeof e.role === "string" && ROLE_RE.test(e.role) ? e.role : "UNSPECIFIED",
+      code: code(e.code), status: code(typeof e.status === "string" ? e.status.toUpperCase() : undefined), reason: code(e.reason),
+      attempts: Array.isArray(e.attempts) ? e.attempts.length : 0,
+      lastAttemptAt: Array.isArray(e.attempts) && object(e.attempts.at(-1)) ? isoOrNull((e.attempts.at(-1) as Record<string, unknown>).createdAt) : null,
+      detectedAt: isoOrNull(e.detectedAt), updatedAt: isoOrNull(e.updatedAt),
+    })),
+    notes: Array.isArray(raw.notes) ? raw.notes.filter(object).slice(0, 40).map(n => ({ role: typeof n.role === "string" && ROLE_RE.test(n.role) ? n.role : "UNSPECIFIED", code: code(n.code) })) : [],
+  };
+}
+
+/** Company orders: counts and dates; never order text. */
+export function shapeCompanyOrders(company: unknown, now: number) {
+  if (!object(company) || !Array.isArray(company.orders)) return { present: false as const };
+  const orders = company.orders.filter(object);
+  const open = orders.filter(o => !o.doneAt);
+  return {
+    present: true as const, total: orders.length, open: open.length,
+    openSystem: open.filter(o => object(o.selfHeal)).length,
+    openOwner: open.filter(o => !object(o.selfHeal)).length,
+    openOldestAgeHours: open.map(o => Date.parse(String(o.at ?? o.createdAt ?? ""))).filter(Number.isFinite).map(t => Math.round((now - t) / 3_600_000)).sort((a, b) => b - a)[0] ?? null,
+    newestAt: orders.map(o => isoOrNull(o.at ?? o.createdAt)).filter((v): v is string => !!v).sort().pop() ?? null,
   };
 }
 
