@@ -76,9 +76,9 @@ test("oauth: auth url has state+pkce, callback stores encrypted token, store res
   const url = new URL(buildAuthUrl("tiktok"));
   assert.equal(url.searchParams.get("client_key"), "ck");
   assert.ok(url.searchParams.get("code_challenge"));
-  const f = (async (u: string) => new Response(JSON.stringify(String(u).includes("token") ? { access_token: "PLAIN_TOKEN_x", refresh_token: "RT", expires_in: 86400 } : { data: { user: { username: "kongnightlife" } } }), { status: 200 })) as any;
+  const f = (async (u: string) => new Response(JSON.stringify(String(u).includes("token") ? { access_token: "PLAIN_TOKEN_x", refresh_token: "RT", expires_in: 86400 } : { data: { user: { open_id: "oid_kong", username: "kongnightlife", display_name: "KONG" } } }), { status: 200 })) as any;
   const rows = await completeOAuth(url.searchParams.get("state")!, "code", f);
-  assert.equal(rows[0].accountId, "kongnightlife");
+  assert.equal(rows[0].accountId, "oid_kong"); assert.equal(rows[0].label, "@kongnightlife");
   await kvFlush();
   const persisted = await backend.read("tokens");
   assert.ok(persisted && !persisted.includes("PLAIN_TOKEN_x"), "token is persisted encrypted");
@@ -118,4 +118,20 @@ test("a failed database write is reported, never confirmed as saved", async () =
   kvSet("tokens", "x");
   await assert.rejects(kvFlushOrThrow(), /db down/);
   assert.equal(kvStatus().lastWriteError?.key, "tokens");
+});
+
+test("tiktok label falls back to display name when username is not granted", async () => {
+  const { hydrateSocialHub, memoryBackend } = await import("../server/social-hub/persist");
+  await hydrateSocialHub(["state", "tokens"], memoryBackend());
+  Object.assign(process.env, { SOCIAL_HUB_TOKEN_KEY: "k".repeat(32), SOCIAL_HUB_PUBLIC_URL: "https://ops.example", SH_TIKTOK_CLIENT_KEY: "ck", SH_TIKTOK_CLIENT_SECRET: "cs" });
+  const { buildAuthUrl, completeOAuth } = await import("../server/social-hub/oauth");
+  const url = new URL(buildAuthUrl("tiktok"));
+  assert.ok(url.searchParams.get("scope")!.includes("user.info.profile"));
+  const f = (async (u: string) => new Response(JSON.stringify(
+    String(u).includes("oauth/token") ? { access_token: "PLAIN_TOKEN_x", open_id: "oid_br", expires_in: 86400 }
+      : String(u).includes("username") ? { error: { code: "scope_not_authorized" } }
+      : { data: { user: { open_id: "oid_br", display_name: "Black Room" } } },
+  ), { status: 200 })) as any;
+  const rows = await completeOAuth(url.searchParams.get("state")!, "code", f);
+  assert.deepEqual([rows[0].accountId, rows[0].label], ["oid_br", "Black Room"]);
 });

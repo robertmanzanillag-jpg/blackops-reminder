@@ -28,7 +28,7 @@ export const OAUTH_APPS: Record<SocialNetwork, OAuthApp> = {
   facebook: { authUrl: "https://www.facebook.com/v21.0/dialog/oauth", tokenUrl: "https://graph.facebook.com/v21.0/oauth/access_token", scopes: ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "read_insights", "instagram_basic", "instagram_content_publish", "instagram_manage_insights", "business_management"], clientIdEnv: "SH_META_CLIENT_ID", clientSecretEnv: "SH_META_CLIENT_SECRET", scopeSep: "," },
   instagram: { authUrl: "https://www.facebook.com/v21.0/dialog/oauth", tokenUrl: "https://graph.facebook.com/v21.0/oauth/access_token", scopes: ["pages_show_list", "instagram_basic", "instagram_content_publish", "instagram_manage_insights", "business_management"], clientIdEnv: "SH_META_CLIENT_ID", clientSecretEnv: "SH_META_CLIENT_SECRET", scopeSep: "," },
   threads: { authUrl: "https://threads.net/oauth/authorize", tokenUrl: "https://graph.threads.net/oauth/access_token", scopes: ["threads_basic", "threads_content_publish", "threads_manage_insights"], clientIdEnv: "SH_THREADS_CLIENT_ID", clientSecretEnv: "SH_THREADS_CLIENT_SECRET", scopeSep: "," },
-  tiktok: { authUrl: "https://www.tiktok.com/v2/auth/authorize/", tokenUrl: "https://open.tiktokapis.com/v2/oauth/token/", scopes: ["user.info.basic", "video.publish", "video.upload", "video.list"], clientIdEnv: "SH_TIKTOK_CLIENT_KEY", clientSecretEnv: "SH_TIKTOK_CLIENT_SECRET", scopeSep: ",", clientKeyName: "client_key", pkce: true, fallbackIdEnv: "TIKTOK_CLIENT_KEY", fallbackSecretEnv: "TIKTOK_CLIENT_SECRET" },
+  tiktok: { authUrl: "https://www.tiktok.com/v2/auth/authorize/", tokenUrl: "https://open.tiktokapis.com/v2/oauth/token/", scopes: ["user.info.basic", "user.info.profile", "video.publish", "video.upload", "video.list"], clientIdEnv: "SH_TIKTOK_CLIENT_KEY", clientSecretEnv: "SH_TIKTOK_CLIENT_SECRET", scopeSep: ",", clientKeyName: "client_key", pkce: true, fallbackIdEnv: "TIKTOK_CLIENT_KEY", fallbackSecretEnv: "TIKTOK_CLIENT_SECRET" },
   youtube: { authUrl: "https://accounts.google.com/o/oauth2/v2/auth", tokenUrl: "https://oauth2.googleapis.com/token", scopes: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"], clientIdEnv: "SH_GOOGLE_CLIENT_ID", clientSecretEnv: "SH_GOOGLE_CLIENT_SECRET", extraAuth: { access_type: "offline", prompt: "consent" } },
   x: { authUrl: "https://x.com/i/oauth2/authorize", tokenUrl: "https://api.x.com/2/oauth2/token", scopes: ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"], clientIdEnv: "SH_X_CLIENT_ID", clientSecretEnv: "SH_X_CLIENT_SECRET", pkce: true, basicAuth: true },
   linkedin: { authUrl: "https://www.linkedin.com/oauth/v2/authorization", tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken", scopes: ["w_organization_social", "r_organization_social", "rw_organization_admin", "w_member_social"], clientIdEnv: "SH_LINKEDIN_CLIENT_ID", clientSecretEnv: "SH_LINKEDIN_CLIENT_SECRET" },
@@ -163,9 +163,13 @@ export async function completeOAuth(state: string, code: string, f: FetchLike = 
     const me: any = await (await f(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${token}`)).json();
     rows.push({ network: "threads", accountId: me.id, label: `@${me.username}`, accessToken: token, connectedAt: now, expiresAt: expiry(ll.expires_in) });
   } else if (p.network === "tiktok") {
-    const me: any = await (await f("https://open.tiktokapis.com/v2/user/info/?fields=open_id,username,display_name", { headers: auth })).json();
-    const u = me.data?.user ?? {};
-    rows.push({ network: "tiktok", accountId: u.username ?? tok.open_id, label: `@${u.username ?? u.display_name}`, accessToken: tok.access_token, ...base });
+    // username needs user.info.profile; fall back to display_name (user.info.basic) if TikTok refuses it.
+    const info = async (fields: string) => (await (await f(`https://open.tiktokapis.com/v2/user/info/?fields=${fields}`, { headers: auth })).json())?.data?.user ?? {};
+    let u: any = await info("open_id,username,display_name");
+    if (!u.open_id && !u.display_name) u = await info("open_id,display_name");
+    const openId = u.open_id ?? tok.open_id;
+    const label = u.username ? `@${u.username}` : u.display_name || `TikTok ${String(openId).slice(0, 8)}`;
+    rows.push({ network: "tiktok", accountId: openId, label, accessToken: tok.access_token, ...base });
   } else if (p.network === "youtube") {
     const me: any = await (await f("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { headers: auth })).json();
     for (const ch of me.items ?? []) rows.push({ network: "youtube", accountId: ch.id, label: ch.snippet?.customUrl ?? ch.snippet?.title, accessToken: tok.access_token, ...base });
