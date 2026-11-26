@@ -254,6 +254,26 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         // queue alone: job present -> settle at 0; job absent -> release the hold.
         const queued = async () => (await store.list(owner)).filter(j => j.ownerKey === ownerKey && j.key === expected.key && j.projectId === config.projectId && j.kind === "discover");
         const noProviderEvidence = `factory-admission-no-provider:${hash([owner, expected.key])}`;
+        // An already-settled admission whose job is queued is returned as-is,
+        // before reserve(): job input fields derived from config (reservations,
+        // payload shape) may have changed since it was admitted, and re-reserving
+        // the same key with a different request hash is CREDIT_IDEMPOTENCY_CONFLICT,
+        // which quarantined every scheduling sweep. No new hold, no provider call.
+        if (!elsewhere) {
+            const prior = await credits.ledger.reservation(key);
+            if (prior && prior.status === "settled") {
+                const found = await queued();
+                if (found.length === 1) return found[0];
+                throw Error("FACTORY_OPERATOR_ADMISSION_RECEIPT_UNAVAILABLE");
+            }
+            // Same for an interrupted (stale) hold: decide it from the queue first.
+            if (prior && prior.status === "reserved" && now().getTime() - Date.parse((prior as { createdAt?: string }).createdAt ?? "") >= STALE_ADMISSION_HOLD_MS) {
+                const found = await queued();
+                if (found.length === 1) { await credits.ledger.settle({ key, actualMicroUsd: 0, evidenceId: noProviderEvidence }); return found[0]; }
+                if (found.length !== 0) throw Error("FACTORY_OPERATOR_ADMISSION_RECEIPT_UNAVAILABLE");
+                await credits.ledger.releaseUndispatched(key, (prior as { createdAt: string }).createdAt);
+            }
+        }
         let reservation = elsewhere ? { admitted: false as const, reservation: elsewhere } : await credits.ledger.reserve({ key, consumer: "factory", requestSha256, maximumMicroUsd });
         if (!elsewhere && !reservation.admitted && reservation.reservation.status === "reserved"
             && now().getTime() - Date.parse((reservation.reservation as { createdAt?: string }).createdAt ?? "") >= STALE_ADMISSION_HOLD_MS) {
