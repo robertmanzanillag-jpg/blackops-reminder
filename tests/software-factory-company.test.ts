@@ -77,3 +77,18 @@ test("admission status counts role ids of orders rejected for no engineering ass
   assert.deepEqual(summary.ordersReadable && summary.rejectedAssigneeAgentIds, { "marketing-cmo": 2, specialist: 1, "(none)": 1 });
   assert.doesNotMatch(JSON.stringify(summary), /búsqueda/);
 });
+test("CEO order fixing KONG's status label on the BlackOps office screen is admissible for engineering roles", () => {
+  const auto = { enabled: true, since: "2026-11-01T00:00:00Z", mappedIds: [] as string[] };
+  const text = "Corrige el texto de estado de KONG en la pantalla de oficina que marca App QA y abre un PR";
+  const roles = (ids: string[]) => ids.map(agentId => ({ agentId, status: "pendiente" as const, note: "" }));
+  for (const ids of [["app-qa", "code", "github"], ["app-qa", "code", "github", "claude-reviewer"], ["github"], ["mechanic"], ["mecanico"]]) {
+    const o = { ...order, createdAt: "2026-11-26T21:13:00Z", text, assignees: roles(ids) };
+    assert.equal(classifyCompanyOrderAdmission(o, auto), "eligible", ids.join(","));
+    assert.doesNotThrow(() => companyOrderJob(o, project, 1));
+  }
+  // Kong work outside BlackOps' own surfaces, or without engineering, stays out.
+  assert.equal(classifyCompanyOrderAdmission({ ...order, text: "Arregla el login de la app KONG", assignees: roles(["code"]) }, auto), "kong_text");
+  assert.equal(classifyCompanyOrderAdmission({ ...order, text, assignees: roles(["ceo"]) }, auto), "kong_text");
+  assert.equal(classifyCompanyOrderAdmission({ ...order, text, assignees: [...roles(["code"]), { agentId: "kong:CEO", status: "pendiente", note: "" }] }, auto), "kong_assignee");
+  assert.throws(() => companyOrderJob({ ...order, text: "Arregla KONG", assignees: roles(["code"]) }, project, 1), /INELIGIBLE/);
+});

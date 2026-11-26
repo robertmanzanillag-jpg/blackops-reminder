@@ -8,7 +8,17 @@ import type { FactoryPipelineDependencies } from "./software-factory-pipeline";
 
 export const ASISTENTE_REPOSITORY = "robertmanzanillag-jpg/blackops-reminder";
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const engineering = new Set(["code", "github", "app-qa", "mechanic", "agent-factory", "claude-reviewer"]);
+const engineering = new Set(["code", "github", "app-qa", "mechanic", "mecanico", "agent-factory", "claude-reviewer"]);
+const hasActiveEngineering = (order: CompanyOrder) => order.assignees.some(a => engineering.has(a.agentId) && a.status !== "hecha");
+// Order text that names this repo's own office/factory surface (where KONG appears only as a status label).
+const OWN_SURFACE_TEXT = /\b(oficinas?|office|f[aá]brica|factory|blackops|panel de agentes|asistente)\b/i;
+/** True when a Kong mention keeps the order out of this repo: Kong work belongs to Kong's
+ * own repo. A mention is allowed only when the order is assigned to an active engineering
+ * role and explicitly targets BlackOps' own office/factory screens (e.g. KONG's status row). */
+export function isOutOfScopeKongText(order: CompanyOrder): boolean {
+  if (!/kong/i.test(order.text)) return false;
+  return !(hasActiveEngineering(order) && OWN_SURFACE_TEXT.test(order.text));
+}
 
 /** Admission is invoked only after owner authentication. Never reads Kong's company,
  * publishes an issue, marks an order done, or treats keywords as spending authority. */
@@ -19,8 +29,8 @@ export function companyOrderJob(order: CompanyOrder, project: FactoryProject, re
   if (!order.id || order.doneAt || !order.text.trim() || order.text.length > 500
     || !Number.isFinite(Date.parse(order.createdAt))
     || order.assignees.some(a => isKongCompanyAgent(a.agentId))
-    || /kong/i.test(order.text)
-    || !order.assignees.some(a => engineering.has(a.agentId) && a.status !== "hecha")) {
+    || isOutOfScopeKongText(order)
+    || !hasActiveEngineering(order)) {
     throw Error("FACTORY_COMPANY_ORDER_INELIGIBLE");
   }
   if (!Number.isSafeInteger(reservationCents) || reservationCents < 1 || reservationCents > 10000) throw Error("FACTORY_COMPANY_RESERVATION_INVALID");
@@ -47,8 +57,8 @@ export function classifyCompanyOrderAdmission(order: CompanyOrder, auto: { enabl
   if (order.text.length > 500) return "text_too_long";
   if (!Number.isFinite(Date.parse(order.createdAt))) return "invalid_created_at";
   if (order.assignees.some(a => isKongCompanyAgent(a.agentId))) return "kong_assignee";
-  if (/kong/i.test(order.text)) return "kong_text";
-  if (!order.assignees.some(a => engineering.has(a.agentId) && a.status !== "hecha")) return "no_active_engineering_assignee";
+  if (isOutOfScopeKongText(order)) return "kong_text";
+  if (!hasActiveEngineering(order)) return "no_active_engineering_assignee";
   try { assertCeoOrderActive(order); } catch { return "domain_paused"; }
   if (order.selfHeal !== undefined) return "self_heal_order";
   if (auto?.mappedIds?.includes(order.id)) return "explicitly_mapped";
