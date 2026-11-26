@@ -153,3 +153,11 @@ test("NO_SAFE_SCOPE from the pre-fix Kong-label refusal gets one bounded, cheap 
   assert.equal(isInfrastructureStop({ ...pre, result: { ...pre.result, costCents: 26 } }), false);
   assert.equal(isInfrastructureStop({ ...pre, kind: "build" }), false);
 });
+
+test("pre-fix NO_SAFE_SCOPE root chain advances to the next bounded retry despite its small selection cost", () => {
+  const pre = { ...root(0, "blocked", { status: "blocked", reason: "FACTORY_AUTO_SELECTION_NO_SAFE_SCOPE", costCents: 3 }), completedAt: "2026-11-26T21:39:14Z" };
+  assert.equal(companyOrderRetryAttempt([pre], ownerKey, orderId, rev), 1);
+  const late = { ...pre, completedAt: "2026-11-27T00:00:00Z" };
+  assert.equal(companyOrderRetryAttempt([late], ownerKey, orderId, rev), 0);
+  assert.equal(companyOrderRetryAttempt([{ ...pre, result: { ...pre.result, costCents: 40 } }], ownerKey, orderId, rev), 0);
+});
