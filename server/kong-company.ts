@@ -5,6 +5,7 @@ import { scoreOfficeKongSnapshot } from "../shared/office-kong-supervisor";
 import type { OfficeKongAuditResult } from "./office-kong";
 import { buildOfficeKongCollaboration, type OfficeKongCollaboration } from "./office-kong-collaboration";
 import { WHATSAPP_AGENT_ID, WHATSAPP_CAREER_ID, whatsappOfficeView } from "../shared/whatsapp-office-agent";
+import { KONG_INVITATION_AGENT_ID } from "../shared/kong-invitation-agent";
 
 // KONG agents (departments, system agents, the WhatsApp reader and the city jobs) have ONE career
 // each, in the main company, with the same vida / Academia / automejora rules as every other agent.
@@ -107,7 +108,7 @@ export function advanceKongCareers(input: {
     return { company: input.company, evidenceAt, statuses, observedAt: null, collaboration, names: {}, vitality: { observed: false, agents: [], holds: {}, blockers: {} } };
   }
   for (const raw of input.evidence.agents.filter(agent => agent.kind !== "city")) {
-    if (raw.id === WHATSAPP_AGENT_ID) continue; // Only the validated reader contract can credit this external role.
+    if (raw.id === WHATSAPP_AGENT_ID || `kong:${raw.id}` === KONG_INVITATION_AGENT_ID) continue; // Only each validated external receipt contract can credit these roles.
     const id = `kong:${raw.id}`;
     roles[id] = raw.name;
     seen.add(id);

@@ -84,6 +84,9 @@ export type CouncilLesson = { key: string; ruleId: string; subject: string; labe
 export type ScoutRelease = { repo: string; tag: string; url: string; publishedAt: string | null; skills: string[] };
 
 export type CouncilState = {
+  /** Owner-attested external coordinator metadata; never a sender capability. */
+  kongInvitations?: import("./kong-invitation-agent").KongInvitationLedger;
+  kongInvitationHistory?: import("./kong-invitation-agent").KongInvitationLedger[];
   officeExecution?: { roles: import("./office-role-lifecycle").OfficeRoleLifecycleState; tokens: import("../server/office-token-budget").OfficeTokenBudgetState; internalWork?: import("../server/office-internal-work").InternalWorkState; roleAcademy?: import("../server/office-role-academy").RoleAcademyState; capabilityTraining?: import("../server/office-capability-training").CapabilityTrainingState; roleWork?: import("../server/office-role-work").RoleWorkState; factoryCareers?: import("./factory-office-agents").FactoryCareerLedger; selfHeal?: import("../server/office-self-heal").SelfHealState; creditPacer?: import("../server/credit-pacer").CreditPacerState; deskWork?: import("../server/office-desk-work").DeskWorkState };
   version: 1;
   /** Retired Supervisor KONG state, kept verbatim (never deleted, never advanced). Read only by parseLegacyKongSupervision. */

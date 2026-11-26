@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-25T16:37:09-05:00
+Generated: 2026-11-25T23:08:47-05:00
 Repo: `.`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1480 | 1355 | 5685 | 675 | 31720 |
+| 1494 | 1369 | 5764 | 676 | 31976 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,36 +28,36 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 408 | 403 | test:408 |
-| `server` | 315 | 308 | server:315 |
-| `client/src` | 166 | 164 | ui-component:55, client-component:54, client-page:29, client-lib:21 |
+| `tests` | 415 | 410 | test:415 |
+| `server` | 318 | 311 | server:318 |
 | `script` | 171 | 154 | script:171 |
-| `docs` | 95 | 92 | docs:95 |
+| `docs` | 96 | 93 | docs:96 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `shared` | 60 | 53 | shared:60 |
+| `client/src/components/ui` | 55 | 55 | ui-component:55 |
+| `shared` | 62 | 55 | shared:62 |
+| `client/src/components` | 38 | 38 | client-component:38 |
+| `client/src/pages` | 29 | 27 | client-page:29 |
+| `client/src/lib` | 21 | 21 | client-lib:21 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
-| `server/blackroom-team` | 17 | 17 | server:17 |
-| `server/replit_integrations` | 9 | 9 | server:9 |
+| `server/blackroom-team` | 12 | 12 | server:12 |
 | `server/social-hub` | 9 | 9 | server:9 |
-| `tests/fixtures` | 11 | 9 | test:11 |
-| `script/office-api-budget-v6` | 10 | 8 | script:10 |
+| `tests/fixtures` | 8 | 8 | test:8 |
+| `client/src/components/agents-world-office` | 7 | 7 | client-component:7 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
+| `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/social-publishing` | 5 | 5 | server:5 |
+| `script/office-api-budget-v6` | 6 | 4 | script:6 |
+| `script/office-api-budget-v6/files/server` | 4 | 4 | script:4 |
+| `server/replit_integrations/chat` | 4 | 4 | server:4 |
 | `tests/helpers` | 4 | 4 | test:4 |
-| `script/office-api-budget-v7-integrity` | 3 | 3 | script:3 |
-| `script/social-publishing` | 4 | 3 | script:4 |
-| `server/social-analytics` | 3 | 3 | server:3 |
-| `client/public` | 16 | 2 | other:16 |
-| `script/social-analytics` | 2 | 2 | script:2 |
-| `.agents/skills` | 2 | 1 | docs:1, other:1 |
-| `client` | 1 | 1 | other:1 |
+| `client/src` | 3 | 3 | other:3 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agent-chat`, `/agents-office`, `/agents-office/panel`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/social-hub`, `/tools`
 - `script/software-factory-office-ui-fixture.mjs`: `/api/agent-council/state`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/ceo/conversation-history`, `/api/legal-compliance/reports`, `/api/monthly-goals`
 - `server/agent-chat-routes.ts`: `/api/agent-chat/:agentId/messages`, `/api/agent-chat/:agentId/threads`, `/api/agent-chat/:agentId/threads/:threadId`, `/api/agent-chat/agents`, `/api/agent-chat/handoffs`
-- `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/internal-work`, `/api/agent-council/run`, `/api/agent-council/state`
+- `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/internal-work`, `/api/agent-council/run`, `/api/agent-council/state`, `/api/agents-office/kong-invitations`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-ceo-chat-routes.ts`: `/api/blackroom-ceo-chat`, `/api/blackroom-ceo-chat/approvals/:id/:decision`, `/api/blackroom-ceo-chat/messages`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/clippers-orchestra`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
@@ -116,14 +116,17 @@ Package: `rest-express`
 - `tests/agent-council-owner.test.ts`
 - `tests/agent-council-store.test.ts`
 - `tests/agent-council.test.ts`
+- `tests/agent-efficiency.test.ts`
 - `tests/agent-live-status.test.ts`
 - `tests/agent-outcome-learning.test.ts`
 - `tests/agent-vitality.test.ts`
 - `tests/agents-down-fixes.test.ts`
 - `tests/agents-world-integration.test.ts`
 - `tests/ai-cost-notifications.test.ts`
+- `tests/ai-model-policy.test.ts`
 - `tests/ai-model-router.test.ts`
 - `tests/ai-router-cost-override.test.ts`
+- `tests/app-context-pack.test.ts`
 - `tests/app-qa-agent.test.ts`
 - `tests/app-qa-health-probe.test.ts`
 - `tests/app-qa-self-heal.test.ts`
@@ -219,11 +222,13 @@ Package: `rest-express`
 - `tests/factory-api-request-binding.test.ts`
 - `tests/factory-api-token-cost.test.ts`
 - `tests/factory-api-unknown-resolve.test.ts`
+- `tests/factory-build-input-fit.test.ts`
 - `tests/factory-claude-primary.test.ts`
 - `tests/factory-model-step-shape.test.ts`
 - `tests/factory-office-agents.test.ts`
 - `tests/factory-openai-http-rejection.test.ts`
 - `tests/factory-resume.test.ts`
+- `tests/factory-selection-path-normalize.test.ts`
 - `tests/factory-unconfirmed-subcause.test.ts`
 - `tests/github-client-security.test.ts`
 - `tests/google-connector.test.ts`
@@ -232,6 +237,8 @@ Package: `rest-express`
 - `tests/kong-company-routes.test.ts`
 - `tests/kong-company.test.ts`
 - `tests/kong-improvement-agent-handoff.test.ts`
+- `tests/kong-invitation-agent.test.ts`
+- `tests/kong-invitation-routes.test.ts`
 - `tests/kong-mirror-lab.test.ts`
 - `tests/kong-mirror-qa-scenarios.test.ts`
 - `tests/kong-office-orders.test.ts`
@@ -415,7 +422,7 @@ Package: `rest-express`
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
 - `client/src/pages/agent-chat.tsx` (client-page; 29 symbols, 6 imports)
-- `client/src/pages/agents-office.tsx` (client-page; 103 symbols, 25 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 103 symbols, 26 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)

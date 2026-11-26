@@ -4,6 +4,7 @@ import { isOnDutyWindow, ON_DUTY_DAY_MS, onDutyStatus } from "@shared/office-on-
 import type { OfficeCityRoom } from "./office-city-agents";
 import type { OfficeKongAuditResult } from "../../../server/office-kong";
 import { WHATSAPP_AGENT_ID, WHATSAPP_CAREER_ID, whatsappOfficeAgent, whatsappOfficeView, type WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
+import { KONG_INVITATION_AGENT_ID, KONG_INVITATION_NAME, kongInvitationStatus } from "@shared/kong-invitation-agent";
 
 export type KongOfficeDesk = { id: string; name: string; role: string; description: string; color: string; status: AgentLiveStatus; kongEvidence?: OfficeKongCentralSignal; whatsappEvidence?: WhatsAppOfficeView };
 export type KongOfficeRing = 1 | 2 | 3;
@@ -71,14 +72,14 @@ export function kongDeskStatus(source: KongCentralAgent | undefined, snapshotExp
 }
 
 /** Shared visual vocabulary with BlackOps; activity comes only from a current KONG snapshot. */
-export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] | undefined, cities: OfficeCityRoom[], media: Record<string, AgentLiveStatus>, now: number, assignment?: KongRingAssignment, transportCurrent = true) {
+export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] | undefined, cities: OfficeCityRoom[], media: Record<string, AgentLiveStatus>, now: number, assignment?: KongRingAssignment, transportCurrent = true, invitationReceipt?: unknown) {
   const age = evidence ? now - Date.parse(evidence.generatedAt) : Infinity;
   const fresh = transportCurrent && age >= -30_000 && age <= 300_000;
   const nativeSignals = buildOfficeKongCentralSignals(transportCurrent ? evidence?.agents : undefined, transportCurrent ? evidence?.generatedAt : undefined, now);
   const central = new Map((evidence?.agents ?? []).filter(agent => agent.kind !== "city").map(agent => [agent.id, agent]));
   central.set(WHATSAPP_AGENT_ID, whatsappOfficeAgent(evidence?.whatsappReader, now, fresh));
   const videoNativeId = nativeSignals.find(signal => signal.id === "kong-videos")?.agent?.id;
-  const ids = new Set([...Object.keys(names), ...[...central.keys()].sort()].filter(id => id !== videoNativeId && id !== "kong-metrics"));
+  const ids = new Set([...Object.keys(names), ...[...central.keys()].sort()].filter(id => id !== videoNativeId && id !== "kong-metrics" && id !== "dj_invitations"));
   const agents: KongOfficeDesk[] = [...ids].map(id => {
     const source = central.get(id);
     if (id === WHATSAPP_AGENT_ID) {
@@ -93,6 +94,7 @@ export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] 
     return { id: `kong:${id}`, name: source?.name || names[id] || id, role: source?.owner || "KONG", description: source?.responsibility || "Puesto KONG; esperando evidencia del backend.", color: "#a3e635", status };
   });
   agents.push(
+    { id: KONG_INVITATION_AGENT_ID, name: KONG_INVITATION_NAME, role: "Coordinador externo autorizado", description: "Valida contactos individuales y prepara cohortes. El único envío permanece en Apps Script; registra revisiones, admisiones y recibos separados.", color: "#a3e635", status: kongInvitationStatus(invitationReceipt, now) },
     { id: "kong-videos", name: "Videos KONG", role: "Contenido", description: "Recibe fichas verificadas. La publicación corresponde al publicador autorizado.", color: "#a3e635", status: media["kong-videos"] || { state: "offline", label: "Sin evidencia" } },
     { id: "kong-metrics", name: "Métricas KONG", role: "Medición", description: "Mide resultados de publicaciones confirmadas.", color: "#38bdf8", status: media["kong-metrics"] || { state: "offline", label: "Sin evidencia" } },
   );
@@ -111,7 +113,7 @@ export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] 
     (busyCities.has(a.city.id) ? (rankedCityOrder.get(a.city.id) ?? Infinity) - (rankedCityOrder.get(b.city.id) ?? Infinity) :
     (cityOrder.get(a.city.id) ?? Infinity) - (cityOrder.get(b.city.id) ?? Infinity)) || a.city.id.localeCompare(b.city.id));
   const centralDepartments = [
-    ...centralGroups.map(({ids, ...group}) => ({...group, agentIds: ids.map(id => `kong:${id}`)})),
+    ...centralGroups.map(({ids, ...group}) => ({...group, agentIds: [...ids.map(id => `kong:${id}`), ...(group.id === "kong-growth" ? [KONG_INVITATION_AGENT_ID] : [])]})),
     { id: "kong-systems", name: "Sistemas KONG", color: "#c084fc", agentIds: [...ids].filter(id => !grouped.has(id)).map(id => `kong:${id}`) },
     { id: "kong-media", name: "Contenido KONG", color: "#f472b6", agentIds: ["kong-videos", "kong-metrics"] },
   ].filter(group => group.agentIds.length);

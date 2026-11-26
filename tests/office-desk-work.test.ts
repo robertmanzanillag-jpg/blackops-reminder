@@ -7,6 +7,7 @@ import { applyOutcomeLessons, collectOutcomeSamples } from "../shared/agent-self
 import { buildAgentChatDirectory } from "../shared/agent-chat-directory";
 import { emptyCouncilState } from "../shared/agent-council";
 import { BLACKROOM_TEAM } from "../shared/blackroom-team";
+import { KONG_INVITATION_AGENT_ID } from "../shared/kong-invitation-agent";
 
 const NOW = Date.parse("2026-11-25T12:00:00Z");
 const H = 3600_000;
@@ -19,10 +20,12 @@ function fakeCouncil(initial: Record<string, unknown> = {}) {
   return { get execution() { return execution; }, async updateOfficeExecution(change: (e: any, c: any) => any) { execution = change(structuredClone(execution), {}); return execution; } };
 }
 
-test("covers every Black Room team agent and every KONG central desk in the directory", () => {
+test("covers internal desks and leaves the external invitation coordinator to its verified receipt workflow", () => {
   assert.deepEqual([...BLACKROOM_DESK_IDS].sort(), BLACKROOM_TEAM.map(a => a.id).sort());
   const kongDesks = buildAgentChatDirectory(emptyCouncilState() as any).filter(e => e.group === "kong-desk").map(e => e.id);
-  for (const id of kongDesks) assert.ok((KONG_DESK_IDS as readonly string[]).includes(id), `${id} sin trabajo diario`);
+  assert.ok(kongDesks.includes(KONG_INVITATION_AGENT_ID));
+  assert.ok(!DESK_WORK_ROLES.includes(KONG_INVITATION_AGENT_ID), "a source-only daily review cannot stand in for real invitation work");
+  for (const id of kongDesks.filter(id => id !== KONG_INVITATION_AGENT_ID)) assert.ok((KONG_DESK_IDS as readonly string[]).includes(id), `${id} sin trabajo diario`);
 });
 
 test("Black Room review with a fresh scheduler record completes with evidence", () => {

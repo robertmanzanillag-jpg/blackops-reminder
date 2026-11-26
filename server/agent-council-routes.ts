@@ -1,4 +1,6 @@
 import type { Express } from "express";
+import { officeSameOrigin } from "./office-routes";
+import { kongInvitationReceiptSchema, parseKongInvitationLedger } from "../shared/kong-invitation-agent";
 import { OrderEvidenceError, getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
 import { getCurrentUserId, getSystemUserId } from "./user-context";
 import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
@@ -56,6 +58,25 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
     const userId = requestUserId(req);
     return userId !== ownerUserId() && await isPartner(userId);
   };
+  app.get("/api/agents-office/kong-invitations", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (requestUserId(req) !== ownerUserId()) return res.status(403).json({ error: "Solo el propietario puede leer los recibos." });
+    try { return res.json({ receipt: parseKongInvitationLedger((await councilInstance().load()).kongInvitations) ?? null }); }
+    catch { return res.status(503).json({ error: "No se pudo leer el recibo." }); }
+  });
+  app.post("/api/agents-office/kong-invitations", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (requestUserId(req) !== ownerUserId() || !officeSameOrigin(req)) return res.status(403).json({ error: "Solo el propietario desde esta oficina puede registrar resultados." });
+    const parsed = kongInvitationReceiptSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Recibo no válido. Usa únicamente metadatos del coordinador autorizado." });
+    try {
+      const state = await councilInstance().recordKongInvitationReceipt(parsed.data);
+      return res.json({ receipt: state.kongInvitations, recorded: true });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "UNAVAILABLE";
+      return res.status(code.includes("CONFLICT") || code.includes("REGRESSION") || code.includes("DUPLICATE") ? 409 : code.includes("STALE") ? 400 : 503).json({ error: "No se registró el recibo. Relee el registro antes de repetir.", code: /^INVITATION_[A-Z_]+$/.test(code) ? code : "UNAVAILABLE" });
+    }
+  });
   // Retired Supervisor KONG (PR #315): its stored conversation stays readable for the owner; it runs nothing.
   registerKongSupervisorRoutes(app, () => councilInstance().readLegacyKongSupervision(), {
     requestUserId: (req) => {
@@ -77,6 +98,7 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
       const view = await councilInstance().view(isOwner ? { factoryLiveJobs: await liveFactoryJobs(owner), factoryOwnerKey: createHash("sha256").update(owner).digest("hex") } : undefined);
       const partner = await partnerRequest(req);
       if (!isOwner) {
+        delete view.kongInvitations;
         view.kongCompany = { version: 1, careers: {}, trainees: [], orders: [], events: [] };
         view.kongLeaderboard = [];
         view.kongPersonalities = {};

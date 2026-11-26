@@ -7,6 +7,7 @@ import { applyApprovedProposal, emptyCouncilState, parseCouncilState, type Counc
 import { createAgentCouncil, type CouncilDeps } from "../server/agent-council";
 import { CLIPPERS_AGENT_IDS } from "../shared/clippers-office-agents";
 import { FACTORY_AGENT_IDS } from "../shared/factory-office-agents";
+import { KONG_INVITATION_AGENT_ID } from "../shared/kong-invitation-agent";
 
 const T0 = Date.parse("2026-11-19T12:00:00Z");
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -239,13 +240,14 @@ test("council round: every agent gets a vida row, cloud Clippers work recovers i
   const view = await council.view() as unknown as { vitality: Array<{ agentId: string; state: string; vida: number | null }>; clippersAcademy: { lessons: unknown[] } };
   const ids = new Set(view.vitality.map(r => r.agentId));
   for (const id of [...CLIPPERS_AGENT_IDS, ...FACTORY_AGENT_IDS, "code", "news", "legal"]) assert.ok(ids.has(id), `${id} listed`);
-  assert.ok(![...ids].some(id => id.startsWith("kong:") || id === "kong-videos"), "KONG keeps its own company");
+  assert.ok(ids.has(KONG_INVITATION_AGENT_ID), "external KONG coordinator has a shared factory vitality row");
   const streamers = view.vitality.find(r => r.agentId === "clippers-streamers")!;
   assert.equal(streamers.state, "trabajando");
   assert.equal(streamers.vida, 80 + VITALITY_RECOVERY);
   assert.equal(view.vitality.find(r => r.agentId === "clippers-supervisor")!.state, "sin_entregable");
   assert.ok(view.clippersAcademy.lessons.length >= 3);
   const publicCompany = (await council.view() as any).company;
+  assert.ok(!Object.keys(publicCompany.careers).some(id => id.startsWith("kong:") || id === "kong-videos"), "KONG careers remain outside the BlackOps company view");
   assert.equal(publicCompany.careers["clippers-streamers"].vitality.creditedIds, undefined, "receipt ledger is not served");
   const state = parseCouncilState(stored);
   assert.ok((state.company.careers["clippers-editor"].skills || []).some(s => s.source === "academia"));

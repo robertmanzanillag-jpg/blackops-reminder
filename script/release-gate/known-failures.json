@@ -203,12 +203,6 @@
         "shell wrapper exports only the exact YouTube allowlist and never logs values"
       ]
     },
-    "tests/kong-company-routes.test.ts": {
-      "reason": "'real council routes isolate KONG owner writes': member write answers 500 instead of 403 (pre-existing; candidate bug to fix).",
-      "failing": [
-        "real council routes isolate KONG owner writes and strip KONG state for members"
-      ]
-    },
     "tests/kong-office-browser-qa.test.mjs": {
       "reason": "KONG unified office browser scouts time out in headless CI (~20 s); pre-existing, also fails locally; it sometimes hangs instead (seen up to 7 min), so <timeout> is listed and the limit is 3 min.",
       "failing": [

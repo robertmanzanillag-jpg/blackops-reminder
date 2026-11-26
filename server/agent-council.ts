@@ -1,4 +1,6 @@
 import { ceoFocusIntegrations } from "./ceo-domain-policy";
+import { applyKongInvitationReceipt } from "./kong-invitation-receipts";
+import { KONG_INVITATION_AGENT_ID, KONG_INVITATION_NAME } from "../shared/kong-invitation-agent";
 import { advanceKongCareers, isKongCompanyAgent, isKongSnapshotAgent, type KongCompanyObservation } from "./kong-company";
 import { parseInternalWork } from "./office-internal-work";
 import { createDeskWorkRunner, parseDeskWork, readDeskSources } from "./office-desk-work";
@@ -258,10 +260,10 @@ export const MAIN_AGENT_NAMES: Record<string, string> = Object.fromEntries(Objec
 
 /** Display names of the KONG careers, as KONG last reported them (falls back to the id). */
 function kongNamesOf(state: Pick<CouncilState, "company" | "kongLastStatuses">): Record<string, string> {
-  return Object.fromEntries(Object.keys(state.company.careers).filter(isKongSnapshotAgent).map(id => {
+  return { [KONG_INVITATION_AGENT_ID]: KONG_INVITATION_NAME, ...Object.fromEntries(Object.keys(state.company.careers).filter(isKongSnapshotAgent).map(id => {
     const name = (state.kongLastStatuses[id] as { name?: unknown } | undefined)?.name;
-    return [id, typeof name === "string" && name ? name.slice(0, 80) : id.replace(/^kong(-city)?:/, "")];
-  }));
+    return [id, id === KONG_INVITATION_AGENT_ID ? KONG_INVITATION_NAME : typeof name === "string" && name ? name.slice(0, 80) : id.replace(/^kong(-city)?:/, "")];
+  })) };
 }
 
 function advanceCompanyCycle(
@@ -934,7 +936,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
   async function view(options: { factoryLiveJobs?: Parameters<typeof factoryAgentsView>[0]["liveJobs"]; factoryOwnerKey?: string } = {}) {
     const loaded = await load();
     // Retired Supervisor KONG history is owner-only (read-only GET /api/kong-supervisor/state): never in this view.
-    const { kongLegacyCompany: _legacyHistory, officeExecution: _privateExecution, kongSupervision: _retiredSupervisor, ...publicState } = loaded;
+    const { kongLegacyCompany: _legacyHistory, officeExecution: _privateExecution, kongSupervision: _retiredSupervisor, kongInvitationHistory: _invitationHistory, ...publicState } = loaded;
     // One ledger, two views: the office keeps showing BlackOps agents and KONG agents in their own wings.
     const state = { ...publicState, company: publicCareerVitality(mainCompanyView(publicState.company)), kongCompany: publicCareerVitality(kongCareersMirror(publicState.company)) };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
@@ -1011,7 +1013,11 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.company;
   }
-  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, readLegacyKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
+  async function recordKongInvitationReceipt(input: unknown) {
+    if (!deps.transactState && !deps.versioned) throw Error("INVITATION_DURABLE_STORE_REQUIRED");
+    return mutate(state => applyKongInvitationReceipt(state, input, deps.now()));
+  }
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, readLegacyKongSupervision, updateOfficeExecution, updateBlackRoomAcademy, recordKongInvitationReceipt };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {

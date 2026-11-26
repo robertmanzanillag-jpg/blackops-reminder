@@ -1,0 +1,37 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import express from "express";
+import { createAgentCouncil } from "../server/agent-council";
+import { emptyCouncilState } from "../shared/agent-council";
+import { registerAgentCouncilRoutes } from "../server/agent-council-routes";
+import { KONG_INVITATION_OWNER, KONG_INVITATION_AGENT_ID as ID } from "../shared/kong-invitation-agent";
+
+test("owner form persists and rereads metadata, isolates members and fences repeated submissions",async t=>{
+ const now=Date.parse("2026-11-26T08:00:00Z"),iso=new Date(now).toISOString();
+ let raw=JSON.stringify(emptyCouncilState()),writes=0;
+ const council=createAgentCouncil({now:()=>now,userId:()=>"owner",readState:async()=>raw,writeState:async()=>{throw Error("unexpected non-CAS write")},transactState:async update=>{const next=await update(raw);raw=next;writes++;return raw;},collect:async()=>({}),submitProposal:async()=>"unused",getPendingActionStatus:async()=>null,fetchLatestRelease:async()=>null,log:()=>{}});
+ const input={version:1,ownerId:KONG_INVITATION_OWNER,scopeId:"kong-dj-invitations",scriptId:"1sPDzL7uZvToeNr9phm8xD5YrZ5x1EBZMp5Bn-jG4igwY8F01cVKd0_kh",senderAccount:"kongnightlifeapp@gmail.com",sequence:1,previousReceiptSha256:null,runId:"test-http-1",observedAt:iso,startedAt:iso,completedAt:iso,provenance:"manual",sourceSha256:"23c2b33e18227f49bb70aeadc93d1d250241e101af112b2eb2169abdb1fa340c",installedCodeSha256:"a".repeat(64),evidenceSha256:"b".repeat(64),reviewed:10,pending:10,excluded:0,admitted:0,sent:0,gmailReceiptSha256s:[],senderExecution:"none",senderPaused:true,cursor:50,fence:7,revision:4,scheduler:"active",blocker:"validation-pending"};
+ const app=express();app.use(express.json());
+ registerAgentCouncilRoutes(app,{council,requestUserId:req=>String(req.headers["x-test-user"]||"member"),ownerUserId:()=>"owner",isPartner:async()=>false,readFactoryJobs:async()=>[],now:()=>now});
+ const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));
+ t.after(()=>new Promise<void>(r=>server.close(()=>r())));
+ const address=server.address();assert.ok(address&&typeof address==="object");const base=`http://127.0.0.1:${address.port}`;
+ const prior=process.env.PUBLIC_APP_URL;process.env.PUBLIC_APP_URL=base;t.after(()=>{if(prior===undefined)delete process.env.PUBLIC_APP_URL;else process.env.PUBLIC_APP_URL=prior});
+ const endpoint="/api/agents-office/kong-invitations";
+ const request=(path=endpoint,user="owner",body?:unknown,origin=base)=>fetch(base+path,{method:body===undefined?"GET":"POST",headers:{"content-type":"application/json","x-test-user":user,origin},...(body===undefined?{}:{body:JSON.stringify(body)})});
+ assert.equal((await request(endpoint,"member")).status,403);
+ assert.equal((await request(endpoint,"member",input)).status,403);
+ assert.equal((await request(endpoint,"owner",input,"https://untrusted.test")).status,403);
+ assert.equal((await request(endpoint,"owner",{...input,artistEmail:"private@example.test"})).status,400);
+ assert.equal(writes,0);
+ const saved=await request(endpoint,"owner",input);assert.equal(saved.status,200);const value=await saved.json();
+ const reread=await request();assert.equal(reread.headers.get("cache-control"),"no-store");assert.equal((await reread.json()).receipt.sha256,value.receipt.sha256);
+ assert.equal((await request(endpoint,"owner",input)).status,200);
+ assert.equal((await council.load()).company.careers[ID].points,10);
+ assert.equal((await council.load()).kongInvitationHistory?.length,1);
+ assert.equal((await request(endpoint,"owner",{...input,reviewed:9})).status,409);
+ const member=await (await request("/api/agent-council/state","member")).json();
+ assert.equal(member.kongInvitations,undefined);assert.equal(member.kongInvitationHistory,undefined);
+ assert.equal(member.vitality.some((row:any)=>row.agentId===ID),false);
+ assert.equal((await council.load()).kongInvitations?.receipt.sent,0);
+});
