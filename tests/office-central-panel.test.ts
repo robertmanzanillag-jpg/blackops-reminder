@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildGlobalRanking, buildPanelRows, buildReportsFeed, filterPanelRows, panelCounters, panelStatusKind, readPanelParams, sectionForDepartment,
-  officeDeepLinkStep, selectReplaceable, selectReplaced, type PanelAgentInput,
+  officeDeepLinkStep, selectReplaceable, emptySectionText, selectReplaced, type PanelAgentInput,
 } from "../client/src/lib/office-central-panel";
 import { PANEL_BOTTOM_RESERVE, availablePanelHeight, clampPanelPosition, parseStoredPanelPosition, visiblePanelArea } from "../client/src/components/agents-world-office/use-draggable-panel";
 import type { AgentCareer, CompanyState, LeaderboardRow } from "../shared/agent-company";
@@ -141,6 +141,13 @@ test("replaced history comes from retired careers (lineage) and the CEO's firing
   assert.deepEqual(rows.map(item => [item.nickname, item.generation, item.successor?.nickname, item.replacedAt]), [["Mia", 2, "Teo", iso(-HOUR)], ["Luna", 1, "Mia", iso(-50 * HOUR)]]);
   assert.equal(rows[0].reason, "Bateria en cero (Fallo).");
   assert.equal(rows[1].reason, null);
+});
+
+test("empty KONG city section reports a failed search, not missing KONG evidence", () => {
+  assert.equal(emptySectionText("kong-cities", "miami"), "Ningún agente coincide con la búsqueda.");
+  assert.equal(emptySectionText("kong-cities", "  "), "Sin ciudades con evidencia vigente de KONG.");
+  assert.equal(emptySectionText("kong", ""), "Sin agentes en esta sección.");
+  assert.equal(emptySectionText("factory", "qa"), "Ningún agente coincide con la búsqueda.");
 });
 
 test("deep-link params accept only known sections and bounded agent ids", () => {

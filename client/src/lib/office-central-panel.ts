@@ -238,6 +238,12 @@ export function buildReportsFeed(input: {
     .slice(0, input.limit ?? 60);
 }
 
+/** Empty-section message: a search without matches is never reported as missing KONG evidence. */
+export function emptySectionText(section: PanelSectionId, query: string): string {
+  if (query.trim()) return "Ningún agente coincide con la búsqueda.";
+  return section === "kong-cities" ? "Sin ciudades con evidencia vigente de KONG." : "Sin agentes en esta sección.";
+}
+
 /** Filters rows by section and free text (name, role, nickname, room, id, status, reason). */
 export function filterPanelRows(rows: readonly PanelRow[], section: PanelSectionId | "all", query: string): PanelRow[] {
   const needle = query.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");

@@ -11,7 +11,7 @@ import {
   ROOM_LABEL_MAX, defaultOfficeLayout, loadOfficeLayout, moveOfficeAgent, officeRoomOf, renameOfficeRoom, saveOfficeLayout, saveOfficeLocations, saveOfficeOffsets, saveOfficeRooms, type OfficeLayout,
 } from "@/lib/office-layout";
 import {
-  BATTERY_DANGER, PANEL_SECTIONS, STATUS_KIND_LABEL, buildGlobalRanking, buildPanelRows, buildReportsFeed, filterPanelRows,
+  BATTERY_DANGER, PANEL_SECTIONS, STATUS_KIND_LABEL, buildGlobalRanking, emptySectionText, buildPanelRows, buildReportsFeed, filterPanelRows,
   panelCounters, readPanelParams, selectReplaceable, selectReplaced, type PanelAgentInput, type PanelCompany, type PanelRow, type PanelSectionId, type PanelStatusKind,
 } from "@/lib/office-central-panel";
 import { useOfficeRoster, type WorldAgent } from "./use-office-roster";
@@ -221,7 +221,7 @@ function OwnerCentralPanel({ agents, kongTeam, legal }: { agents: WorldAgent[]; 
         const rooms = [...new Map(sectionRows.map(row => [row.departmentId, { id: row.departmentId, name: row.departmentName, color: row.departmentColor }])).values()];
         return <section key={item.id} id={`panel-section-${item.id}`} aria-label={item.name} className="scroll-mt-24" data-testid={`central-section-${item.id}`}>
           <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100">{item.name} <span className="text-zinc-500">· {panelCounters(sectionRows).active} de {sectionRows.length} activos</span></h2>
-          {sectionRows.length === 0 && <p className="mt-2 text-xs text-zinc-500">{item.id === "kong-cities" ? "Sin ciudades con evidencia vigente de KONG." : query ? "Ningún agente coincide con la búsqueda." : "Sin agentes en esta sección."}</p>}
+          {sectionRows.length === 0 && <p className="mt-2 text-xs text-zinc-500">{emptySectionText(item.id, query)}</p>}
           {rooms.map(room => {
             const roomRows = sectionRows.filter(row => row.departmentId === room.id);
             // 25 cities x 7 desks: city rooms start folded unless something there needs a look.
