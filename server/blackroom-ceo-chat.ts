@@ -130,7 +130,9 @@ export type CeoChatOrders = {
    * Owner only: records a request that is not Black Room work as a task for the main office
    * (same as the classic CEO channel). Returns the order id and the names of the assignees.
    */
-  placeGeneral?(text: string, placedBy: BlackRoomTeamActor): Promise<{ orderId: string | null; assignees: string[] } | null>;
+  /** factory=true only when the placed order passes the software factory's code-level admission
+   * filters (engineering assignee, not KONG, not paused); the factory's own caps still apply. */
+  placeGeneral?(text: string, placedBy: BlackRoomTeamActor): Promise<{ orderId: string | null; assignees: string[]; factory?: boolean } | null>;
 };
 
 export type CeoChatDeps = {
@@ -743,7 +745,9 @@ export function createCeoChat(deps: CeoChatDeps = {}) {
           if (placed?.orderId) {
             orderIds.push(placed.orderId);
             const who = placed.assignees.length ? placed.assignees.join(", ") : "el equipo";
-            generalNote = `Eso no es de Black Room, así que lo anoté como tarea para ${who} en la oficina. Esos agentes todavía no lo ejecutan solos: lo ves en la pestaña Tareas.`;
+            generalNote = placed.factory
+              ? `Lo mandé a la fábrica de software como orden de la compañía (${who}). La fábrica la toma en su próxima corrida, dentro de sus límites diarios y de costo; si encuentra un arreglo abre un PR en borrador para que lo revises. Nada se publica sin tu aprobación. Lo sigues en la pestaña Tareas.`
+              : `Eso no es de Black Room, así que lo anoté como tarea para ${who} en la oficina. Esos agentes todavía no lo ejecutan solos: lo ves en la pestaña Tareas.`;
           }
         } catch (error) {
           console.warn("[blackroom-ceo-chat] general order not recorded:", error instanceof Error ? error.message : error);
@@ -821,7 +825,10 @@ export const defaultCeoChatOrders: CeoChatOrders = {
     const state = await getAgentCouncil().placeOrder(text, "main", placedBy);
     const order = state.company.orders[0];
     if (!order) return null;
-    return { orderId: order.id, assignees: order.assignees.map((assignee) => AGENT_NAMES[assignee.agentId] || assignee.agentId) };
+    const { classifyCompanyOrderAdmission } = await import("./software-factory-company");
+    // Code-level filters only (auto-admit config lives with the factory, not the web).
+    const factory = classifyCompanyOrderAdmission(order, { enabled: true, since: "1970-01-01T00:00:00.000Z" }) === "eligible";
+    return { orderId: order.id, assignees: order.assignees.map((assignee) => AGENT_NAMES[assignee.agentId] || assignee.agentId), factory };
   },
 };
 
