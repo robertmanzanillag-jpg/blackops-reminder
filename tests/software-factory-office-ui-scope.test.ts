@@ -5,13 +5,13 @@ import { OFFICE_UI_HARNESS_FILES } from "../script/software-factory-ui-static.mj
 const m = (path: string, oldMode = "100644", newMode = "100644") => ({ path, oldMode, newMode });
 
 test("office UI candidate scope admits office screen, backend leaf and tests (run 45890535176 shape)", () => {
-  for (const p of ["client/src/components/agents-world-office/agents-office-world.tsx", "client/src/components/agents-world-office/sub/x.ts", "client/src/pages/agents-office.tsx", "client/src/pages/agents-office-world.tsx", "server/office-role-work.ts", "tests/app-qa-agent.test.ts", "tests/office-role-work.test.ts", "tests/sub/a.test.ts"])
+  for (const p of ["client/src/components/agents-world-office/agents-office-world.tsx", "client/src/components/agents-world-office/sub/x.ts", "client/src/pages/agents-office.tsx", "client/src/pages/agents-office-world.tsx", "server/office-role-work.ts", "client/src/lib/office-central-panel.ts", "tests/app-qa-agent.test.ts", "tests/office-role-work.test.ts", "tests/sub/a.test.ts"])
     assert.equal(officeUiCandidatePathAllowed(p), true, p);
   assert.equal(officeUiCandidateScopeValid([m("client/src/components/agents-world-office/agents-office-world.tsx"), m("tests/app-qa-agent.test.ts")]), true);
 });
 
 test("office UI candidate scope denies harness, workflows, scripts, packages, secrets and traversal", () => {
-  for (const p of [...OFFICE_UI_HARNESS_FILES, ".github/workflows/factory-candidate-checks.yml", "script/build.ts", "package.json", "package-lock.json", ".env", "secrets/key.pem", "credentials/a.json", "server/office-role-snapshots.ts", "server/routes.ts", "client/src/pages/home.tsx", "client/src/pages/agents-office.ts", "client/src/components/agents-world-office/../../App.tsx", "client/src/components/agents-world-office/.env", "tests/helper.ts", "tests/a.test.mjs", "vite.config.ts", "tests/../package.json.test.ts", ""])
+  for (const p of [...OFFICE_UI_HARNESS_FILES, ".github/workflows/factory-candidate-checks.yml", "script/build.ts", "package.json", "package-lock.json", ".env", "secrets/key.pem", "credentials/a.json", "server/office-role-snapshots.ts", "server/routes.ts", "client/src/pages/home.tsx", "client/src/lib/queryClient.ts", "client/src/lib/office/x.ts", "client/src/lib/office-x.tsx", "client/src/lib/Office-x.ts", "client/src/pages/agents-office.ts", "client/src/components/agents-world-office/../../App.tsx", "client/src/components/agents-world-office/.env", "tests/helper.ts", "tests/a.test.mjs", "vite.config.ts", "tests/../package.json.test.ts", ""])
     assert.equal(officeUiCandidatePathAllowed(p), false, p);
   assert.equal(officeUiCandidateScopeValid([]), false);
   assert.equal(officeUiCandidateScopeValid([m("server/office-role-work.ts"), m("script/software-factory-office-ui-oracle.mjs")]), false);

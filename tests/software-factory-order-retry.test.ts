@@ -161,3 +161,12 @@ test("pre-fix NO_SAFE_SCOPE root chain advances to the next bounded retry despit
   assert.equal(companyOrderRetryAttempt([late], ownerKey, orderId, rev), 0);
   assert.equal(companyOrderRetryAttempt([{ ...pre, result: { ...pre.result, costCents: 40 } }], ownerKey, orderId, rev), 0);
 });
+
+test("a paid build that failed only the pre-fix office-lib UI scope (window-bound, <=100c) gets one bounded retry", () => {
+  const r0 = { ...root(0, "completed", { status: "completed", costCents: 2, evidence: { pipelineState: { finding: { sourcePaths: ["tests/x.test.ts"] } } } }), completedAt: "2026-11-26T22:07:00Z" };
+  const b = { ...build(r0, "failed", "FACTORY_ACTIONS_CHECK_FAILED", 30), completedAt: "2026-11-26T22:12:10Z" };
+  assert.equal(companyOrderRetryAttempt([r0, b], ownerKey, orderId, rev), 1);
+  assert.equal(companyOrderRetryAttempt([r0, { ...b, completedAt: "2026-11-26T20:26:34Z" }], ownerKey, orderId, rev), 0);
+  assert.equal(companyOrderRetryAttempt([r0, { ...b, result: { ...b.result, costCents: 101 } }], ownerKey, orderId, rev), 0);
+  assert.equal(companyOrderRetryAttempt([r0, { ...b, result: { ...b.result, reason: "FACTORY_REVIEW_REJECTED" } }], ownerKey, orderId, rev), 0);
+});
