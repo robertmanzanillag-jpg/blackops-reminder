@@ -1,5 +1,6 @@
 import { CompanyOffice } from "@/components/company-office/company-office";
 import { SoftwareFactoryPanel } from "@/components/software-factory-panel";
+import { KongInvitationsPanel } from "@/components/kong-invitations-panel";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ownerOfficeStorageKey } from "@/lib/owner-office-storage";
@@ -1361,6 +1362,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
       <section className="relative h-full overflow-hidden bg-black bg-[linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:64px_64px,64px_64px]">
         <OfficeConnectionsPanel />
         <SoftwareFactoryPanel />
+        {workspace.isOwner && <KongInvitationsPanel />}
         {workspace.isOwner && <OfficeVerificationPanel ownerId={ownerId} />}
         {workspace.isOwner && <OfficeRosterPanel />}
         <div className="absolute left-5 top-5 z-[95]">

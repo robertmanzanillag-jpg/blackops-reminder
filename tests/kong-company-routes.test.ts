@@ -3,9 +3,13 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createAgentCouncil } from "../server/agent-council";
 import { emptyCouncilState } from "../shared/agent-council";
+import { mainCompanyView } from "../shared/agent-company";
 import { registerAgentCouncilRoutes } from "../server/agent-council-routes";
 
 test("real council routes isolate KONG owner writes and strip KONG state for members", async t => {
+  const configuredOwner = process.env.DEFAULT_USER_ID;
+  process.env.DEFAULT_USER_ID = "owner"; // Match the production singleton-owner guard in this isolated fixture.
+  t.after(() => { if (configuredOwner === undefined) delete process.env.DEFAULT_USER_ID; else process.env.DEFAULT_USER_ID = configuredOwner; });
   const state = emptyCouncilState();
   state.company.orders.push({ id: "private-order", text: "Owner private request", createdAt: new Date().toISOString(), assignees: [], scope: "kong" });
   state.kongObservedAt = new Date().toISOString();
@@ -16,7 +20,8 @@ test("real council routes isolate KONG owner writes and strip KONG state for mem
   let cycles = 0;
   const council = createAgentCouncil({ now: () => Date.now(), userId: () => "owner", readState: async () => raw, writeState: async value => { raw = value; }, collect: async () => { cycles++; return {}; }, submitProposal: async () => "fixture", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
   const app = express(); app.use(express.json());
-  registerAgentCouncilRoutes(app, { council, requestUserId: req => String(req.headers["x-test-user"] || "member"), ownerUserId: () => "owner", enabled: () => true });
+  registerAgentCouncilRoutes(app, { council, requestUserId: req => String(req.headers["x-test-user"] || "member"), ownerUserId: () => "owner", enabled: () => true,
+    isPartner: async () => false, readFactoryJobs: async () => [] }); // HTTP fixture never queries a real partner/factory database.
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => server.once("listening", resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
@@ -41,7 +46,9 @@ test("real council routes isolate KONG owner writes and strip KONG state for mem
   const created = await request("/api/agent-company/orders", "owner", { company: "kong", text: "Review venues" });
   assert.equal(created.status, 200);
   const order = (await created.json()).order;
-  assert.equal((await council.load()).company.orders.length, 0);
+  // Careers/orders share one durable ledger; the main-office projection excludes KONG orders.
+  assert.equal(mainCompanyView((await council.load()).company).orders.length, 0);
+  assert.equal((await council.load()).company.orders.filter(item => item.scope === "kong").length, 2);
   assert.equal((await request(`/api/agent-company/orders/${order.id}/done`, "owner", { company: "kong", evidenceRunId: "unrelated" })).status, 422);
   assert.equal((await request(`/api/agent-company/orders/${order.id}/done`, "owner", { company: "kong" })).status, 200);
   assert.equal((await request("/api/agent-council/run", "owner", {})).status, 200);

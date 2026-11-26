@@ -28,6 +28,7 @@ export const KONG_CITY_CATEGORY_NAMES: Record<string, string> = {
   clubs: "Clubs", vip: "Mesas VIP", restaurants: "Restaurantes", events: "Eventos", sports: "Deportes", experiences: "Experiencias", media: "Fotos y media",
 };
 const KONG_DESKS: Array<AgentChatProfile & { legacyIds: string[] }> = [
+  { id: "kong:dj_invitations", name: "Invitaciones a DJs", job: "Coordinador externo de validación y cohortes; Apps Script conserva el único envío. Recibos separados de revisión, admisión y correo confirmado.", aliases: ["invitaciones djs", "dj invitations"], legacyIds: [] },
   { id: "kong:KONG AI", name: "KONG AI", job: "Chat central de KONG: preguntas, herramientas internas y contexto de la app.", aliases: ["kong ai"], legacyIds: ["Kong-KONG AI"] },
   { id: "kong:Promoters + Mesas", name: "Promotores + Mesas", job: "Flujo comercial de KONG: promotores, mesas y seguimiento.", aliases: ["promoters + mesas", "promotores + mesas", "promotores y mesas", "promoters y mesas"], legacyIds: ["Kong-Promoters + Mesas"] },
   { id: "kong:Venues", name: "Venues", job: "Busca, revisa e importa eventos de venues para KONG.", aliases: ["venues kong", "kong venues"], legacyIds: ["Kong-Venues"] },

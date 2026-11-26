@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-25T16:37:09-05:00",
+  "generatedAt": "2026-11-25T23:08:47-05:00",
   "repoRoot": ".",
   "packageName": "rest-express",
   "scripts": {
@@ -10,7 +10,6 @@
     "office:worker": "node dist/office-worker.cjs",
     "office:cloud": "node script/office-cloud-launch.mjs",
     "codebase:map": "node --import tsx script/codebase-map.ts",
-    "context:pack": "node --import tsx script/app-context-pack.ts",
     "test:dropshipping-ceo": "node --import tsx --test tests/dropshipping-ceo.test.ts",
     "test:ceo": "node --import tsx --test tests/ceo-briefing.test.ts",
     "test:ceo-brief-cli": "node --import tsx --test tests/ceo-brief-cli.test.ts",
@@ -127,39 +126,46 @@
     "test:social-hub": "node --import tsx --test tests/social-hub.test.ts"
   },
   "totals": {
-    "filesVisible": 1480,
-    "filesIndexed": 1355,
-    "imports": 5685,
-    "routes": 675,
-    "symbols": 31720
+    "filesVisible": 1494,
+    "filesIndexed": 1369,
+    "imports": 5764,
+    "routes": 676,
+    "symbols": 31976
   },
   "directories": {
-    ".github/workflows": {
-      "files": 14,
-      "indexed": 0,
+    "client/src/components": {
+      "files": 38,
+      "indexed": 38,
       "kinds": {
-        "other": 14
+        "client-component": 38
       }
     },
     "docs": {
-      "files": 95,
-      "indexed": 92,
+      "files": 96,
+      "indexed": 93,
       "kinds": {
-        "docs": 95
+        "docs": 96
       }
     },
-    "script": {
-      "files": 171,
-      "indexed": 154,
+    "server": {
+      "files": 318,
+      "indexed": 311,
       "kinds": {
-        "script": 171
+        "server": 318
       }
     },
     "shared": {
-      "files": 60,
-      "indexed": 53,
+      "files": 62,
+      "indexed": 55,
       "kinds": {
-        "shared": 60
+        "shared": 62
+      }
+    },
+    "tests": {
+      "files": 415,
+      "indexed": 410,
+      "kinds": {
+        "test": 415
       }
     },
     ".": {
@@ -178,11 +184,17 @@
         "docs": 5
       }
     },
-    ".agents/skills": {
-      "files": 2,
+    ".agents/skills/codebase-overview": {
+      "files": 1,
       "indexed": 1,
       "kinds": {
-        "docs": 1,
+        "docs": 1
+      }
+    },
+    ".agents/skills/codebase-overview/agents": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
         "other": 1
       }
     },
@@ -191,6 +203,13 @@
       "indexed": 0,
       "kinds": {
         "other": 1
+      }
+    },
+    ".github/workflows": {
+      "files": 14,
+      "indexed": 0,
+      "kinds": {
+        "other": 14
       }
     },
     "assets/fonts": {
@@ -215,22 +234,108 @@
       }
     },
     "client/public": {
-      "files": 16,
+      "files": 14,
       "indexed": 2,
       "kinds": {
-        "other": 16
+        "other": 14
+      }
+    },
+    "client/public/local-news": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "other": 2
       }
     },
     "client/src": {
-      "files": 166,
-      "indexed": 164,
+      "files": 3,
+      "indexed": 3,
       "kinds": {
-        "other": 4,
-        "client-component": 54,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 21,
+        "other": 3
+      }
+    },
+    "client/src/components/agent-chat": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/agents-building": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/agents-world-office": {
+      "files": 7,
+      "indexed": 7,
+      "kinds": {
+        "client-component": 7
+      }
+    },
+    "client/src/components/blackroom-ceo-chat": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/clippers": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/company-office": {
+      "files": 5,
+      "indexed": 5,
+      "kinds": {
+        "client-component": 5
+      }
+    },
+    "client/src/components/ui": {
+      "files": 55,
+      "indexed": 55,
+      "kinds": {
+        "ui-component": 55
+      }
+    },
+    "client/src/components/workspace": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/hooks": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "client-hook": 3
+      }
+    },
+    "client/src/lib": {
+      "files": 21,
+      "indexed": 21,
+      "kinds": {
+        "client-lib": 21
+      }
+    },
+    "client/src/pages": {
+      "files": 29,
+      "indexed": 27,
+      "kinds": {
         "client-page": 29
+      }
+    },
+    "client/src/types": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "other": 1
       }
     },
     "examples/clippers-motivation": {
@@ -241,11 +346,25 @@
         "other": 70
       }
     },
-    "script/office-api-budget-v6": {
-      "files": 10,
-      "indexed": 8,
+    "script": {
+      "files": 171,
+      "indexed": 154,
       "kinds": {
-        "script": 10
+        "script": 171
+      }
+    },
+    "script/office-api-budget-v6": {
+      "files": 6,
+      "indexed": 4,
+      "kinds": {
+        "script": 6
+      }
+    },
+    "script/office-api-budget-v6/files/server": {
+      "files": 4,
+      "indexed": 4,
+      "kinds": {
+        "script": 4
       }
     },
     "script/office-api-budget-v7-integrity": {
@@ -283,25 +402,60 @@
         "script": 4
       }
     },
-    "server": {
-      "files": 315,
-      "indexed": 308,
-      "kinds": {
-        "server": 315
-      }
-    },
     "server/blackroom-team": {
-      "files": 17,
-      "indexed": 17,
+      "files": 12,
+      "indexed": 12,
       "kinds": {
-        "server": 17
+        "server": 12
       }
     },
-    "server/replit_integrations": {
-      "files": 9,
-      "indexed": 9,
+    "server/blackroom-team/blackroom-analytics": {
+      "files": 1,
+      "indexed": 1,
       "kinds": {
-        "server": 9
+        "server": 1
+      }
+    },
+    "server/blackroom-team/blackroom-competition": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "server": 1
+      }
+    },
+    "server/blackroom-team/blackroom-scripts": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "server": 2
+      }
+    },
+    "server/blackroom-team/blackroom-website": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "server": 1
+      }
+    },
+    "server/replit_integrations/batch": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "server": 2
+      }
+    },
+    "server/replit_integrations/chat": {
+      "files": 4,
+      "indexed": 4,
+      "kinds": {
+        "server": 4
+      }
+    },
+    "server/replit_integrations/image": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "server": 3
       }
     },
     "server/social-analytics": {
@@ -332,18 +486,25 @@
         "shared": 1
       }
     },
-    "tests": {
-      "files": 408,
-      "indexed": 403,
+    "tests/fixtures": {
+      "files": 8,
+      "indexed": 8,
       "kinds": {
-        "test": 408
+        "test": 8
       }
     },
-    "tests/fixtures": {
-      "files": 11,
-      "indexed": 9,
+    "tests/fixtures/factory-exact-source": {
+      "files": 2,
+      "indexed": 0,
       "kinds": {
-        "test": 11
+        "test": 2
+      }
+    },
+    "tests/fixtures/office-api-budget-v6-public": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "test": 1
       }
     },
     "tests/harness": {
@@ -1312,6 +1473,7 @@
         "@shared/blackroom-team",
         "@shared/clippers-office-agents",
         "@shared/factory-office-agents",
+        "@shared/kong-invitation-agent",
         "@shared/office-role-work-activity",
         "@shared/office-self-heal-view",
         "@shared/whatsapp-office-agent",
@@ -1885,6 +2047,36 @@
       "symbols": [
         "InfoCard",
         "InfoCardProps"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/kong-invitations-panel.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@/lib/queryClient",
+        "@shared/kong-invitation-agent",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "KongInvitationsPanel"
+      ],
+      "symbols": [
+        "KongInvitationsPanel",
+        "checked",
+        "client",
+        "endpoint",
+        "parsed",
+        "query",
+        "receipt",
+        "reread",
+        "response",
+        "save",
+        "saved",
+        "status"
       ],
       "routes": []
     },
@@ -2709,7 +2901,7 @@
         "react"
       ],
       "exports": [
-        "AlertDialog,\n  AlertDialogPortal,\n  AlertDialogOverlay,\n  AlertDialogTrigger,\n  AlertDialogContent,\n  AlertDialogHeader,\n  AlertDialogFooter,\n  AlertDialogTitle,\n  AlertDialogDescription,\n  AlertDialogAction,\n  AlertDialogCancel,\n"
+        "AlertDialog,\r\n  AlertDialogPortal,\r\n  AlertDialogOverlay,\r\n  AlertDialogTrigger,\r\n  AlertDialogContent,\r\n  AlertDialogHeader,\r\n  AlertDialogFooter,\r\n  AlertDialogTitle,\r\n  AlertDialogDescription,\r\n  AlertDialogAction,\r\n  AlertDialogCancel,\r\n"
       ],
       "symbols": [
         "AlertDialog",
@@ -2805,7 +2997,7 @@
         "react"
       ],
       "exports": [
-        "Breadcrumb,\n  BreadcrumbList,\n  BreadcrumbItem,\n  BreadcrumbLink,\n  BreadcrumbPage,\n  BreadcrumbSeparator,\n  BreadcrumbEllipsis,\n"
+        "Breadcrumb,\r\n  BreadcrumbList,\r\n  BreadcrumbItem,\r\n  BreadcrumbLink,\r\n  BreadcrumbPage,\r\n  BreadcrumbSeparator,\r\n  BreadcrumbEllipsis,\r\n"
       ],
       "symbols": [
         "Breadcrumb",
@@ -2829,7 +3021,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "ButtonGroup,\n  ButtonGroupSeparator,\n  ButtonGroupText,\n  buttonGroupVariants,\n"
+        "ButtonGroup,\r\n  ButtonGroupSeparator,\r\n  ButtonGroupText,\r\n  buttonGroupVariants,\r\n"
       ],
       "symbols": [
         "ButtonGroup",
@@ -2912,7 +3104,7 @@
         "react"
       ],
       "exports": [
-        "type CarouselApi,\n  Carousel,\n  CarouselContent,\n  CarouselItem,\n  CarouselPrevious,\n  CarouselNext,\n"
+        "type CarouselApi,\r\n  Carousel,\r\n  CarouselContent,\r\n  CarouselItem,\r\n  CarouselPrevious,\r\n  CarouselNext,\r\n"
       ],
       "symbols": [
         "Carousel",
@@ -2946,7 +3138,7 @@
       ],
       "exports": [
         "ChartConfig",
-        "ChartContainer,\n  ChartTooltip,\n  ChartTooltipContent,\n  ChartLegend,\n  ChartLegendContent,\n  ChartStyle,\n"
+        "ChartContainer,\r\n  ChartTooltip,\r\n  ChartTooltipContent,\r\n  ChartLegend,\r\n  ChartLegendContent,\r\n  ChartStyle,\r\n"
       ],
       "symbols": [
         "ChartContainer",
@@ -3020,7 +3212,7 @@
         "react"
       ],
       "exports": [
-        "Command,\n  CommandDialog,\n  CommandInput,\n  CommandList,\n  CommandEmpty,\n  CommandGroup,\n  CommandItem,\n  CommandShortcut,\n  CommandSeparator,\n"
+        "Command,\r\n  CommandDialog,\r\n  CommandInput,\r\n  CommandList,\r\n  CommandEmpty,\r\n  CommandGroup,\r\n  CommandItem,\r\n  CommandShortcut,\r\n  CommandSeparator,\r\n"
       ],
       "symbols": [
         "Command",
@@ -3045,7 +3237,7 @@
         "react"
       ],
       "exports": [
-        "ContextMenu,\n  ContextMenuTrigger,\n  ContextMenuContent,\n  ContextMenuItem,\n  ContextMenuCheckboxItem,\n  ContextMenuRadioItem,\n  ContextMenuLabel,\n  ContextMenuSeparator,\n  ContextMenuShortcut,\n  ContextMenuGroup,\n  ContextMenuPortal,\n  ContextMenuSub,\n  ContextMenuSubContent,\n  ContextMenuSubTrigger,\n  ContextMenuRadioGroup,\n"
+        "ContextMenu,\r\n  ContextMenuTrigger,\r\n  ContextMenuContent,\r\n  ContextMenuItem,\r\n  ContextMenuCheckboxItem,\r\n  ContextMenuRadioItem,\r\n  ContextMenuLabel,\r\n  ContextMenuSeparator,\r\n  ContextMenuShortcut,\r\n  ContextMenuGroup,\r\n  ContextMenuPortal,\r\n  ContextMenuSub,\r\n  ContextMenuSubContent,\r\n  ContextMenuSubTrigger,\r\n  ContextMenuRadioGroup,\r\n"
       ],
       "symbols": [
         "ContextMenu",
@@ -3076,7 +3268,7 @@
         "react"
       ],
       "exports": [
-        "Dialog,\n  DialogPortal,\n  DialogOverlay,\n  DialogTrigger,\n  DialogClose,\n  DialogContent,\n  DialogHeader,\n  DialogFooter,\n  DialogTitle,\n  DialogDescription,\n"
+        "Dialog,\r\n  DialogPortal,\r\n  DialogOverlay,\r\n  DialogTrigger,\r\n  DialogClose,\r\n  DialogContent,\r\n  DialogHeader,\r\n  DialogFooter,\r\n  DialogTitle,\r\n  DialogDescription,\r\n"
       ],
       "symbols": [
         "Dialog",
@@ -3101,7 +3293,7 @@
         "vaul"
       ],
       "exports": [
-        "Drawer,\n  DrawerPortal,\n  DrawerOverlay,\n  DrawerTrigger,\n  DrawerClose,\n  DrawerContent,\n  DrawerHeader,\n  DrawerFooter,\n  DrawerTitle,\n  DrawerDescription,\n"
+        "Drawer,\r\n  DrawerPortal,\r\n  DrawerOverlay,\r\n  DrawerTrigger,\r\n  DrawerClose,\r\n  DrawerContent,\r\n  DrawerHeader,\r\n  DrawerFooter,\r\n  DrawerTitle,\r\n  DrawerDescription,\r\n"
       ],
       "symbols": [
         "Drawer",
@@ -3127,7 +3319,7 @@
         "react"
       ],
       "exports": [
-        "DropdownMenu,\n  DropdownMenuTrigger,\n  DropdownMenuContent,\n  DropdownMenuItem,\n  DropdownMenuCheckboxItem,\n  DropdownMenuRadioItem,\n  DropdownMenuLabel,\n  DropdownMenuSeparator,\n  DropdownMenuShortcut,\n  DropdownMenuGroup,\n  DropdownMenuPortal,\n  DropdownMenuSub,\n  DropdownMenuSubContent,\n  DropdownMenuSubTrigger,\n  DropdownMenuRadioGroup,\n"
+        "DropdownMenu,\r\n  DropdownMenuTrigger,\r\n  DropdownMenuContent,\r\n  DropdownMenuItem,\r\n  DropdownMenuCheckboxItem,\r\n  DropdownMenuRadioItem,\r\n  DropdownMenuLabel,\r\n  DropdownMenuSeparator,\r\n  DropdownMenuShortcut,\r\n  DropdownMenuGroup,\r\n  DropdownMenuPortal,\r\n  DropdownMenuSub,\r\n  DropdownMenuSubContent,\r\n  DropdownMenuSubTrigger,\r\n  DropdownMenuRadioGroup,\r\n"
       ],
       "symbols": [
         "DropdownMenu",
@@ -3156,7 +3348,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "Empty,\n  EmptyHeader,\n  EmptyTitle,\n  EmptyDescription,\n  EmptyContent,\n  EmptyMedia,\n"
+        "Empty,\r\n  EmptyHeader,\r\n  EmptyTitle,\r\n  EmptyDescription,\r\n  EmptyContent,\r\n  EmptyMedia,\r\n"
       ],
       "symbols": [
         "Empty",
@@ -3180,7 +3372,7 @@
         "react"
       ],
       "exports": [
-        "Field,\n  FieldLabel,\n  FieldDescription,\n  FieldError,\n  FieldGroup,\n  FieldLegend,\n  FieldSeparator,\n  FieldSet,\n  FieldContent,\n  FieldTitle,\n"
+        "Field,\r\n  FieldLabel,\r\n  FieldDescription,\r\n  FieldError,\r\n  FieldGroup,\r\n  FieldLegend,\r\n  FieldSeparator,\r\n  FieldSet,\r\n  FieldContent,\r\n  FieldTitle,\r\n"
       ],
       "symbols": [
         "Field",
@@ -3210,7 +3402,7 @@
         "react-hook-form"
       ],
       "exports": [
-        "useFormField,\n  Form,\n  FormItem,\n  FormLabel,\n  FormControl,\n  FormDescription,\n  FormMessage,\n  FormField,\n"
+        "useFormField,\r\n  Form,\r\n  FormItem,\r\n  FormLabel,\r\n  FormControl,\r\n  FormDescription,\r\n  FormMessage,\r\n  FormField,\r\n"
       ],
       "symbols": [
         "Form",
@@ -3262,7 +3454,7 @@
         "react"
       ],
       "exports": [
-        "InputGroup,\n  InputGroupAddon,\n  InputGroupButton,\n  InputGroupText,\n  InputGroupInput,\n  InputGroupTextarea,\n"
+        "InputGroup,\r\n  InputGroupAddon,\r\n  InputGroupButton,\r\n  InputGroupText,\r\n  InputGroupInput,\r\n  InputGroupTextarea,\r\n"
       ],
       "symbols": [
         "InputGroup",
@@ -3323,7 +3515,7 @@
         "react"
       ],
       "exports": [
-        "Item,\n  ItemMedia,\n  ItemContent,\n  ItemActions,\n  ItemGroup,\n  ItemSeparator,\n  ItemTitle,\n  ItemDescription,\n  ItemHeader,\n  ItemFooter,\n"
+        "Item,\r\n  ItemMedia,\r\n  ItemContent,\r\n  ItemActions,\r\n  ItemGroup,\r\n  ItemSeparator,\r\n  ItemTitle,\r\n  ItemDescription,\r\n  ItemHeader,\r\n  ItemFooter,\r\n"
       ],
       "symbols": [
         "Comp",
@@ -3385,7 +3577,7 @@
         "react"
       ],
       "exports": [
-        "Menubar,\n  MenubarMenu,\n  MenubarTrigger,\n  MenubarContent,\n  MenubarItem,\n  MenubarSeparator,\n  MenubarLabel,\n  MenubarCheckboxItem,\n  MenubarRadioGroup,\n  MenubarRadioItem,\n  MenubarPortal,\n  MenubarSubContent,\n  MenubarSubTrigger,\n  MenubarGroup,\n  MenubarSub,\n  MenubarShortcut,\n"
+        "Menubar,\r\n  MenubarMenu,\r\n  MenubarTrigger,\r\n  MenubarContent,\r\n  MenubarItem,\r\n  MenubarSeparator,\r\n  MenubarLabel,\r\n  MenubarCheckboxItem,\r\n  MenubarRadioGroup,\r\n  MenubarRadioItem,\r\n  MenubarPortal,\r\n  MenubarSubContent,\r\n  MenubarSubTrigger,\r\n  MenubarGroup,\r\n  MenubarSub,\r\n  MenubarShortcut,\r\n"
       ],
       "symbols": [
         "Menubar",
@@ -3418,7 +3610,7 @@
         "react"
       ],
       "exports": [
-        "navigationMenuTriggerStyle,\n  NavigationMenu,\n  NavigationMenuList,\n  NavigationMenuItem,\n  NavigationMenuContent,\n  NavigationMenuTrigger,\n  NavigationMenuLink,\n  NavigationMenuIndicator,\n  NavigationMenuViewport,\n"
+        "navigationMenuTriggerStyle,\r\n  NavigationMenu,\r\n  NavigationMenuList,\r\n  NavigationMenuItem,\r\n  NavigationMenuContent,\r\n  NavigationMenuTrigger,\r\n  NavigationMenuLink,\r\n  NavigationMenuIndicator,\r\n  NavigationMenuViewport,\r\n"
       ],
       "symbols": [
         "NavigationMenu",
@@ -3443,7 +3635,7 @@
         "react"
       ],
       "exports": [
-        "Pagination,\n  PaginationContent,\n  PaginationLink,\n  PaginationItem,\n  PaginationPrevious,\n  PaginationNext,\n  PaginationEllipsis,\n"
+        "Pagination,\r\n  PaginationContent,\r\n  PaginationLink,\r\n  PaginationItem,\r\n  PaginationPrevious,\r\n  PaginationNext,\r\n  PaginationEllipsis,\r\n"
       ],
       "symbols": [
         "Pagination",
@@ -3555,7 +3747,7 @@
         "react"
       ],
       "exports": [
-        "Select,\n  SelectGroup,\n  SelectValue,\n  SelectTrigger,\n  SelectContent,\n  SelectLabel,\n  SelectItem,\n  SelectSeparator,\n  SelectScrollUpButton,\n  SelectScrollDownButton,\n"
+        "Select,\r\n  SelectGroup,\r\n  SelectValue,\r\n  SelectTrigger,\r\n  SelectContent,\r\n  SelectLabel,\r\n  SelectItem,\r\n  SelectSeparator,\r\n  SelectScrollUpButton,\r\n  SelectScrollDownButton,\r\n"
       ],
       "symbols": [
         "Select",
@@ -3598,7 +3790,7 @@
         "react"
       ],
       "exports": [
-        "Sheet,\n  SheetPortal,\n  SheetOverlay,\n  SheetTrigger,\n  SheetClose,\n  SheetContent,\n  SheetHeader,\n  SheetFooter,\n  SheetTitle,\n  SheetDescription,\n"
+        "Sheet,\r\n  SheetPortal,\r\n  SheetOverlay,\r\n  SheetTrigger,\r\n  SheetClose,\r\n  SheetContent,\r\n  SheetHeader,\r\n  SheetFooter,\r\n  SheetTitle,\r\n  SheetDescription,\r\n"
       ],
       "symbols": [
         "Sheet",
@@ -3634,7 +3826,7 @@
         "react"
       ],
       "exports": [
-        "Sidebar,\n  SidebarContent,\n  SidebarFooter,\n  SidebarGroup,\n  SidebarGroupAction,\n  SidebarGroupContent,\n  SidebarGroupLabel,\n  SidebarHeader,\n  SidebarInput,\n  SidebarInset,\n  SidebarMenu,\n  SidebarMenuAction,\n  SidebarMenuBadge,\n  SidebarMenuButton,\n  SidebarMenuItem,\n  SidebarMenuSkeleton,\n  SidebarMenuSub,\n  SidebarMenuSubButton,\n  SidebarMenuSubItem,\n  SidebarProvider,\n  SidebarRail,\n  SidebarSeparator,\n  SidebarTrigger,\n  useSidebar,\n"
+        "Sidebar,\r\n  SidebarContent,\r\n  SidebarFooter,\r\n  SidebarGroup,\r\n  SidebarGroupAction,\r\n  SidebarGroupContent,\r\n  SidebarGroupLabel,\r\n  SidebarHeader,\r\n  SidebarInput,\r\n  SidebarInset,\r\n  SidebarMenu,\r\n  SidebarMenuAction,\r\n  SidebarMenuBadge,\r\n  SidebarMenuButton,\r\n  SidebarMenuItem,\r\n  SidebarMenuSkeleton,\r\n  SidebarMenuSub,\r\n  SidebarMenuSubButton,\r\n  SidebarMenuSubItem,\r\n  SidebarProvider,\r\n  SidebarRail,\r\n  SidebarSeparator,\r\n  SidebarTrigger,\r\n  useSidebar,\r\n"
       ],
       "symbols": [
         "Comp",
@@ -3770,7 +3962,7 @@
         "react"
       ],
       "exports": [
-        "Table,\n  TableHeader,\n  TableBody,\n  TableFooter,\n  TableHead,\n  TableRow,\n  TableCell,\n  TableCaption,\n"
+        "Table,\r\n  TableHeader,\r\n  TableBody,\r\n  TableFooter,\r\n  TableHead,\r\n  TableRow,\r\n  TableCell,\r\n  TableCaption,\r\n"
       ],
       "symbols": [
         "Table",
@@ -3829,7 +4021,7 @@
         "react"
       ],
       "exports": [
-        "type ToastProps,\n  type ToastActionElement,\n  ToastProvider,\n  ToastViewport,\n  Toast,\n  ToastTitle,\n  ToastDescription,\n  ToastClose,\n  ToastAction,\n"
+        "type ToastProps,\r\n  type ToastActionElement,\r\n  ToastProvider,\r\n  ToastViewport,\r\n  Toast,\r\n  ToastTitle,\r\n  ToastDescription,\r\n  ToastClose,\r\n  ToastAction,\r\n"
       ],
       "symbols": [
         "Toast",
@@ -4338,6 +4530,7 @@
         "./agent-live-status",
         "./office-city-agents",
         "./office-kong-central-agents",
+        "@shared/kong-invitation-agent",
         "@shared/office-on-duty",
         "@shared/whatsapp-office-agent"
       ],
@@ -4913,6 +5106,7 @@
         "@/components/agents-world-office/office-central-panel",
         "@/components/clippers-office-area",
         "@/components/company-office/company-office",
+        "@/components/kong-invitations-panel",
         "@/components/kong-mirror-panel",
         "@/components/kong-operations-panel",
         "@/components/kong-repair-dialog",
@@ -6759,6 +6953,14 @@
     },
     {
       "path": "docs/factory-readiness.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/kong-invitation-coordinator.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -17873,6 +18075,7 @@
       "kind": "server",
       "imports": [
         "./agent-chat",
+        "./app-context-pack-loader",
         "./user-context",
         "express"
       ],
@@ -17903,6 +18106,7 @@
       "path": "server/agent-chat.ts",
       "kind": "server",
       "imports": [
+        "../shared/ai-model-policy",
         "./ceo-domain-policy",
         "./kong-office-orders",
         "@shared/agent-chat-directory",
@@ -18062,6 +18266,7 @@
         "self",
         "send",
         "sendOnce",
+        "slice",
         "state",
         "status",
         "statusAt",
@@ -18076,6 +18281,7 @@
         "title",
         "toThread",
         "trainee",
+        "tuning",
         "unsupportedNumbers",
         "user",
         "v",
@@ -18091,10 +18297,12 @@
       "path": "server/agent-council-routes.ts",
       "kind": "server",
       "imports": [
+        "../shared/kong-invitation-agent",
         "./agent-council",
         "./kong-supervisor-routes",
         "./office-capability-training",
         "./office-role-academy",
+        "./office-routes",
         "./user-context",
         "@shared/agent-chat-routing",
         "@shared/agent-company",
@@ -18113,6 +18321,7 @@
         "academy",
         "assessment",
         "capabilityTraining",
+        "code",
         "council",
         "councilInstance",
         "current",
@@ -18127,6 +18336,7 @@
         "order",
         "owner",
         "ownerUserId",
+        "parsed",
         "partner",
         "partnerRequest",
         "radioAcademy",
@@ -18150,7 +18360,8 @@
         "/api/agent-company/orders/:id/done",
         "/api/agent-council/internal-work",
         "/api/agent-council/run",
-        "/api/agent-council/state"
+        "/api/agent-council/state",
+        "/api/agents-office/kong-invitations"
       ]
     },
     {
@@ -18204,6 +18415,7 @@
         "../shared/agent-chat-routing",
         "../shared/clippers-office-agents",
         "../shared/factory-office-agents",
+        "../shared/kong-invitation-agent",
         "../shared/office-role-lifecycle",
         "../shared/office-role-work-activity",
         "./blackroom-office-operations",
@@ -18211,6 +18423,7 @@
         "./credit-pacer",
         "./database-url",
         "./kong-company",
+        "./kong-invitation-receipts",
         "./office-capability-training",
         "./office-desk-work",
         "./office-internal-work",
@@ -18392,6 +18605,7 @@
         "open",
         "operation",
         "outcomeCostTrends",
+        "pack",
         "parseDurableCouncilState",
         "parsed",
         "patches",
@@ -18411,6 +18625,7 @@
         "readLegacyKongSupervision",
         "readSkillDocs",
         "recent",
+        "recordKongInvitationReceipt",
         "referenced",
         "release",
         "remote",
@@ -18581,6 +18796,32 @@
         "status",
         "trackedSpendUsd",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-model-pricing.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/ai-model-policy",
+        "./factory-api-invocation",
+        "./factory-api-token-cost"
+      ],
+      "exports": [
+        "catalogPricedPolicyModel",
+        "policyAnthropicPricing",
+        "policyOpenAiPrice"
+      ],
+      "symbols": [
+        "DEFAULT_MAX_INPUT_TOKENS",
+        "base",
+        "catalogPricedPolicyModel",
+        "chosen",
+        "codeOwnedOpenAiPrice",
+        "p",
+        "policyAnthropicPricing",
+        "policyOpenAiPrice",
+        "usable"
       ],
       "routes": []
     },
@@ -18823,6 +19064,30 @@
         "shouldUseCheapScoutForWebChat",
         "strongTerms",
         "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/app-context-pack-loader.ts",
+      "kind": "server",
+      "imports": [
+        "@shared/app-context-pack",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [
+        "appContextSliceText",
+        "loadAppContextPack",
+        "resetAppContextPackCacheForTests"
+      ],
+      "symbols": [
+        "APP_QUESTION",
+        "appContextSliceText",
+        "file",
+        "loadAppContextPack",
+        "mtimeMs",
+        "pack",
+        "resetAppContextPackCacheForTests"
       ],
       "routes": []
     },
@@ -19169,6 +19434,7 @@
       "imports": [
         "./ai-cost-notifications",
         "./ai-cost-policy",
+        "./ai-model-pricing",
         "./ai-model-router",
         "./ai-router",
         "./blackroom-chat-service",
@@ -19207,6 +19473,7 @@
       ],
       "symbols": [
         "APP_HELP_CONTEXT",
+        "ASSISTANT_CHAT_MODEL",
         "ASSISTANT_TIMEZONE",
         "AssistantConversationHistoryMessage",
         "CHEAP_SCOUT_CACHE_MAX_ENTRIES",
@@ -19722,6 +19989,7 @@
         "entry",
         "execute",
         "executionTimeoutMs",
+        "factory",
         "first",
         "firstLine",
         "greeting",
@@ -24752,6 +25020,7 @@
       "path": "server/clippers-local-news-translation.ts",
       "kind": "server",
       "imports": [
+        "./ai-model-pricing",
         "./ai-model-router",
         "./factory-api-sdk",
         "node:path",
@@ -27660,6 +27929,7 @@
         "../shared/agent-company",
         "../shared/agent-live-status",
         "../shared/agent-vitality",
+        "../shared/kong-invitation-agent",
         "../shared/office-kong-supervisor",
         "../shared/whatsapp-office-agent",
         "./office-kong",
@@ -27811,6 +28081,34 @@
         "timer",
         "value",
         "view"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/kong-invitation-receipts.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/agent-council",
+        "../shared/agent-vitality",
+        "../shared/kong-invitation-agent",
+        "node:crypto"
+      ],
+      "exports": [
+        "applyKongInvitationReceipt"
+      ],
+      "symbols": [
+        "applyKongInvitationReceipt",
+        "company",
+        "history",
+        "ledger",
+        "prior",
+        "priorSends",
+        "receipt",
+        "scored",
+        "sha256",
+        "statuses",
+        "work"
       ],
       "routes": []
     },
@@ -28075,6 +28373,7 @@
       "path": "server/kong-mirror-routes.ts",
       "kind": "server",
       "imports": [
+        "./ai-model-pricing",
         "./kong-agent-handoff",
         "./kong-improvement-scouts",
         "./kong-mirror-chat",
@@ -28822,7 +29121,7 @@
       "exports": [
         "createLocalAuthUser",
         "hasLocalAuthSession",
-        "hashPassword,\n  isLocalAuthEnabled,\n  isLocalAuthRegistrationAllowed,\n  normalizeUsername,\n  sanitizeAuthUser,\n  verifyPassword,\n",
+        "hashPassword,\r\n  isLocalAuthEnabled,\r\n  isLocalAuthRegistrationAllowed,\r\n  normalizeUsername,\r\n  sanitizeAuthUser,\r\n  verifyPassword,\r\n",
         "localAuthAccountSchema",
         "localAuthRateLimit",
         "registerLocalAuthRoutes",
@@ -29935,11 +30234,14 @@
         "maxInput",
         "maxOutputTokens",
         "maximumMicroUsd",
+        "rate",
         "readJson",
         "reader",
         "release",
         "remaining",
         "requestSha256",
+        "reserveRate",
+        "settleRate",
         "text",
         "usage"
       ],
@@ -30683,8 +30985,10 @@
       "kind": "server",
       "imports": [
         "../shared/agent-company",
+        "../shared/ai-model-policy",
         "../shared/office-role-lifecycle",
         "./agent-council",
+        "./ai-model-pricing",
         "./ai-provider-credit-cooldown",
         "./factory-api-invocation",
         "./factory-api-sdk",
@@ -30710,14 +31014,18 @@
         "artifactId",
         "assigned",
         "budget",
+        "callEnv",
         "claude",
         "claudeEnabled",
+        "claudeModel",
         "codeOf",
         "completion",
         "createOfficeExecution",
         "factoryPrice",
+        "loaded",
         "log",
         "monetary",
+        "openAiChoice",
         "openai",
         "provider",
         "read",
@@ -30725,12 +31033,16 @@
         "role",
         "roleId",
         "run",
+        "runEnv",
         "runWithProviderFailover",
         "runtime",
         "scored",
         "shared",
         "state",
         "store",
+        "task",
+        "tierPrice",
+        "tiering",
         "tokens",
         "version"
       ],
@@ -33802,7 +34114,7 @@
         "./utils"
       ],
       "exports": [
-        "batchProcess,\n  batchProcessWithSSE,\n  isRateLimitError,\n  type BatchOptions,\n"
+        "batchProcess,\r\n  batchProcessWithSSE,\r\n  isRateLimitError,\r\n  type BatchOptions,\r\n"
       ],
       "symbols": [],
       "routes": []
@@ -35955,6 +36267,7 @@
       "path": "server/software-factory-agents-routes.ts",
       "kind": "server",
       "imports": [
+        "../shared/ai-model-policy",
         "../shared/software-factory-agents",
         "./office-self-heal",
         "./software-factory-company",
@@ -35997,6 +36310,7 @@
       "path": "server/software-factory-anthropic-ledger.ts",
       "kind": "server",
       "imports": [
+        "../shared/ai-model-policy",
         "./agent-council-store",
         "./shared-openai-credit-ledger",
         "./software-factory-anthropic"
@@ -36029,6 +36343,7 @@
         "at",
         "base",
         "checkGrant",
+        "chosen",
         "createAnthropicFactoryLedger",
         "durable",
         "emptyState",
@@ -36040,6 +36355,7 @@
         "ledgerIdentity",
         "loadAnthropicFactoryRuntime",
         "loadAnthropicOfficeRuntime",
+        "model",
         "monthWindow",
         "officeAnthropicFallbackEnabled",
         "officeAnthropicMonthlyBudgetMicroUsd",
@@ -36240,11 +36556,13 @@
         "build",
         "built",
         "call",
+        "caps",
         "checks",
         "client",
         "clientFor",
         "createAsistenteFactoryBuild",
         "generatePatch",
+        "inputCap",
         "key",
         "limit",
         "maxOutputTokens",
@@ -36647,6 +36965,8 @@
         "factorySelectionNotCompletedReason",
         "isFactoryTestPath",
         "listFactorySelectablePaths",
+        "normalizeFactorySelectedPaths",
+        "previousCompanyOrderSelection",
         "resolveDirectImports",
         "selfHealKnownFailureTestPath"
       ],
@@ -36660,8 +36980,10 @@
         "TEST_PATH",
         "allowedRoots",
         "allowlist",
+        "at",
         "attempt",
         "available",
+        "bare",
         "base",
         "blocked",
         "call",
@@ -36672,6 +36994,8 @@
         "createFactoryOrderFileSelector",
         "digest",
         "dir",
+        "exact",
+        "f",
         "factorySelectionNotCompletedReason",
         "hit",
         "isFactoryTestPath",
@@ -36679,10 +37003,16 @@
         "listFactorySelectablePaths",
         "m",
         "maxOutputTokens",
+        "normalizeFactorySelectedPaths",
+        "o",
         "parts",
         "paths",
+        "previousCompanyOrderSelection",
+        "prior",
         "recordId",
         "resolveDirectImports",
+        "retry",
+        "reuse",
         "roots",
         "rows",
         "scope",
@@ -36866,6 +37196,8 @@
       "exports": [
         "FACTORY_ASISTENTE_BASE_BRANCHES",
         "FACTORY_ASISTENTE_REPOSITORY",
+        "FACTORY_EXPORT_MAX_FILE_BYTES",
+        "FACTORY_EXPORT_MAX_TOTAL_BYTES",
         "FACTORY_PILOT_REPOSITORY",
         "FactoryAsistenteBaseBranch",
         "FactoryPilotGitHubClient",
@@ -36878,6 +37210,8 @@
         "ClientOptions",
         "FACTORY_ASISTENTE_BASE_BRANCHES",
         "FACTORY_ASISTENTE_REPOSITORY",
+        "FACTORY_EXPORT_MAX_FILE_BYTES",
+        "FACTORY_EXPORT_MAX_TOTAL_BYTES",
         "FACTORY_PILOT_REPOSITORY",
         "branch",
         "branchPattern",
@@ -37444,42 +37778,65 @@
         "node:path"
       ],
       "exports": [
-        "createOpenAiFactoryPatchGenerator"
+        "createOpenAiFactoryPatchGenerator",
+        "estimateFactoryInputTokens",
+        "factoryRequestAnchors",
+        "shrinkFactorySourceContext"
       ],
       "symbols": [
+        "EXACT_INSTRUCTIONS",
+        "EXCERPT_NOTE",
+        "ModelFile",
+        "STOP",
         "TEST_PATH",
+        "anchors",
+        "base",
         "before",
+        "canonical",
+        "cap",
         "cause",
         "createOpenAiFactoryPatchGenerator",
         "edit",
+        "editPath",
         "edits",
         "end",
+        "estimateFactoryInputTokens",
         "exactSourcePatch",
+        "factoryRequestAnchors",
         "files",
+        "fits",
         "generate",
         "group",
         "grouped",
+        "hits",
         "input",
-        "modelFiles",
+        "lines",
+        "needles",
         "offset",
         "oldLines",
+        "out",
         "patch",
         "plainTextNodes",
         "plainTextPatch",
         "protectedSegment",
+        "radius",
         "raw",
+        "readLimit",
         "reason",
         "result",
         "rootStat",
         "segments",
+        "shrinkFactorySourceContext",
         "signal",
         "source",
         "sources",
         "start",
         "stat",
+        "stems",
         "text",
         "updated",
-        "valid"
+        "valid",
+        "w"
       ],
       "routes": []
     },
@@ -37659,7 +38016,11 @@
         "FACTORY_ORDER_MAX_RETRIES",
         "FACTORY_SELECTION_FIX_MERGED_AT",
         "INFRA",
+        "INPUT_SIZE",
+        "RESERVATION",
         "SELECTION",
+        "SELECTION_REUSE",
+        "SOURCE",
         "chain",
         "companyOrderRetryAttempt",
         "companyOrderRetryOf",
@@ -37672,6 +38033,7 @@
         "reason",
         "reasonOf",
         "result",
+        "reusable",
         "rootOf",
         "roots",
         "s",
@@ -40007,23 +40369,31 @@
         "./factory-office-agents"
       ],
       "exports": [
+        "AgentEfficiency",
         "AgentLearning",
         "AgentLesson",
         "AgentLessonKind",
         "COST_OWNERS",
         "ClippersLesson",
         "CostTrend",
+        "EfficiencyTuning",
         "KONG_BLOCKER_DAYS",
         "MAX_AGENT_LESSONS",
         "MAX_OPEN_SELF_IMPROVEMENT",
         "OutcomeSample",
         "PROMPT_LESSONS",
         "SELF_IMPROVEMENT_PREFIX",
+        "TUNING_DEFAULT",
+        "TUNING_MIN",
         "applyOutcomeLessons",
         "clippersAcademyLessons",
         "collectOutcomeSamples",
+        "deriveAgentEfficiency",
         "deriveAgentLessons",
+        "deriveEfficiencyTuning",
         "deriveSelfImprovementProposals",
+        "efficiencySummary",
+        "efficiencyTuningOf",
         "kongImprovementApplyHook",
         "learnClippersLessons",
         "learningSummary",
@@ -40048,10 +40418,13 @@
         "RoleWorkLike",
         "SAFE",
         "SELF_IMPROVEMENT_PREFIX",
+        "TUNING_DEFAULT",
+        "TUNING_MIN",
         "agentId",
         "all",
         "applyOutcomeLessons",
         "at",
+        "base",
         "blocked",
         "blocker",
         "boosts",
@@ -40062,20 +40435,31 @@
         "byVerdict",
         "c",
         "career",
+        "clamp",
         "clippersAcademyLessons",
         "collectOutcomeSamples",
         "cost",
         "counts",
+        "cur",
         "day",
         "days",
+        "deriveAgentEfficiency",
         "deriveAgentLessons",
+        "deriveEfficiencyTuning",
         "deriveSelfImprovementProposals",
         "derived",
         "dest",
         "diagnosticsOf",
+        "e",
+        "eff",
+        "effLesson",
+        "efficiencyLesson",
+        "efficiencySummary",
+        "efficiencyTuningOf",
         "evaluatedAt",
         "evidence",
         "hint",
+        "inWin",
         "isObj",
         "iso",
         "keyHash",
@@ -40097,13 +40481,21 @@
         "merged",
         "ms",
         "nameOf",
+        "next",
         "obs",
         "observedByCreator",
+        "ok",
         "old",
         "openCount",
+        "perUsd",
         "pick",
         "pipelineHolds",
         "prev",
+        "prevAt",
+        "prevCareer",
+        "prevCount",
+        "prevWeekMicroUsd",
+        "prevWeekSuccesses",
         "push",
         "raw",
         "reason",
@@ -40112,6 +40504,7 @@
         "roleWorkHolds",
         "roleWorkVitalityEvidence",
         "run",
+        "same",
         "samples",
         "seat",
         "skillId",
@@ -40119,12 +40512,19 @@
         "stamped",
         "start",
         "streamerVitalityEvidence",
+        "successesPerUsd",
+        "t",
         "timed",
         "title",
+        "tokensPerSuccess",
         "total",
+        "trend",
+        "tuning",
         "usd",
         "variants",
-        "verdicts"
+        "verdicts",
+        "weekMicroUsd",
+        "weekSuccesses"
       ],
       "routes": []
     },
@@ -40236,6 +40636,55 @@
       "routes": []
     },
     {
+      "path": "shared/ai-model-policy.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "AI_MODEL_DEFAULTS",
+        "AI_MODEL_PRICES",
+        "AI_MODEL_PRICING_EVIDENCE",
+        "AI_MODEL_PRICING_VALID_UNTIL",
+        "AI_MODEL_PRICING_VERIFIED_AT",
+        "AiAgentTier",
+        "AiModelChoice",
+        "AiModelPrice",
+        "AiPolicyProvider",
+        "AiTaskKind",
+        "agentModelView",
+        "agentTier",
+        "aiModelPrice",
+        "aiModelRateFor",
+        "aiModelTieringEnabled",
+        "ceoAgentIds",
+        "resolveAiModel"
+      ],
+      "symbols": [
+        "AI_MODEL_PRICING_EVIDENCE",
+        "AI_MODEL_PRICING_VALID_UNTIL",
+        "AI_MODEL_PRICING_VERIFIED_AT",
+        "CODE_TASKS",
+        "MODEL_ID",
+        "agentModelView",
+        "agentTier",
+        "aiModelPrice",
+        "aiModelRateFor",
+        "aiModelTieringEnabled",
+        "base",
+        "ceoAgentIds",
+        "env",
+        "fallback",
+        "high",
+        "openai",
+        "r",
+        "raw",
+        "resolveAiModel",
+        "table",
+        "tier",
+        "tierLabel"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/app-context-pack.ts",
       "kind": "shared",
       "imports": [],
@@ -40245,6 +40694,7 @@
         "ContextPackFacts",
         "ContextPackFile",
         "DEFAULT_SLICE_ENTRIES",
+        "MAX_PACK_FILES",
         "MAX_SLICE_ENTRIES",
         "MAX_SUMMARY_CHARS",
         "buildContextPack",
@@ -40252,6 +40702,7 @@
         "fileKind",
         "isPackablePath",
         "parseContextPack",
+        "redactSecrets",
         "renderContextSlice",
         "selectContextSlice",
         "summarizeSource"
@@ -40259,9 +40710,11 @@
       "symbols": [
         "APP_CONTEXT_PACK_VERSION",
         "DEFAULT_SLICE_ENTRIES",
+        "MAX_PACK_FILES",
         "MAX_SLICE_ENTRIES",
         "MAX_SUMMARY_CHARS",
         "SECRET_NAME",
+        "SECRET_VALUE",
         "block",
         "body",
         "buildContextPack",
@@ -40279,6 +40732,7 @@
         "pathT",
         "prev",
         "q",
+        "redactSecrets",
         "renderContextSlice",
         "routes",
         "rows",
@@ -41457,6 +41911,42 @@
         "lessonFromMergedImprovement",
         "passed",
         "skillId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/kong-invitation-agent.ts",
+      "kind": "shared",
+      "imports": [
+        "./agent-live-status",
+        "zod"
+      ],
+      "exports": [
+        "KONG_INVITATION_AGENT_ID",
+        "KONG_INVITATION_NAME",
+        "KONG_INVITATION_OWNER",
+        "KongInvitationLedger",
+        "KongInvitationReceipt",
+        "kongInvitationReceiptSchema",
+        "kongInvitationStatus",
+        "parseKongInvitationLedger"
+      ],
+      "symbols": [
+        "KONG_INVITATION_AGENT_ID",
+        "KONG_INVITATION_NAME",
+        "KONG_INVITATION_OWNER",
+        "add",
+        "base",
+        "count",
+        "counts",
+        "hash",
+        "kongInvitationReceiptSchema",
+        "kongInvitationStatus",
+        "ledger",
+        "parseKongInvitationLedger",
+        "parsed",
+        "r",
+        "timestamp"
       ],
       "routes": []
     },
@@ -42860,6 +43350,29 @@
       "routes": []
     },
     {
+      "path": "tests/agent-efficiency.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/agent-self-improvement",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "c",
+        "company",
+        "done",
+        "e",
+        "next",
+        "samples",
+        "t",
+        "week"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/agent-live-status.test.ts",
       "kind": "test",
       "imports": [
@@ -43250,6 +43763,25 @@
       "routes": []
     },
     {
+      "path": "tests/ai-model-policy.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-model-policy",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "catalog",
+        "full",
+        "haiku",
+        "luna",
+        "p",
+        "unpriced"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-model-router.test.ts",
       "kind": "test",
       "imports": [
@@ -43303,6 +43835,35 @@
         "previousGemini",
         "previousStrict",
         "route"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/app-context-pack.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/app-context-pack-loader",
+        "../shared/app-context-pack",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "build",
+        "counted",
+        "digest",
+        "facts",
+        "files",
+        "first",
+        "root",
+        "s",
+        "same",
+        "second",
+        "slice"
       ],
       "routes": []
     },
@@ -43639,6 +44200,7 @@
         "ai",
         "app",
         "asked",
+        "base",
         "call",
         "card",
         "chat",
@@ -49735,6 +50297,40 @@
       "routes": []
     },
     {
+      "path": "tests/factory-build-input-fit.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-company-auto",
+        "../server/software-factory-openai-builder",
+        "../server/software-factory-order-retry",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "big",
+        "build",
+        "files",
+        "found",
+        "generator",
+        "input",
+        "list",
+        "out",
+        "ownerKey",
+        "r0",
+        "r2",
+        "repo",
+        "root",
+        "sent",
+        "workspace",
+        "ws"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/factory-claude-primary.test.ts",
       "kind": "test",
       "imports": [
@@ -49924,6 +50520,23 @@
         "r",
         "r2",
         "recorder"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/factory-selection-path-normalize.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-company-auto",
+        "../server/software-factory-write-scope",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "listed",
+        "n",
+        "roots"
       ],
       "routes": []
     },
@@ -50386,6 +50999,67 @@
         "ui",
         "v",
         "view"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-invitation-agent.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/kong-office-wing",
+        "../server/kong-invitation-receipts",
+        "../shared/agent-chat-directory",
+        "../shared/agent-council",
+        "../shared/agent-vitality",
+        "../shared/kong-invitation-agent",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "after",
+        "before",
+        "desk",
+        "first",
+        "input",
+        "iso",
+        "next",
+        "now",
+        "original",
+        "receipt",
+        "repeated",
+        "sample",
+        "state",
+        "wing"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-invitation-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council",
+        "../server/agent-council-routes",
+        "../shared/agent-council",
+        "../shared/kong-invitation-agent",
+        "express",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "council",
+        "endpoint",
+        "input",
+        "member",
+        "now",
+        "prior",
+        "request",
+        "reread",
+        "saved",
+        "server"
       ],
       "routes": []
     },
@@ -52299,18 +52973,24 @@
         "NOW",
         "a",
         "blocked",
+        "ceo",
+        "clip",
         "deps",
         "diff",
         "env",
         "execution",
         "f",
         "failed",
+        "fetchStub",
         "fixture",
         "initial",
         "ledger",
+        "legacy",
         "loaded",
         "make",
         "modules",
+        "off",
+        "on",
         "output",
         "reserved",
         "restarted",
@@ -52318,7 +52998,8 @@
         "role",
         "runner",
         "sharedCreditFixture",
-        "task"
+        "task",
+        "unpriced"
       ],
       "routes": []
     },
@@ -54622,6 +55303,7 @@
         "auth",
         "authorityStore",
         "base",
+        "big",
         "billing",
         "both",
         "broke",
@@ -54865,6 +55547,9 @@
         "reply",
         "repoId",
         "results",
+        "retried",
+        "retryInput",
+        "reused",
         "rows",
         "signal",
         "sim",
@@ -55233,6 +55918,7 @@
       "kind": "test",
       "imports": [
         "../server/software-factory-github-client",
+        "../server/software-factory-write-scope",
         "node:assert/strict",
         "node:crypto",
         "node:fs/promises",
@@ -55638,6 +56324,7 @@
       ],
       "exports": [],
       "symbols": [
+        "capped",
         "cases",
         "common",
         "context",
@@ -55648,6 +56335,7 @@
         "generateText",
         "gitMissing",
         "gitProbe",
+        "got",
         "input",
         "make",
         "ok",
@@ -55834,6 +56522,7 @@
         "failedObs",
         "infra",
         "jobs",
+        "late",
         "later",
         "now",
         "obs",
@@ -55850,6 +56539,7 @@
         "rev",
         "root",
         "running",
+        "sel",
         "spent",
         "state",
         "t"
@@ -56878,14 +57568,17 @@
     "tests/agent-council-owner.test.ts",
     "tests/agent-council-store.test.ts",
     "tests/agent-council.test.ts",
+    "tests/agent-efficiency.test.ts",
     "tests/agent-live-status.test.ts",
     "tests/agent-outcome-learning.test.ts",
     "tests/agent-vitality.test.ts",
     "tests/agents-down-fixes.test.ts",
     "tests/agents-world-integration.test.ts",
     "tests/ai-cost-notifications.test.ts",
+    "tests/ai-model-policy.test.ts",
     "tests/ai-model-router.test.ts",
     "tests/ai-router-cost-override.test.ts",
+    "tests/app-context-pack.test.ts",
     "tests/app-qa-agent.test.ts",
     "tests/app-qa-health-probe.test.ts",
     "tests/app-qa-self-heal.test.ts",
@@ -56981,11 +57674,13 @@
     "tests/factory-api-request-binding.test.ts",
     "tests/factory-api-token-cost.test.ts",
     "tests/factory-api-unknown-resolve.test.ts",
+    "tests/factory-build-input-fit.test.ts",
     "tests/factory-claude-primary.test.ts",
     "tests/factory-model-step-shape.test.ts",
     "tests/factory-office-agents.test.ts",
     "tests/factory-openai-http-rejection.test.ts",
     "tests/factory-resume.test.ts",
+    "tests/factory-selection-path-normalize.test.ts",
     "tests/factory-unconfirmed-subcause.test.ts",
     "tests/github-client-security.test.ts",
     "tests/google-connector.test.ts",
@@ -56994,6 +57689,8 @@
     "tests/kong-company-routes.test.ts",
     "tests/kong-company.test.ts",
     "tests/kong-improvement-agent-handoff.test.ts",
+    "tests/kong-invitation-agent.test.ts",
+    "tests/kong-invitation-routes.test.ts",
     "tests/kong-mirror-lab.test.ts",
     "tests/kong-mirror-qa-scenarios.test.ts",
     "tests/kong-office-orders.test.ts",

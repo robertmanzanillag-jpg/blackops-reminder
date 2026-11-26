@@ -11,6 +11,7 @@ import { effectiveIntegrations, type AgentIntegration } from "@shared/agent-inte
 import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
 import { buildKongOfficeWing, createKongRingAssignment, kongCentralOnDuty, type KongRingAssignment } from "@/lib/kong-office-wing";
 import type { WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
+import type { KongInvitationLedger } from "@shared/kong-invitation-agent";
 import { kongOfficeSnapshotKey, readOwnerKongSnapshot } from "@/lib/whatsapp-office-query";
 import { applyRoleWorkActivity, parseRoleWorkActivity } from "@shared/office-role-work-activity";
 import { parseSelfHealView, selfHealLine } from "@shared/office-self-heal-view";
@@ -67,7 +68,7 @@ export const DEPARTMENTS: OfficeDepartment[] = [
   { id: "operaciones", name: "Operaciones", color: "#2dd4bf", agentIds: ["automations"] },
 ];
 
-export type CompanyView = { vitality?: VitalityRow[]; factoryAgents?: FactoryAgentView[]; kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
+export type CompanyView = { kongInvitations?: KongInvitationLedger; vitality?: VitalityRow[]; factoryAgents?: FactoryAgentView[]; kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
 export type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal; whatsappEvidence?: WhatsAppOfficeView };
 
 const cityRefreshInterval = ({ state }: { state: { error: Error | null } }) => /^(401|403):/.test(state.error?.message ?? "") ? false as const : 60_000;
@@ -242,7 +243,7 @@ export function useOfficeRoster({ agents, kongTeam, legal, kongEnabled }: {
     ...DEPARTMENTS,
     ...(mainAcademy.academyIds.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: mainAcademy.academyIds }] : []),
   ];
-  const kongWing = buildKongOfficeWing(citySnapshot.data?.evidence, cityRooms, statuses, clock, kongRingAssignment, !citySnapshot.isError);
+  const kongWing = buildKongOfficeWing(citySnapshot.data?.evidence, cityRooms, statuses, clock, kongRingAssignment, !citySnapshot.isError, companyView.kongInvitations);
   const kongDepartments: OfficeDepartment[] = [
     ...kongWing.departments,
     ...(kongAcademy.academyIds.length ? [{ id: "kong-academia", name: "Academia KONG", color: "#60a5fa", agentIds: kongAcademy.academyIds, officeRing: 1 as const }] : []),
