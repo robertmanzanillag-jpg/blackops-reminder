@@ -146,7 +146,10 @@ export function createAnthropicFactoryTextProvider(config: AnthropicFactoryModel
       const base = { model: c.model, system: input.instructions, messages: [{ role: "user" as const, content: input.text }],
         thinking: { type: "adaptive" as const }, output_config: { effort, ...(schema ? { format: { type: "json_schema" as const, schema } } : {}) } };
       const counted = await client.countTokens(base, { signal: controller.signal });
-      if (!count(counted?.input_tokens) || counted.input_tokens > c.maxInputTokens) return blocked("FACTORY_ANTHROPIC_COUNT_INVALID");
+      // Shape problems and over-cap inputs are different holds (same split as
+      // the OpenAI provider); both block before any paid dispatch.
+      if (!count(counted?.input_tokens)) return blocked("FACTORY_ANTHROPIC_COUNT_INVALID");
+      if (counted.input_tokens > c.maxInputTokens) return blocked("FACTORY_ANTHROPIC_INPUT_TOO_LARGE");
       // Worst case = the requested attempt plus one server-side fallback attempt,
       // both at full max_tokens. The fallback attempt is priced at the max rate.
       const budget = BigInt(input.maxCostCents) * 10000000n, inputNano = BigInt(counted.input_tokens) * BigInt(listed.input + MAX_PRICE.input);

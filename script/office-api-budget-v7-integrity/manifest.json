@@ -107,7 +107,7 @@
     },
     {
       "path": "server/software-factory-anthropic.ts",
-      "sha256": "bb0d55ba8ec77440ad8f7cf32c08e70cec184596018c1010e56df738ac8015e8"
+      "sha256": "f1609bac80b621d6894651dc60f121a103b7fd5ed513aec548a139c58b6133f0"
     },
     {
       "path": "server/software-factory-api-budget.ts",
