@@ -31,7 +31,7 @@ import { FACTORY_DEFAULT_WRITE_ROOTS, FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY, F
 import type { FactoryJob } from "./software-factory-store";
 import { createFactoryOfficeReviewSweep, type FactoryOfficeReviewEnqueue } from "./software-factory-office-review";
 import { readFactoryOrderProposals } from "./software-factory-order-evidence";
-import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, isFactoryTestPath, listFactorySelectablePaths } from "./software-factory-company-auto";
+import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, previousCompanyOrderSelection, isFactoryTestPath, listFactorySelectablePaths } from "./software-factory-company-auto";
 import { isSelfHealOrder, isValidSelfHealOrder } from "./office-self-heal";
 import type { CreditPacer } from "./credit-pacer-runtime";
 import { blackopsApplicationName } from "./agent-council-store";
@@ -315,7 +315,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             if (Number.isSafeInteger(data.size) && data.size! > 200000) throw Error("FACTORY_SELECTION_SOURCE_TOO_LARGE");
             if (data.encoding !== "base64" || typeof data.content !== "string" || !Number.isSafeInteger(data.size)) throw Error("FACTORY_SELECTION_SOURCE_INVALID");
             const bytes = Buffer.from(data.content.replace(/\s/g, ""), "base64"); if (bytes.length !== data.size) throw Error("FACTORY_SELECTION_SOURCE_INVALID");
-            return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); } });
+            return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); },
+        previousSelection: async (orderId, revision) => previousCompanyOrderSelection(await store.list(owner), ownerKey, orderId, revision) });
     const discover = createCompanyOrderDiscovery({ readMainOrder: id => readMainOrder(owner, id), resolveHead: async (repo, signal) => { signal.throwIfAborted(); if (repo !== ASISTENTE_REPOSITORY)
             throw Error("FACTORY_OPERATOR_REPOSITORY_INVALID"); return (await client.git.getRef({ owner: "robertmanzanillag-jpg", repo: "blackops-reminder", ref: `heads/${config.baseBranch}` })).data.object.sha; }, inspectOrder: async (order, baseSha, signal, budget) => { signal.throwIfAborted(); const { mapping, revision } = await resolve(order); if (!mapping) {
             // Automatic order: current head of the base branch, code-owned generic

@@ -364,6 +364,13 @@ test("auto discovery selects bounded existing files at the current head and pers
     for (let i = 0; i < 5; i++) f.jobs.push(prJob(i));
     const discover = { ...f.discoverJob(f.orders[0]), status: "completed", result: { status: "completed", costCents: 1, evidence: (found.evidence as any) } };
     f.store.getCompletedJob = async () => discover;
+    // A bounded retry of the same revision reuses the persisted selection at $0 (no model call).
+    f.jobs.push(discover as any);
+    const reused = await worker.adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 });
+    assert.equal(reused.status, "completed", JSON.stringify(reused)); assert.equal(reused.costCents, 0);
+    assert.deepEqual((reused.evidence as any).pipelineState.finding.sourcePaths, ["server/office-search.ts", "tests/office-search.test.ts"]);
+    assert.equal(f.counts().generations, 1);
+    f.jobs.pop();
     const before = f.counts();
     const built = await worker.adapters!.build!.execute({ id: "55555555-5555-4555-8555-555555555555", ownerKey, projectId: "asistente", kind: "build", key: `${discover.id}.next`, payload: { previousJobId: discover.id, repairAttempts: 0 }, reservedCents: 2, recoveryCents: 0, month: "2026-11", status: "running", createdAt: at.toISOString() } as any, { signal: signal(), maxCostCents: 2 });
     assert.equal(built.reason, "FACTORY_DAILY_DRAFT_PR_LIMIT"); assert.equal(built.costCents, 0);

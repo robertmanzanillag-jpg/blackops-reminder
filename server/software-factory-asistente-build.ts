@@ -42,6 +42,9 @@ export function createAsistenteFactoryBuild(options: {
   const model = { ...options.model };
   const maxOutputTokens = options.maxOutputTokens;
   const routes: readonly FactoryModelRoute[] = options.routes?.length ? [...options.routes] : [{ provider: "openai", ledger: options.ledger, model }];
+  // Smallest configured input cap across routes: the builder fits the context to it before the paid call.
+  const caps = routes.map(r => (r.model as { maxInputTokens?: unknown }).maxInputTokens).filter((n): n is number => Number.isSafeInteger(n) && (n as number) > 0);
+  const inputCap = caps.length ? Math.min(...caps) : undefined;
   const profile = { baseBranch: options.baseBranch, checks: { ...options.checks } };
   return async (project, state, context) => {
     if (project.repo !== repository || state.projectId !== project.id || !state.rootJobId || !Number.isSafeInteger(state.repairAttempts) || state.repairAttempts < 0) {
@@ -65,7 +68,7 @@ export function createAsistenteFactoryBuild(options: {
     };
     const key = `factory:${createHash("sha256").update(JSON.stringify([project.id, state.rootJobId, state.repairAttempts])).digest("hex")}`;
     let used: { provider: string; model: string } | undefined;
-    const generatePatch = createOpenAiFactoryPatchGenerator({ patchMode:"exactSourceEdits", requireTestEdit: state.finding.kind === "bug" || !!state.finding.regressionScenarioId, sourcePaths: { [repository]: paths }, maxOutputTokens,
+    const generatePatch = createOpenAiFactoryPatchGenerator({ patchMode:"exactSourceEdits", requireTestEdit: state.finding.kind === "bug" || !!state.finding.regressionScenarioId, sourcePaths: { [repository]: paths }, maxOutputTokens, ...(inputCap ? { maxInputTokens: inputCap } : {}),
       generateText: async input => {
         let unconfirmed: string | undefined;
         const call = await runFactoryModelCall(routes, { key, input, unknownError: "FACTORY_MODEL_OUTCOME_UNKNOWN", onUnconfirmed: sub => { unconfirmed = sub; },

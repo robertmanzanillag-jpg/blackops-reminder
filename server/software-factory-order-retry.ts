@@ -35,11 +35,21 @@ const SELECTION = /^FACTORY_AUTO_SELECTION_NOT_COMPLETED(?:_[A-Z0-9_]{1,80})?$/;
  * (bounded by FACTORY_ORDER_MAX_RETRIES) at any time, not only before #542. */
 const RESERVATION = /^(?:FACTORY_AUTO_SELECTION_NOT_COMPLETED_(?:ANTHROPIC|OPENAI)_BUDGET_UNAVAILABLE|FACTORY_(?:ANTHROPIC|OPENAI)_BUDGET_UNAVAILABLE|PROVIDER_BUDGET_UNAVAILABLE)$/;
 
+/** $0 pre-dispatch stops because the counted build input exceeded
+ * maxInputTokens, or the count was unusable (before #583 an over-cap Claude
+ * count was reported as COUNT_INVALID). The provider generated nothing; the
+ * builder now shrinks the context deterministically, so one more bounded try
+ * (FACTORY_ORDER_MAX_RETRIES, costCents===0 only) can succeed. */
+const INPUT_SIZE = /^(?:FACTORY_AUTO_SELECTION_NOT_COMPLETED_)?(?:PROVIDER_(?:INPUT_TOO_LARGE|COUNT_INVALID)|FACTORY_(?:ANTHROPIC|OPENAI)_(?:INPUT_TOO_LARGE|COUNT_INVALID)|(?:ANTHROPIC|OPENAI)_(?:INPUT_TOO_LARGE|COUNT_INVALID))$/;
+/** $0 discovery stop on a retry whose selection key was already settled; the
+ * selector now reuses the persisted selection, so it is retryable (bounded). */
+const SELECTION_REUSE = /^FACTORY_AUTO_SELECTION_ALREADY_EXECUTED$/;
+
 /** True only for a zero-cost stop caused by infrastructure, never by the order or the code. */
 export function isInfrastructureStop(job: FactoryJob, options: RetryOptions = {}): boolean {
   const reason = reasonOf(job);
   if (reason === undefined) return false;
-  if (INFRA.test(reason) || RESERVATION.test(reason)) return true;
+  if (INFRA.test(reason) || RESERVATION.test(reason) || INPUT_SIZE.test(reason) || SELECTION_REUSE.test(reason)) return true;
   if (CREDIT.test(reason)) return options.creditAvailable === true;
   return SELECTION.test(reason) && job.kind === "discover" && !!job.completedAt && Date.parse(job.completedAt) < Date.parse(FACTORY_SELECTION_FIX_MERGED_AT);
 }
@@ -75,7 +85,11 @@ export function isZeroCostInfrastructureChain(jobs: readonly FactoryJob[], root:
   if (chain.some(j => j.status === "pending" || j.status === "running" || j.status === "unknown")) return false;
   // Any recorded spend, or any stage past the root that completed (it may have
   // dispatched to a provider or opened a draft PR), keeps the order settled.
-  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0) || (j.id !== root.id && j.status === "completed"); })) return false;
+  // Exception: a completed root discovery whose paid file selection was persisted
+  // (finding.sourcePaths). Its retry reuses that selection at $0 (stable
+  // selection key, never replayed), so only the $0 later stops decide.
+  const reusable = root.status === "completed" && Array.isArray((root.result as { evidence?: { pipelineState?: { finding?: { sourcePaths?: unknown } } } } | undefined)?.evidence?.pipelineState?.finding?.sourcePaths);
+  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0 && !(reusable && j.id === root.id)) || (j.id !== root.id && j.status === "completed"); })) return false;
   const stopped = chain.filter(j => j.status === "blocked" || j.status === "failed");
   // Any spend or non-infrastructure stop in the chain keeps the order settled.
   return stopped.length > 0 && stopped.every(j => isInfrastructureStop(j, options));

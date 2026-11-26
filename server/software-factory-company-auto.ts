@@ -110,6 +110,10 @@ export function createFactoryOrderFileSelector(options: {
   listPaths(baseSha: string, signal: AbortSignal): Promise<string[]>;
   /** UTF-8 text of one listed file at the base commit (self-heal deterministic selection). */
   readText?(baseSha: string, path: string, signal: AbortSignal): Promise<string>;
+  /** The selection a completed discovery of this exact order revision already
+   * persisted (finding.sourcePaths). Used only when the stable selection key is
+   * settled, so a bounded $0 retry reuses it instead of blocking or paying again. */
+  previousSelection?(orderId: string, revision: string): Promise<{ kind: "bug" | "improvement"; paths: string[] } | undefined>;
 }) {
   const roots = validateFactoryWriteRoots([...options.roots]), maxFiles = options.maxFiles, ledger = options.ledger, model = { ...options.model };
   const routes: readonly FactoryModelRoute[] = options.routes?.length ? [...options.routes] : [{ provider: "openai", ledger, model }];
@@ -171,7 +175,17 @@ export function createFactoryOrderFileSelector(options: {
         const rows = options.routes?.length ? await factoryModelKeyRows(routes, key).catch(() => []) : [];
         const settled = options.routes?.length ? rows.length > 0 && rows.every(r => r.row.status === "settled")
           : await (factoryModelErrorLedger(error) ?? ledger).settledReceipt(key).then(() => true, () => false);
-        if (settled) return blocked("FACTORY_AUTO_SELECTION_ALREADY_EXECUTED");
+        if (settled) {
+          // Never replay the paid call; reuse its persisted, re-validated answer at $0.
+          const prior = options.previousSelection ? await options.previousSelection(input.orderId, input.revision).catch(() => undefined) : undefined;
+          if (prior && (prior.kind === "bug" || prior.kind === "improvement") && Array.isArray(prior.paths)) {
+            let reused: string[] | undefined;
+            try { reused = validateFactoryOrderPaths([...prior.paths], { roots, maxFiles }); } catch { reused = undefined; }
+            const available = new Set(listed);
+            if (reused && reused.length && reused.every(p => available.has(p)) && reused.some(isFactoryTestPath)) { signal.throwIfAborted(); return { status: "selected", kind: prior.kind, paths: reused, costCents: 0 }; }
+          }
+          return blocked("FACTORY_AUTO_SELECTION_ALREADY_EXECUTED");
+        }
         throw Error("FACTORY_AUTO_SELECTION_OUTCOME_UNKNOWN");
       }
       if (["CREDIT_UNAVAILABLE", "CREDIT_EXPIRED", "CREDIT_RECONCILIATION_REQUIRED", "CREDIT_CAPACITY_REQUIRED", "CREDIT_NOT_INITIALIZED"].includes(code)) return blocked("FACTORY_AUTO_SELECTION_CREDIT_UNAVAILABLE");
@@ -195,4 +209,19 @@ export function createFactoryOrderFileSelector(options: {
     signal.throwIfAborted();
     return { status: "selected", kind: parsed.kind, paths, costCents, ...(modelProvider ? { modelProvider } : {}) };
   };
+}
+
+/** Latest completed discovery of this exact order revision and its persisted
+ * selection (finding.sourcePaths). Pure; never trusts a model answer. */
+export function previousCompanyOrderSelection(jobs: readonly { ownerKey?: unknown; kind?: unknown; status?: unknown; completedAt?: unknown; payload?: unknown; result?: unknown }[], ownerKey: string, orderId: string, revision: string): { kind: "bug" | "improvement"; paths: string[] } | undefined {
+  let best: { at: number; kind: "bug" | "improvement"; paths: string[] } | undefined;
+  for (const j of jobs) {
+    const o = (j?.payload as { companyOrder?: { orderId?: unknown; revision?: unknown } } | undefined)?.companyOrder;
+    if (j?.ownerKey !== ownerKey || j.kind !== "discover" || j.status !== "completed" || o?.orderId !== orderId || o.revision !== revision) continue;
+    const f = (j.result as { evidence?: { pipelineState?: { finding?: { kind?: unknown; sourcePaths?: unknown } } } } | undefined)?.evidence?.pipelineState?.finding;
+    if (!f || (f.kind !== "bug" && f.kind !== "improvement") || !Array.isArray(f.sourcePaths) || !f.sourcePaths.length || f.sourcePaths.some(p => typeof p !== "string")) continue;
+    const at = Date.parse(String(j.completedAt ?? "")) || 0;
+    if (!best || at > best.at) best = { at, kind: f.kind, paths: [...f.sourcePaths as string[]] };
+  }
+  return best && { kind: best.kind, paths: best.paths };
 }
