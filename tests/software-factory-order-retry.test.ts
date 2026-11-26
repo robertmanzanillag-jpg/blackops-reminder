@@ -138,3 +138,10 @@ test("$0 reservation-too-small stops stay retryable after #542 (owner raises the
   const r2 = root(2, "blocked", late.result);
   assert.equal(companyOrderRetryAttempt([r2], ownerKey, orderId, rev), FACTORY_ORDER_MAX_RETRIES);
 });
+
+test("owner-settled zero-cost orphan (api-unknown-resolve orphan policy) is a bounded infrastructure stop", () => {
+  const ok = root(0, "failed", { status: "failed", reason: `api-unknown-resolve: owner-evidence-orphan-job-zero-cost; evidence sha256 ${"a".repeat(64)}`, costCents: 0 });
+  assert.equal(isInfrastructureStop(ok), true);
+  assert.equal(isInfrastructureStop(root(0, "failed", { status: "failed", reason: `api-unknown-resolve: conservative-full-reserved-amount; evidence sha256 ${"a".repeat(64)}`, costCents: 0 })), false);
+  assert.equal(isInfrastructureStop(root(0, "failed", { status: "failed", reason: `api-unknown-resolve: owner-evidence-orphan-job-zero-cost; evidence sha256 ${"a".repeat(64)}`, costCents: 3 })), false);
+});

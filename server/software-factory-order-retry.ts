@@ -48,12 +48,18 @@ const SELECTION_REUSE = /^FACTORY_AUTO_SELECTION_ALREADY_EXECUTED$/;
  * limits were below the selector's (fixed in #589). Retryable only at
  * costCents===0 and within FACTORY_ORDER_MAX_RETRIES; a paid one never is. */
 const SOURCE = /^SOURCE$/;
+/** A job left `unknown` by an interrupted run and settled by the owner through
+ * factory-ops api-unknown-resolve under the zero-cost orphan policy (#591): the
+ * owner's evidence confirms no provider spend, so the attempt cost nothing.
+ * Only that exact audited reason; the conservative full-reserved policy (which
+ * charges the hold) never qualifies. Bounded by FACTORY_ORDER_MAX_RETRIES. */
+const OWNER_SETTLED_ORPHAN = /^api-unknown-resolve: owner-evidence-orphan-job-zero-cost; evidence sha256 [a-f0-9]{64}$/;
 
 /** True only for a zero-cost stop caused by infrastructure, never by the order or the code. */
 export function isInfrastructureStop(job: FactoryJob, options: RetryOptions = {}): boolean {
   const reason = reasonOf(job);
   if (reason === undefined) return false;
-  if (INFRA.test(reason) || RESERVATION.test(reason) || INPUT_SIZE.test(reason) || SELECTION_REUSE.test(reason) || SOURCE.test(reason)) return true;
+  if (INFRA.test(reason) || RESERVATION.test(reason) || INPUT_SIZE.test(reason) || SELECTION_REUSE.test(reason) || SOURCE.test(reason) || OWNER_SETTLED_ORPHAN.test(reason)) return true;
   if (CREDIT.test(reason)) return options.creditAvailable === true;
   return SELECTION.test(reason) && job.kind === "discover" && !!job.completedAt && Date.parse(job.completedAt) < Date.parse(FACTORY_SELECTION_FIX_MERGED_AT);
 }
