@@ -10,6 +10,10 @@ import type { SharedCreditState } from "../server/shared-openai-credit-ledger";
 /** Quarantined News execution (docs/factory-api-budget-authority.md). Code-owned; never printed. */
 export const NEWS_EXECUTION_ID = "2763c249-cd43-4ead-b6a0-111f6d76715a";
 export const RESOLUTION_POLICY = "conservative-full-reserved-amount" as const;
+/** Orphan mode (`--hold-id=orphan-jobs`): unknown Factory jobs with NO API-ledger reservation at all,
+ * settled at $0 on owner evidence (e.g. a guard threw before any provider dispatch). */
+export const ORPHAN_JOBS_MODE = "orphan-jobs" as const;
+export const ORPHAN_POLICY = "owner-evidence-orphan-job-zero-cost" as const;
 const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
 const identifier = /^[A-Za-z0-9_.:-]{1,200}$/;
 
@@ -21,27 +25,38 @@ export function holdNeedles(holdId: string) {
 const matches = (values: unknown[], needles: string[]) => values.some(v => typeof v === "string" && needles.some(n => v.includes(n)));
 
 export function parseResolveArgs(argv: string[], evidenceText: string | undefined) {
-  let apply = false, holdId: string | undefined;
+  let apply = false, holdId: string | undefined, externalUnknownCount: number | undefined;
   for (const arg of argv) {
     if (arg === "--apply" && !apply) { apply = true; continue; }
+    const ext = /^--external-unknown-count=(.*)$/s.exec(arg);
+    if (ext && externalUnknownCount === undefined) {
+      const raw = ext[1].trim();
+      if (raw === "") continue;
+      if (!/^\d{1,6}$/.test(raw)) throw new Error("EXTERNAL_UNKNOWN_COUNT_INVALID");
+      externalUnknownCount = Number(raw); continue;
+    }
     const match = /^--hold-id=(.*)$/s.exec(arg);
     if (!match || holdId !== undefined) throw new Error("ARGUMENT_INVALID");
     holdId = match[1].trim();
   }
   // No hold id (or "news"): explicit modes. Empty = every unknown API-ledger reservation.
   if (holdId === "news") holdId = NEWS_EXECUTION_ID;
-  if (holdId !== undefined && holdId !== "" && (!identifier.test(holdId) || holdId.length < 8)) throw new Error("HOLD_ID_INVALID");
+  const orphanJobs = holdId === ORPHAN_JOBS_MODE;
+  if (orphanJobs) holdId = undefined;
+  if (!orphanJobs && holdId !== undefined && holdId !== "" && (!identifier.test(holdId) || holdId.length < 8)) throw new Error("HOLD_ID_INVALID");
   if (holdId === "") holdId = undefined;
   const evidence = (evidenceText ?? "").trim();
   if (evidence.length < 20 || evidence.length > 4000) throw new Error("EVIDENCE_INVALID");
-  return { holdId, apply, evidenceSha256: sha256(evidence), evidenceChars: evidence.length };
+  // Orphan settlement at $0 needs the owner's explicit statement that nothing external is unknown.
+  if (orphanJobs && externalUnknownCount !== 0) throw new Error("ORPHAN_REQUIRES_EXTERNAL_UNKNOWN_ZERO");
+  return { holdId, orphanJobs, externalUnknownCount, apply, evidenceSha256: sha256(evidence), evidenceChars: evidence.length };
 }
 
 export type ResolutionStep =
   | { ledger: "shared-credit"; holdSha256: string; key: string; settleMicroUsd: number }
   | { ledger: "api-reservation"; holdSha256: string; reservationKey: string; settleMicroUsd: number }
   | { ledger: "external-checkpoint"; holdSha256: string; checkpointMonth: string; settleMicroUsd: number }
-  | { ledger: "factory-job"; holdSha256: string; jobId: string; costCents: number; settleMicroUsd: number };
+  | { ledger: "factory-job"; holdSha256: string; jobId: string; costCents: number; settleMicroUsd: number; orphan?: true };
 /** Unknown Factory job as read from software_factory_jobs (id + its own cents reservation). */
 export type UnknownFactoryJob = { id: string; reservedCents: number };
 
@@ -77,6 +92,29 @@ export function planAllApiUnknown(input: { api: FactoryApiState; jobs: UnknownFa
   const all = [...steps, ...jobs.steps];
   return { holdSha256: null as string | null, steps: jobs.refusal ? [] : all, refusal: jobs.refusal, alreadyResolved: !all.length && !jobs.refusal && done.size > 0,
     found: { apiUnknownUnresolved: steps.length, unknownJobs: input.jobs.length, unknownJobsNotTiedToApiLedger: jobs.untied } };
+}
+
+/** Orphan mode: unknown Factory jobs that NO API-ledger reservation references (any status, as parent),
+ * settled at $0 and releasing their cents reservation. Refuses everything if any API-ledger reservation is
+ * unknown/unresolved or any checkpoint still carries an unresolved external unknown: those go through the
+ * conservative path first. Jobs referenced by any reservation are never touched here. */
+export function planOrphanJobs(input: { api: FactoryApiState; jobs: UnknownFactoryJob[]; externalUnknownCount: number | undefined }) {
+  const resolutions = input.api.resolutions ?? [];
+  const done = new Set(resolutions.map(r => r.reservationKey).filter(Boolean));
+  const apiUnknown = input.api.reservations.filter(r => r.status === "unknown" && !done.has(r.key)).length;
+  const externalOpen = input.api.checkpoints.reduce((n, c) => n + Math.max(0, c.externalUnknownReservations -
+    resolutions.filter(r => r.source === "external-checkpoint" && r.checkpointMonth === c.month).length), 0);
+  const referenced = new Set(input.api.reservations.map(r => r.parent?.jobId).filter((id): id is string => typeof id === "string"));
+  const orphans = input.jobs.filter(j => !referenced.has(j.id));
+  const found = { unknownJobs: input.jobs.length, orphanJobs: orphans.length, jobsWithApiReservation: input.jobs.length - orphans.length,
+    apiUnknownUnresolved: apiUnknown, externalUnknownOpen: externalOpen };
+  const base = { holdSha256: null as string | null, steps: [] as ResolutionStep[], refusal: null as string | null, alreadyResolved: false, found, policy: ORPHAN_POLICY };
+  if (input.externalUnknownCount !== 0) return { ...base, refusal: "ORPHAN_REQUIRES_EXTERNAL_UNKNOWN_ZERO" };
+  if (apiUnknown > 0) return { ...base, refusal: "ORPHAN_API_UNKNOWN_PRESENT" };
+  if (externalOpen > 0) return { ...base, refusal: "ORPHAN_EXTERNAL_UNKNOWN_PRESENT" };
+  if (!orphans.length) return { ...base, alreadyResolved: true };
+  return { ...base, steps: orphans.map(j => ({ ledger: "factory-job" as const, holdSha256: sha256(`factory-job:${j.id}`), jobId: j.id,
+    costCents: 0, settleMicroUsd: 0, orphan: true as const, releaseCents: j.reservedCents })) as ResolutionStep[] };
 }
 
 /** Finds where the hold actually lives and what a conservative resolution would append. Writes nothing. */
@@ -120,16 +158,18 @@ export function planUnknownResolution(input: { holdId: string; shared: SharedCre
 }
 
 /** Public view of a plan: ledgers, amounts and digests only (no keys or ids). */
-type Plan = { holdSha256: string | null; steps: ResolutionStep[]; refusal: string | null; alreadyResolved: boolean; found: Record<string, unknown> };
+type Plan = { holdSha256: string | null; steps: ResolutionStep[]; refusal: string | null; alreadyResolved: boolean; found: Record<string, unknown>; policy?: ResolutionPolicy };
+type ResolutionPolicy = typeof RESOLUTION_POLICY | typeof ORPHAN_POLICY;
 export function describePlan(plan: Plan) {
-  return { holdSha256: plan.holdSha256, refusal: plan.refusal, alreadyResolved: plan.alreadyResolved, found: plan.found, policy: RESOLUTION_POLICY,
+  return { holdSha256: plan.holdSha256, refusal: plan.refusal, alreadyResolved: plan.alreadyResolved, found: plan.found, policy: plan.policy ?? RESOLUTION_POLICY,
     steps: plan.steps.map(s => ({ ledger: s.ledger, holdSha256: s.holdSha256, settleMicroUsd: s.settleMicroUsd,
       ...(s.ledger === "external-checkpoint" ? { checkpointMonth: s.checkpointMonth } : {}),
-      ...(s.ledger === "factory-job" ? { costCents: s.costCents, terminalStatus: "failed" } : {}) })) };
+      ...(s.ledger === "factory-job" ? { costCents: s.costCents, terminalStatus: "failed",
+        ...(s.orphan ? { orphan: true, releaseReservedCents: (s as { releaseCents?: number }).releaseCents } : {}) } : {}) })) };
 }
 
 export type ResolutionReceipt = { event: "factory_api_unknown_resolution"; holdSha256: string; ledger: ResolutionStep["ledger"];
-  settledMicroUsd: number; evidenceSha256: string; resolvedAt: string; policy: typeof RESOLUTION_POLICY };
+  settledMicroUsd: number; evidenceSha256: string; resolvedAt: string; policy: ResolutionPolicy };
 
 /** Dry run (apply=false) calls nothing. Apply appends each receipt BEFORE its settlement, then settles
  * through the ledger's own reconciliation path or the API authority's append-only resolution. */
@@ -146,12 +186,12 @@ export async function runUnknownResolution(plan: Plan, input: {
   if (!input.apply || plan.refusal || !plan.steps.length) return { applied: false, ...describePlan(plan) };
   for (const step of plan.steps) {
     await input.appendReceipt({ event: "factory_api_unknown_resolution", holdSha256: step.holdSha256, ledger: step.ledger,
-      settledMicroUsd: step.settleMicroUsd, evidenceSha256: input.evidenceSha256, resolvedAt: input.at, policy: RESOLUTION_POLICY });
+      settledMicroUsd: step.settleMicroUsd, evidenceSha256: input.evidenceSha256, resolvedAt: input.at, policy: plan.policy ?? RESOLUTION_POLICY });
     if (step.ledger === "shared-credit")
       await input.settleShared({ key: step.key, actualMicroUsd: step.settleMicroUsd, evidenceId: `unknown-resolution:${input.evidenceSha256.slice(0, 48)}` });
     else if (step.ledger === "factory-job")
       await input.reconcileJob!({ jobId: step.jobId, actualCostCents: step.costCents,
-        reason: `api-unknown-resolve: ${RESOLUTION_POLICY}; evidence sha256 ${input.evidenceSha256}` });
+        reason: `api-unknown-resolve: ${plan.policy ?? RESOLUTION_POLICY}; evidence sha256 ${input.evidenceSha256}` });
     else await input.resolveApi({ holdSha256: step.holdSha256, source: step.ledger, settledMicroUsd: step.settleMicroUsd, evidenceSha256: input.evidenceSha256,
       ...(step.ledger === "api-reservation" ? { reservationKey: step.reservationKey } : { checkpointMonth: step.checkpointMonth }) });
   }
