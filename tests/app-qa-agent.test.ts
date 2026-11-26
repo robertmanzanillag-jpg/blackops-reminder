@@ -945,3 +945,11 @@ test("a protected route without an authorized visual session is pending, never c
   assert.equal(direction.passedRoutes, 0);
   assert.equal(direction.status, 'pending');
 });
+
+test("office status chat reports KONG Native current work without inventing task detail", () => {
+  const source = readFileSync('client/src/components/agents-world-office/agents-office-world.tsx', 'utf8');
+  const qa = readFileSync('tests/agents-office-local-qa.test.mjs', 'utf8');
+  assert.match(qa, /no incluye el detalle de la tarea/);
+  assert.match(source, /KONG Native reporta una ejecución actual; la lectura no incluye el detalle de la tarea\./);
+  assert.doesNotMatch(source, /KONG Native reporta actividad; no hay una tarea en ejecución verificada/);
+});

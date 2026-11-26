@@ -690,7 +690,7 @@ export function AgentsOfficeWorld({
               {panelAgent.kongEvidence && <div className="mt-2 rounded-lg border border-lime-300/20 bg-lime-300/5 p-2 text-[11px]" data-testid={`world-kong-native-evidence-${panelAgent.kongEvidence.id}`}>
                 <p className="font-semibold text-lime-100">{panelAgent.kongEvidence.label}</p>
                 <p className="mt-1 text-zinc-300">{panelAgent.kongEvidence.detail}</p>
-                <p className="mt-1">Tarea en curso: {panelAgent.kongEvidence.signal === "current" ? "KONG Native reporta actividad; no hay una tarea en ejecución verificada." : "No hay tarea actual verificada."}</p>
+                <p className="mt-1">Tarea en curso: {panelAgent.kongEvidence.signal === "current" ? "KONG Native reporta una ejecución actual; la lectura no incluye el detalle de la tarea." : "No hay tarea actual verificada."}</p>
                 <p>Último resultado: {formatCityTime(panelAgent.kongEvidence.lastRunAt)}</p>
                 <p>Próximo turno: {formatCityTime(panelAgent.kongEvidence.nextRunAt)}</p>
                 <p className="text-zinc-400">La lectura disponible no identifica entregas ni ejecuciones bajo demanda por separado.</p>
@@ -849,7 +849,7 @@ export function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
     else if (agent.kongEvidence && /ultim|anterior|resultado|entrega/.test(text)) answer = agent.kongEvidence.lastRunAt
       ? `KONG Native registra una ejecución el ${formatCityTime(agent.kongEvidence.lastRunAt)}; no confirma que sea una entrega.` : "KONG Native no muestra una última ejecución verificable.";
     else if (agent.kongEvidence && /tarea|haces|haciendo/.test(text)) answer = agent.kongEvidence.signal === "current"
-      ? "KONG Native reporta actividad; no hay una tarea en ejecución verificada."
+      ? "KONG Native reporta una ejecución actual; la lectura no incluye el detalle de la tarea."
       : "No hay una tarea actual verificada para este puesto.";
     else if (!/estado|trabaj|bloque|error|problema|hola/.test(text)) {
       if (workspace.isOwner && isKongOrderAgent(agent.id)) { setMessage(""); void askAgentChat(question); return; }
