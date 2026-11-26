@@ -176,6 +176,11 @@ export function createOpenAiFactoryPatchGenerator(options: {
     const rootStat = await lstat(context.workspace);
     if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error("FACTORY_MODEL_SOURCE_INVALID");
     const contents: { path: string; text: string }[] = [];
+    // Raw read bound. With exactSourceEdits and an input cap the context is shrunk
+    // to line windows below, so accept what the scoped exporter accepts (8 x 200 kB).
+    // Over the bound is a $0 pre-dispatch stop (no provider call), never an
+    // unconfirmed outcome: throwing here used to quarantine the factory.
+    const readLimit = patchMode === "exactSourceEdits" && options.maxInputTokens !== undefined ? 1600000 : 192000;
     let bytes = 0;
     for (const file of files) {
       let current = context.workspace;
@@ -184,11 +189,11 @@ export function createOpenAiFactoryPatchGenerator(options: {
         current = path.join(current, segment);
         const stat = await lstat(current);
         if (stat.isSymbolicLink() || (index === segments.length - 1 ? !stat.isFile() : !stat.isDirectory())) throw new Error("FACTORY_MODEL_SOURCE_INVALID");
-        if (index === segments.length - 1 && stat.size > 192000 - bytes) throw new Error("FACTORY_MODEL_CONTEXT_TOO_LARGE");
+        if (index === segments.length - 1 && stat.size > readLimit - bytes) return { patch: "", costCents: 0, diagnostic: "PROVIDER_INPUT_TOO_LARGE" as const };
       }
       const raw = await readFile(current, { signal });
       bytes += raw.byteLength;
-      if (bytes > 192000 || raw.includes(0)) throw new Error("FACTORY_MODEL_CONTEXT_INVALID");
+      if (bytes > readLimit || raw.includes(0)) throw new Error("FACTORY_MODEL_CONTEXT_INVALID");
       contents.push({ path: file, text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: patchMode !== undefined }).decode(raw) });
     }
     if(patchMode === "exactSourceEdits" && contents.some(file=>!file.text.endsWith("\n")||/[\x00-\x09\x0b-\x1f\x7f\uFEFF]/.test(file.text)))return {patch:"",costCents:0,diagnostic:"UNSUPPORTED_SOURCE" as const};

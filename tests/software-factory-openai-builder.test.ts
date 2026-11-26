@@ -36,8 +36,15 @@ test("protected, traversal and oversized source cannot reach the model", async (
   try {
     await writeFile(path.join(workspace, "app.ts"), "x".repeat(192001));
     const generate = createOpenAiFactoryPatchGenerator({ sourcePaths: { "owner/app": ["app.ts"] }, maxOutputTokens: 100, generateText });
-    await assert.rejects(generate(input, { workspace, maxCostCents: 10 }), /CONTEXT_TOO_LARGE/);
+    // Oversized source is a $0 pre-dispatch stop, never an unconfirmed (quarantining) throw.
+    assert.deepEqual(await generate(input, { workspace, maxCostCents: 10 }), { patch: "", costCents: 0, diagnostic: "PROVIDER_INPUT_TOO_LARGE" });
     await assert.rejects(generate({ ...input, repository: "other/app" }, { workspace, maxCostCents: 10 }), /NOT_ALLOWED/);
+    assert.equal(calls, 0);
+    // exactSourceEdits with an input cap reads up to the exporter bound (8 x 200 kB)
+    // and shrinks to windows; beyond it, still $0 and no call.
+    await writeFile(path.join(workspace, "big.ts"), "y".repeat(1600001));
+    const capped = createOpenAiFactoryPatchGenerator({ patchMode: "exactSourceEdits", maxInputTokens: 1000, sourcePaths: { "owner/app": ["big.ts"] }, maxOutputTokens: 100, generateText });
+    assert.deepEqual(await capped(input, { workspace, maxCostCents: 10 }), { patch: "", costCents: 0, diagnostic: "PROVIDER_INPUT_TOO_LARGE" });
     assert.equal(calls, 0);
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
