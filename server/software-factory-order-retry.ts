@@ -44,12 +44,16 @@ const INPUT_SIZE = /^(?:FACTORY_AUTO_SELECTION_NOT_COMPLETED_)?(?:PROVIDER_(?:IN
 /** $0 discovery stop on a retry whose selection key was already settled; the
  * selector now reuses the persisted selection, so it is retryable (bounded). */
 const SELECTION_REUSE = /^FACTORY_AUTO_SELECTION_ALREADY_EXECUTED$/;
+/** $0 source-export stop (before any model call): the scoped exporter's
+ * limits were below the selector's (fixed in #589). Retryable only at
+ * costCents===0 and within FACTORY_ORDER_MAX_RETRIES; a paid one never is. */
+const SOURCE = /^SOURCE$/;
 
 /** True only for a zero-cost stop caused by infrastructure, never by the order or the code. */
 export function isInfrastructureStop(job: FactoryJob, options: RetryOptions = {}): boolean {
   const reason = reasonOf(job);
   if (reason === undefined) return false;
-  if (INFRA.test(reason) || RESERVATION.test(reason) || INPUT_SIZE.test(reason) || SELECTION_REUSE.test(reason)) return true;
+  if (INFRA.test(reason) || RESERVATION.test(reason) || INPUT_SIZE.test(reason) || SELECTION_REUSE.test(reason) || SOURCE.test(reason)) return true;
   if (CREDIT.test(reason)) return options.creditAvailable === true;
   return SELECTION.test(reason) && job.kind === "discover" && !!job.completedAt && Date.parse(job.completedAt) < Date.parse(FACTORY_SELECTION_FIX_MERGED_AT);
 }

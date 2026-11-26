@@ -5,7 +5,8 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createFactoryPilotGitHubClient, createFactoryPilotGitHubSourceExporter, FACTORY_PILOT_REPOSITORY } from "../server/software-factory-github-client";
-import { createFactoryAsistenteGitHubClient, FACTORY_ASISTENTE_REPOSITORY } from "../server/software-factory-github-client";
+import { createFactoryAsistenteGitHubClient, FACTORY_ASISTENTE_REPOSITORY, FACTORY_EXPORT_MAX_FILE_BYTES, FACTORY_EXPORT_MAX_TOTAL_BYTES } from "../server/software-factory-github-client";
+import { FACTORY_MAX_FILES_PER_ORDER } from "../server/software-factory-write-scope";
 const scope = { owner: "robertmanzanillag-jpg", repo: "software-factory-pilot" };
 const sha = "a".repeat(40), tree = "b".repeat(40), branch = `factory/${sha}-${"c".repeat(64)}`;
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
@@ -206,4 +207,11 @@ test("Asistente client accepts the production integration base, targets it for d
  assert.equal(requests.length,before);
  for(const other of ['claude/integration-20261110','claude/integration','master','factory/x'])
   assert.throws(()=>createFactoryAsistenteGitHubClient({baseBranch:other as any,writePaths:[],request:async()=>json({})}),undefined,other);
+});
+
+test("scoped export accepts every file the selector can pick (200 kB) and stays bounded", () => {
+  assert.equal(FACTORY_EXPORT_MAX_FILE_BYTES, 200000);
+  assert.ok(FACTORY_EXPORT_MAX_FILE_BYTES >= 120164, "agents-office.tsx must export");
+  assert.equal(FACTORY_EXPORT_MAX_TOTAL_BYTES, FACTORY_EXPORT_MAX_FILE_BYTES * FACTORY_MAX_FILES_PER_ORDER);
+  assert.ok(FACTORY_EXPORT_MAX_TOTAL_BYTES <= 4 * 1024 * 1024);
 });

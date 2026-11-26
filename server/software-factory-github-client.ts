@@ -192,6 +192,13 @@ function createScopedClient(repository: string, baseBranch: string, options: Cli
                 invalid(); const data = await call("/pulls", "POST", { head: input.head, base: baseBranch, draft: true, title: input.title, body: input.body }, 201); id(data.number); return { data }; },
         } };
 }
+/** Scoped export limits. The selector admits a source file up to 200 kB
+ * (software-factory-asistente-operator.ts / -company-auto.ts) and the builder
+ * fits large files to the model context by line windows, so the exporter must
+ * accept every file the selector can pick; a 120 kB page (agents-office.tsx)
+ * used to fail FACTORY_REMOTE_BUILD_FAILED:SOURCE at $0. Still fail-closed. */
+export const FACTORY_EXPORT_MAX_FILE_BYTES = 200000;
+export const FACTORY_EXPORT_MAX_TOTAL_BYTES = FACTORY_EXPORT_MAX_FILE_BYTES * FACTORY_MAX_FILES_PER_ORDER;
 /** Reuses the verified blob exporter; no checkout credentials or commands. */
 export function createFactoryPilotGitHubSourceExporter(client: FactoryPilotGitHubClient): NonNullable<FactoryBuilderDependencies["exportSource"]> {
     return createScopedExporter(client, FACTORY_PILOT_REPOSITORY);
@@ -203,7 +210,7 @@ export function createFactoryAsistenteGitHubSourceExporter(client: FactoryPilotG
 }
 function createScopedExporter(client: FactoryPilotGitHubClient, allowedRepository: string, options?: {sourcePaths:readonly string[];signal:AbortSignal}): NonNullable<FactoryBuilderDependencies["exportSource"]> {
     const [owner, repo] = allowedRepository.split("/");
-    const exporter = createGitHubFactorySourceExporter({ ...(options?{sourcePaths:options.sourcePaths,signal:options.signal,maxFileBytes:100000,maxTotalBytes:200000}:{}), repositories: [allowedRepository], client: { rest: { git: {
+    const exporter = createGitHubFactorySourceExporter({ ...(options?{sourcePaths:options.sourcePaths,signal:options.signal,maxFileBytes:FACTORY_EXPORT_MAX_FILE_BYTES,maxTotalBytes:FACTORY_EXPORT_MAX_TOTAL_BYTES}:{}), repositories: [allowedRepository], client: { rest: { git: {
                     getCommit: client.git.getCommit, getBlob: client.git.getBlob,
                     getTree: input => { if (input.recursive !== "1")
                         invalid(); return client.git.getTree({ ...input, recursive: "1" }); },
