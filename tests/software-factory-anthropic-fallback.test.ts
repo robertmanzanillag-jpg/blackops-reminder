@@ -522,3 +522,18 @@ test("factory authority: cap reached blocks Claude before any call; a billing re
   const row = auth.rows.get(factoryAnthropicAuthorityKey("factory:billed"))!;
   assert.equal(row.status, "settled"); assert.equal(row.actualMicroUsd, 0); assert.equal(auth.used(), 0);
 });
+
+test("Claude count: over-cap input is INPUT_TOO_LARGE, a malformed count stays COUNT_INVALID; neither streams", async () => {
+  const big = mockClient({ message: message(), countTokens: 100001 });
+  assert.deepEqual(await createAnthropicFactoryTextProvider(claudeConfig(big.client))(input()), { status: "blocked", reason: "FACTORY_ANTHROPIC_INPUT_TOO_LARGE", costCents: 0 });
+  assert.equal(big.calls.some(c => c.kind === "stream"), false);
+  for (const bad of [null, -1, 1.5, "100", undefined]) {
+    const { client, calls } = mockClient({ message: message() });
+    client.countTokens = async () => ({ input_tokens: bad } as any);
+    assert.deepEqual(await createAnthropicFactoryTextProvider(claudeConfig(client))(input()), { status: "blocked", reason: "FACTORY_ANTHROPIC_COUNT_INVALID", costCents: 0 });
+    assert.equal(calls.some(c => c.kind === "stream"), false);
+  }
+  // Realistic count_tokens + usage payload (null cache fields, cache_creation object) still settles.
+  const ok = mockClient({ countTokens: 41234, message: message({ usage: { input_tokens: 41234, output_tokens: 2100, cache_creation_input_tokens: null, cache_read_input_tokens: null, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 }, server_tool_use: null, service_tier: "standard" } }) });
+  assert.equal((await createAnthropicFactoryTextProvider(claudeConfig(ok.client))(input())).status, "completed");
+});
