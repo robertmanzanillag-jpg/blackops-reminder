@@ -28,12 +28,18 @@ const reasonOf = (job: FactoryJob) => {
 /** True for a zero-cost stop because a provider had no credit/quota. */
 export function isProviderCreditStop(job: FactoryJob): boolean { const r = reasonOf(job); return r !== undefined && CREDIT.test(r); }
 const SELECTION = /^FACTORY_AUTO_SELECTION_NOT_COMPLETED(?:_[A-Z0-9_]{1,80})?$/;
+/** $0 pre-dispatch stops because the stage reservation could not cover the
+ * provider's worst case (software-factory-anthropic.ts / -openai.ts). The
+ * provider was never called; the owner fixes it by raising the reservation in
+ * SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON, so the order must stay re-admittable
+ * (bounded by FACTORY_ORDER_MAX_RETRIES) at any time, not only before #542. */
+const RESERVATION = /^(?:FACTORY_AUTO_SELECTION_NOT_COMPLETED_(?:ANTHROPIC|OPENAI)_BUDGET_UNAVAILABLE|FACTORY_(?:ANTHROPIC|OPENAI)_BUDGET_UNAVAILABLE|PROVIDER_BUDGET_UNAVAILABLE)$/;
 
 /** True only for a zero-cost stop caused by infrastructure, never by the order or the code. */
 export function isInfrastructureStop(job: FactoryJob, options: RetryOptions = {}): boolean {
   const reason = reasonOf(job);
   if (reason === undefined) return false;
-  if (INFRA.test(reason)) return true;
+  if (INFRA.test(reason) || RESERVATION.test(reason)) return true;
   if (CREDIT.test(reason)) return options.creditAvailable === true;
   return SELECTION.test(reason) && job.kind === "discover" && !!job.completedAt && Date.parse(job.completedAt) < Date.parse(FACTORY_SELECTION_FIX_MERGED_AT);
 }
