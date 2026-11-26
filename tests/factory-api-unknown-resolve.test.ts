@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { NEWS_EXECUTION_ID, parseResolveArgs, planAllApiUnknown, planUnknownResolution, runUnknownResolution } from "../script/factory-api-unknown-resolve-core";
+import { NEWS_EXECUTION_ID, ORPHAN_POLICY, parseResolveArgs, planAllApiUnknown, planOrphanJobs, planUnknownResolution, runUnknownResolution } from "../script/factory-api-unknown-resolve-core";
 import { createSoftwareFactoryObjectStore, type FactoryObjectTransport } from "../server/software-factory-object-store";
 import { checkpointFactoryApiMonth, emptyFactoryApiState, factoryApiBudgetStatus, parseFactoryApiState, reserveFactoryApi,
   resolveFactoryApiUnknown, type FactoryApiState } from "../server/software-factory-api-budget";
@@ -165,4 +165,58 @@ test("job with an unconfirmed second child is refused (fail closed)", () => {
   api.reservations.push({ ...api.reservations[0], key: "child-2", status: "reserved" });
   const plan = planAllApiUnknown({ api, jobs: [{ id: jobId, reservedCents: 100 }] });
   assert.equal(plan.refusal, "JOB_CHILD_UNCONFIRMED"); assert.equal(plan.steps.length, 0);
+});
+
+/** Reproduces 2026-11-26: a read guard threw before dispatch; the job went unknown with NO API reservation. */
+test("orphan-jobs: args require external unknown count 0", () => {
+  const e = "owner: console shows no spend for this job beyond recorded";
+  assert.throws(() => parseResolveArgs(["--hold-id=orphan-jobs"], e), /ORPHAN_REQUIRES_EXTERNAL_UNKNOWN_ZERO/);
+  assert.throws(() => parseResolveArgs(["--hold-id=orphan-jobs", "--external-unknown-count=1"], e), /ORPHAN_REQUIRES_EXTERNAL_UNKNOWN_ZERO/);
+  assert.throws(() => parseResolveArgs(["--hold-id=orphan-jobs", "--external-unknown-count=x"], e), /EXTERNAL_UNKNOWN_COUNT_INVALID/);
+  assert.throws(() => parseResolveArgs(["--hold-id=orphan-jobs", "--external-unknown-count=0"], ""), /EVIDENCE_INVALID/);
+  const a = parseResolveArgs(["--hold-id=orphan-jobs", "--external-unknown-count=0"], e);
+  assert.equal(a.orphanJobs, true); assert.equal(a.holdId, undefined); assert.equal(a.apply, false);
+  assert.equal(parseResolveArgs(["--external-unknown-count="], e).externalUnknownCount, undefined);
+});
+
+test("orphan-jobs: never touches jobs with any API reservation; refuses on API/external unknowns", () => {
+  const jobId = "00000000-0000-4000-8000-000000000002", orphan = "00000000-0000-4000-8000-000000000009";
+  const api = apiUnknown(); api.reservations[0].parent = { jobId, fence: "00000000-0000-4000-8000-000000000003" };
+  const jobs = [{ id: jobId, reservedCents: 100 }, { id: orphan, reservedCents: 100 }];
+  assert.equal(planOrphanJobs({ api, jobs, externalUnknownCount: 0 }).refusal, "ORPHAN_API_UNKNOWN_PRESENT");
+  assert.equal(planOrphanJobs({ api, jobs, externalUnknownCount: undefined }).refusal, "ORPHAN_REQUIRES_EXTERNAL_UNKNOWN_ZERO");
+  api.reservations[0].status = "settled"; api.reservations[0].actualMicroUsd = 1;
+  const plan = planOrphanJobs({ api, jobs, externalUnknownCount: 0 });
+  assert.equal(plan.refusal, null); assert.deepEqual(plan.steps.map(s => (s as { jobId: string }).jobId), [orphan]);
+  assert.equal(plan.steps[0].settleMicroUsd, 0); assert.equal((plan.steps[0] as { costCents: number }).costCents, 0);
+  assert.equal(planOrphanJobs({ api: withExternal(), jobs, externalUnknownCount: 0 }).refusal, "ORPHAN_EXTERNAL_UNKNOWN_PRESENT");
+});
+
+test("orphan-jobs: unknown job without API reservation settles at $0, releases its cents, idempotent", async () => {
+  const owner = "fixture-owner", transport = new MemoryTransport(), clock = Date.parse("2026-11-26T04:25:00Z");
+  const store = createSoftwareFactoryObjectStore({ transport, ledgerId: "private-factory", now: () => new Date(clock), maxClockSkewMs: 0 });
+  await store.initializeStore(); await store.initializeMonth(owner, "2026-11", 0); await store.setPaused(owner, false);
+  await store.checkpointApiMonth(owner, { month: "2026-11", evidenceSha256: ev, reconciledAt: "2026-11-26T04:00:00.000Z",
+    externalSpentMicroUsd: 0, externalReservedMicroUsd: 0, externalUnknownReservations: 0, complete: true });
+  await store.enqueue(owner, { key: "build-orphan", projectId: "pilot", kind: "build", reservedCents: 100, payload: {} });
+  const job = (await store.claim("worker"))!;
+  await store.complete(job, { status: "unknown", costCents: 0 });
+  const ledger = () => JSON.parse(transport.body!);
+  const read = () => { const l = ledger(); return { api: l.apiAuthorities[0].state, jobs: l.jobs.filter((j: { status: string }) => j.status === "unknown").map((j: { id: string; input: { reservedCents: number } }) => ({ id: j.id, reservedCents: j.input.reservedCents })) }; };
+  const receipts: Array<{ policy: string; evidenceSha256: string; settledMicroUsd: number }> = [];
+  const run = (apply: boolean) => runUnknownResolution(planOrphanJobs({ ...read(), externalUnknownCount: 0 }), { apply, evidenceSha256: ev, at: "2026-11-26T09:00:00.000Z",
+    appendReceipt: async r => { receipts.push(r); }, settleShared: async () => { throw Error("NO_SHARED"); }, resolveApi: async () => { throw Error("NO_API"); },
+    reconcileJob: x => store.reconcile(owner, x.jobId, { ...x, executionStopped: true }) });
+  assert.equal(planAllApiUnknown(read()).steps.length, 0, "default path cannot settle the orphan");
+  const reservedBefore = ledger().budgets[0].reservedCents; assert.ok(reservedBefore >= 100);
+  const snapshot = JSON.stringify(ledger()), dry = await run(false);
+  assert.equal(dry.applied, false); assert.equal(dry.policy, ORPHAN_POLICY);
+  assert.deepEqual(dry.steps.map(s => [s.ledger, s.settleMicroUsd, s.costCents, s.releaseReservedCents]), [["factory-job", 0, 0, 100]]);
+  assert.equal(JSON.stringify(ledger()), snapshot, "dry run is read-only"); assert.equal(receipts.length, 0);
+  const out = await run(true); assert.equal(out.applied, true);
+  const l = ledger(), row = l.jobs.find((j: { id: string }) => j.id === job.id);
+  assert.equal(row.status, "failed"); assert.equal(row.result.costCents, 0); assert.match(row.result.reason, new RegExp(ev));
+  assert.equal(l.budgets[0].reservedCents, reservedBefore - 100);
+  assert.deepEqual(receipts.map(r => [r.policy, r.evidenceSha256, r.settledMicroUsd]), [[ORPHAN_POLICY, ev, 0]]);
+  const again = await run(true); assert.equal(again.applied, false); assert.equal(again.alreadyResolved, true); assert.equal(receipts.length, 1);
 });

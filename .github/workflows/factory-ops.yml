@@ -95,7 +95,7 @@ on:
         type: string
         default: ""
       api_hold_id:
-        description: "api-unknown-resolve: empty = all unknown API-ledger reservations (+ tied unknown jobs); news = quarantined News hold"
+        description: "api-unknown-resolve: empty = all unknown API-ledger reservations (+ tied unknown jobs); news = quarantined News hold; orphan-jobs = unknown jobs with no API reservation, $0 (needs api_external_unknown_count=0)"
         required: false
         type: string
         default: ""
@@ -299,11 +299,13 @@ jobs:
           SHARED_CREDIT_SCOPE: ${{ vars.OFFICE_SHARED_CREDIT_SCOPE || 'openai-2026-11-19' }}
           CONFIRM: ${{ inputs.confirm }}
           HOLD_ID: ${{ inputs.api_hold_id }}
+          API_UNKNOWN: ${{ inputs.api_external_unknown_count }}
           FACTORY_API_EVIDENCE: ${{ inputs.api_evidence }}
         run: |
           set -euo pipefail
           args=()
           if [ -n "$HOLD_ID" ]; then args+=("--hold-id=$HOLD_ID"); fi
+          if [ -n "$API_UNKNOWN" ]; then args+=("--external-unknown-count=$API_UNKNOWN"); fi
           if [ "$CONFIRM" = "APLICAR" ]; then args+=(--apply); fi
           node --import tsx script/factory-api-unknown-resolve.ts "${args[@]}"
 

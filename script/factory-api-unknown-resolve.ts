@@ -7,11 +7,13 @@ import { createSharedCreditTransaction } from "../server/shared-openai-credit-st
 import { safeErrorCode } from "./software-factory-db-cli";
 import { readApiAuthority } from "./factory-api-authority-read";
 import { createHash } from "node:crypto";
-import { parseResolveArgs, planAllApiUnknown, planUnknownResolution, runUnknownResolution, type UnknownFactoryJob } from "./factory-api-unknown-resolve-core";
+import { parseResolveArgs, planAllApiUnknown, planOrphanJobs, planUnknownResolution, runUnknownResolution, type UnknownFactoryJob } from "./factory-api-unknown-resolve-core";
 
 // factory-ops `api-unknown-resolve` (docs/factory-api-budget-authority.md):
 //   [--hold-id=ID|news] [--apply]   default: every unknown API-ledger reservation (+ tied unknown Factory jobs);
 //                                   --hold-id=news targets the quarantined News execution (code-owned, never printed)
+//   --hold-id=orphan-jobs --external-unknown-count=0: unknown Factory jobs with NO API-ledger reservation,
+//                                   settled at $0 (budget reservation released) on owner evidence
 //   evidence text from env FACTORY_API_EVIDENCE (only its SHA-256 and length are printed)
 //   shared-credit scope from env SHARED_CREDIT_SCOPE
 // Dry run by default: reads only and prints the plan. Apply settles at the FULL reserved amount.
@@ -44,7 +46,8 @@ async function main() {
           .filter(j => Number.isSafeInteger(j.reservedCents) && j.reservedCents >= 0);
         return { ...read, jobs };
       });
-      const plan = args.holdId === undefined ? planAllApiUnknown({ api: state, jobs }) : planUnknownResolution({ holdId: args.holdId, shared, api: state, jobs });
+      const plan = args.orphanJobs ? planOrphanJobs({ api: state, jobs, externalUnknownCount: args.externalUnknownCount })
+        : args.holdId === undefined ? planAllApiUnknown({ api: state, jobs }) : planUnknownResolution({ holdId: args.holdId, shared, api: state, jobs });
       return { shared, authority, plan };
     };
     const before = await read();
