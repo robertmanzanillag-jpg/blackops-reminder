@@ -113,7 +113,7 @@ export function isZeroCostInfrastructureChain(jobs: readonly FactoryJob[], root:
   // (finding.sourcePaths). Its retry reuses that selection at $0 (stable
   // selection key, never replayed), so only the $0 later stops decide.
   const reusable = root.status === "completed" && Array.isArray((root.result as { evidence?: { pipelineState?: { finding?: { sourcePaths?: unknown } } } } | undefined)?.evidence?.pipelineState?.finding?.sourcePaths);
-  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0 && !(reusable && j.id === root.id)) || (j.id !== root.id && j.status === "completed"); })) return false;
+  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0 && !((reusable || isPreFixNoSafeScope(root)) && j.id === root.id)) || (j.id !== root.id && j.status === "completed"); })) return false;
   const stopped = chain.filter(j => j.status === "blocked" || j.status === "failed");
   // Any spend or non-infrastructure stop in the chain keeps the order settled.
   return stopped.length > 0 && stopped.every(j => isInfrastructureStop(j, options));
