@@ -119,7 +119,7 @@
     },
     {
       "path": "server/software-factory-asistente-operator.ts",
-      "sha256": "6f442ca9895bf8361639d8c075248412a24b53b84cad1424d5ef5a862f6f0013"
+      "sha256": "1a128fe8fbae284c3b16cec39567703b30c428190173a5da1de4e5c885f6cf06"
     },
     {
       "path": "server/software-factory-asistente-review.ts",

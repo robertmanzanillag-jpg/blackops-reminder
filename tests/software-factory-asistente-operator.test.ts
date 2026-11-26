@@ -557,3 +557,12 @@ test("daily credit pacer: new admissions wait (scheduler reads nothing, route re
     await (await closed.createFactoryWorkerOptions()).scheduleCompanyOrders!(owner);
     assert.equal(broken.counts().enqueued, 0);
 });
+test("settled admission whose job is queued is returned even after reservation config changed (no CREDIT_IDEMPOTENCY_CONFLICT)", async () => {
+    const f = await fixture();
+    const first = await createAsistenteOperatorComposition(f.config, f.deps).admitWithinCredits(owner, f.input);
+    const changed = { ...f.config, reservations: { ...f.config.reservations, build: f.config.reservations.build + 1 } };
+    assert.deepEqual(await createAsistenteOperatorComposition(changed, f.deps).admitWithinCredits(owner, f.input), first);
+    assert.equal(f.calls(), 1);
+    f.jobs.length = 0;
+    await assert.rejects(createAsistenteOperatorComposition(changed, f.deps).admitWithinCredits(owner, f.input), /RECEIPT_UNAVAILABLE/);
+});
