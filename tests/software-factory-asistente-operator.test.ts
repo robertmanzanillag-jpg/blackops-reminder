@@ -390,8 +390,8 @@ test("auto selection fails closed on invalid, denied, nonexistent, too many or t
         [JSON.stringify({ kind: "bug", paths: ["server/kong.ts", "tests/office-search.test.ts"] }), "FACTORY_AUTO_SELECTION_PATH_DENIED"],
         [JSON.stringify({ kind: "bug", paths: [".github/workflows/x.yml", "tests/office-search.test.ts"] }), "FACTORY_AUTO_SELECTION_PATH_DENIED"],
         [JSON.stringify({ kind: "bug", paths: ["server/missing.ts", "tests/office-search.test.ts"] }), "FACTORY_AUTO_SELECTION_PATH_NOT_FOUND"],
-        [JSON.stringify({ kind: "bug", paths: [...listing, "server/a.ts", "server/b.ts"] }), "FACTORY_AUTO_SELECTION_PATHS_INVALID"],
-        [JSON.stringify({ kind: "bug", paths: [] }), "FACTORY_AUTO_SELECTION_PATHS_INVALID"],
+        [JSON.stringify({ kind: "bug", paths: [...listing, "server/a.ts", "server/b.ts"] }), "FACTORY_AUTO_SELECTION_TOO_MANY_PATHS"],
+        [JSON.stringify({ kind: "bug", paths: [] }), "FACTORY_AUTO_SELECTION_NO_SAFE_SCOPE"],
         [JSON.stringify({ kind: "bug", paths: ["server/office-search.ts"] }), "FACTORY_AUTO_SELECTION_TEST_PATH_REQUIRED"],
     ];
     for (const [text, reason] of cases) {

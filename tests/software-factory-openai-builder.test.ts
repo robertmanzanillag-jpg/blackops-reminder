@@ -148,7 +148,7 @@ test("exact source edits use original offsets across files and generate strict d
 test("invalid exact edits retain known usage and expose only static conversion diagnostics",async()=>{
  const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-exact-reject-"));
  try{await writeFile(path.join(workspace,"app.ts"),"const first = 1;\nconst second = 2;\n");const edit={path:"app.ts",before:"first",after:"third"};
-  const cases:Array<[string,string]>=[['{',"MALFORMED_JSON"],[JSON.stringify({edits:[{...edit,extra:true}]}),"INVALID_EDIT_SHAPE"],[JSON.stringify({edits:[{...edit,path:"secrets/value"}]}),"EDIT_PATH_NOT_ALLOWED"],[JSON.stringify({edits:[{...edit,before:"const"}]}),"NONUNIQUE_EDIT"],[JSON.stringify({edits:[{...edit,before:"absent"}]}),"NONUNIQUE_EDIT"],[JSON.stringify({edits:[{...edit,before:"first = 1"},{...edit,before:"= 1"}]}),"OVERLAPPING_EDITS"],[JSON.stringify({edits:[{...edit,after:"x\r\ny"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:[{...edit,after:"x\u0000y"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:[{...edit,after:"\ud800"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:Array(17).fill(edit)}),"EDIT_LIMIT_EXCEEDED"]];
+  const cases:Array<[string,string]>=[['{',"MALFORMED_JSON"],[JSON.stringify({edits:[{...edit,extra:true}]}),"INVALID_EDIT_SHAPE"],[JSON.stringify({edits:[{...edit,path:"secrets/value"}]}),"EDIT_PATH_NOT_ALLOWED"],[JSON.stringify({edits:[{...edit,before:"const"}]}),"NONUNIQUE_EDIT"],[JSON.stringify({edits:[{...edit,before:"absent"}]}),"NONUNIQUE_EDIT"],[JSON.stringify({edits:[{...edit,before:"first = 1"},{...edit,before:"= 1"}]}),"OVERLAPPING_EDITS"],[JSON.stringify({edits:[{...edit,after:"x\r\ny"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:[{...edit,after:"x\u0000y"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:[{...edit,after:"\ud800"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:Array(17).fill(edit)}),"EDIT_LIMIT_EXCEEDED"],[JSON.stringify({edits:[]}),"EMPTY_PATCH"],[JSON.stringify({edits:[{...edit,path:"../app.ts"}]}),"EDIT_PATH_NOT_ALLOWED"],[JSON.stringify({edits:[{...edit,path:"/etc/app.ts"}]}),"EDIT_PATH_NOT_ALLOWED"]];
   for(const [text,diagnostic] of cases){const generate=createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts"]},maxOutputTokens:1000,patchMode:"exactSourceEdits",generateText:async()=>({status:"completed",text,costCents:7,inputTokens:20,outputTokens:30})});assert.deepEqual(await generate(input,{workspace,maxCostCents:10}),{patch:"",costCents:7,diagnostic});}
  }finally{await rm(workspace,{recursive:true,force:true});}
 });
@@ -187,5 +187,14 @@ test("required regression test edit fails fast before publication when no test f
   assert.deepEqual(await make([{path:"app.ts",before:"first",after:"second"}])(input,{workspace,maxCostCents:10}),{patch:"",costCents:3,diagnostic:"TEST_EDIT_REQUIRED"});
   const ok=await make([{path:"app.ts",before:"first = 1",after:"first = 2"},{path:"tests/app.test.ts",before:"first, 1",after:"first, 2"}])(input,{workspace,maxCostCents:10});
   assert.equal(ok.diagnostic,undefined);assert.deepEqual(validateFactoryPublicationPatch(ok.patch),["app.ts","tests/app.test.ts"]);
+ }finally{await rm(workspace,{recursive:true,force:true});}
+});
+
+test("harmless path spellings map to the provided path; the prompt states the hard limits",async()=>{
+ const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-exact-norm-"));
+ try{await writeFile(path.join(workspace,"app.ts"),"const first = 1;\n");let instructions="";
+  for(const p of ["./app.ts","/app.ts","APP.ts"]){const generate=createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts"]},maxOutputTokens:1000,patchMode:"exactSourceEdits",generateText:async r=>{instructions=r.instructions;return {status:"completed",text:JSON.stringify({edits:[{path:p,before:"first",after:"third"}]}),costCents:7,inputTokens:20,outputTokens:30};}});
+   const got=await generate(input,{workspace,maxCostCents:10});assert.equal(got.diagnostic,undefined);assert.match(got.patch,/^diff --git a\/app.ts b\/app.ts\n/);}
+  assert.match(instructions,/at most 16 edits/);assert.match(instructions,/65536/);assert.match(instructions,/smallest correct patch/);assert.match(instructions,/no leading \.\/ or \//);
  }finally{await rm(workspace,{recursive:true,force:true});}
 });
