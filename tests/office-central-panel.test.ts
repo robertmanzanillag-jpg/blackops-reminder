@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildGlobalRanking, buildPanelRows, buildReportsFeed, filterPanelRows, panelCounters, panelStatusKind, readPanelParams, sectionForDepartment,
-  officeDeepLinkStep, selectReplaceable, selectReplaced, type PanelAgentInput,
+  officeDeepLinkStep, selectReplaceable, selectReplaced, STATUS_KIND_LABEL, type PanelAgentInput,
 } from "../client/src/lib/office-central-panel";
 import { PANEL_BOTTOM_RESERVE, availablePanelHeight, clampPanelPosition, parseStoredPanelPosition, visiblePanelArea } from "../client/src/components/agents-world-office/use-draggable-panel";
 import type { AgentCareer, CompanyState, LeaderboardRow } from "../shared/agent-company";
@@ -75,6 +75,25 @@ test("rows carry careers from their own ledger, last/next work and the blocking 
     ["kong:legal_audit", "Lectura autenticada KONG", "problem"],
     [null, "Eventos de la empresa", "info"],
   ]);
+});
+
+test("central panel shows the status of every agent desk, even before its probe answers", () => {
+  const agents = new Map<string, PanelAgentInput>([
+    ["a", { id: "a", name: "A", role: "r", status: { state: "working", label: "Publicando" } }],
+    ["b", { id: "b", name: "B", role: "r", status: { state: "error", label: "Fallo", detail: "Sin token" } }],
+    ["c", { id: "c", name: "C", role: "r", status: { state: "offline", label: "Apagado" } }],
+    ["d", { id: "d", name: "D", role: "r", status: undefined as never }],
+  ]);
+  const rows = buildPanelRows({
+    departments: [{ department: { id: "direccion", name: "Direccion", color: "#fff", agentIds: ["a", "b", "c", "d"] }, company: "main" }],
+    agents, careers: { main: {}, kong: {} }, leaderboards: { main: [], kong: [] },
+  });
+  assert.deepEqual(rows.map(item => [item.id, item.kind, item.statusLabel]), [
+    ["a", "working", "Publicando"], ["b", "blocked", "Fallo"], ["c", "idle", "Apagado"], ["d", "checking", "Verificando..."],
+  ]);
+  assert.ok(rows.every(item => typeof STATUS_KIND_LABEL[item.kind] === "string" && STATUS_KIND_LABEL[item.kind].length > 0), "every row has a visible status chip label");
+  assert.equal(rows[1].reason, "Sin token");
+  assert.deepEqual(panelCounters(rows), { total: 4, working: 1, onDuty: 0, active: 1, blocked: 1, attention: 0 });
 });
 
 test("global ranking merges both ledgers, keeps only real points and orders like leaderboard()", () => {
