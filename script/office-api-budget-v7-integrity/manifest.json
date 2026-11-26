@@ -127,7 +127,7 @@
     },
     {
       "path": "server/software-factory-company-auto.ts",
-      "sha256": "65117b99bd5c82be49df9cbaea311371a24f5b3fe7ae44adfd79446b615115a8"
+      "sha256": "16f640bbeb18cd9aa8356ddb5dd7a2624c31ca5f6da0575c246f8c6b1304fb10"
     },
     {
       "path": "server/software-factory-model-routes.ts",
@@ -139,7 +139,7 @@
     },
     {
       "path": "server/software-factory-openai-builder.ts",
-      "sha256": "0ce5f0884a12a328a1943efcd728b97af641302b612921647b55bdbd52da290e"
+      "sha256": "9589e59ff76798e2484c1a4ef1b69699e385b536797af82a91babbbc6681d666"
     },
     {
       "path": "server/software-factory-openai-count.ts",
