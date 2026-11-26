@@ -116,3 +116,16 @@ test("$0 credit rejections do not consume the autoAdmit daily count", () => {
   const paid = [r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PATCH")];
   assert.equal(countAutoAdmissionsToday(paid, now, ownerKey, () => false), 1);
 });
+
+test("$0 reservation-too-small stops stay retryable after #542 (owner raises the reservation)", () => {
+  const sel = root(0, "blocked", { status: "blocked", reason: "FACTORY_AUTO_SELECTION_NOT_COMPLETED_ANTHROPIC_BUDGET_UNAVAILABLE", costCents: 0 });
+  const late = { ...sel, completedAt: "2026-11-26T00:15:00Z" };
+  assert.equal(isInfrastructureStop(late), true);
+  assert.equal(companyOrderRetryAttempt([late], ownerKey, orderId, rev), 1);
+  assert.equal(isInfrastructureStop({ ...late, result: { ...late.result, costCents: 4 } }), false);
+  assert.equal(isInfrastructureStop({ ...late, result: { ...late.result, reason: "FACTORY_AUTO_SELECTION_NOT_COMPLETED_ANTHROPIC_REFUSAL" } }), false);
+  const r0 = root();
+  assert.equal(companyOrderRetryAttempt([r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BUDGET_UNAVAILABLE")], ownerKey, orderId, rev), 1);
+  const r2 = root(2, "blocked", late.result);
+  assert.equal(companyOrderRetryAttempt([r2], ownerKey, orderId, rev), FACTORY_ORDER_MAX_RETRIES);
+});
