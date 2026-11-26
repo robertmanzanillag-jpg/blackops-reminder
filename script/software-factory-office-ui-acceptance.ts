@@ -46,6 +46,8 @@ export function parseRawDiff(raw: string): CandidateChange[] {
 const OFFICE_UI_CANDIDATE_SCOPE = [
     /^client\/src\/components\/agents-world-office\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/,
     /^client\/src\/pages\/agents-office[A-Za-z0-9_-]*\.tsx$/,
+    // Pure view-model helpers of the office screen (e.g. lib/office-central-panel.ts, run 45902724453).
+    /^client\/src\/lib\/office-[a-z0-9-]+\.ts$/,
     /^server\/office-role-work\.ts$/,
     /^tests\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.test\.ts$/,
 ];

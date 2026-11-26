@@ -68,9 +68,21 @@ function isPreFixNoSafeScope(job: FactoryJob): boolean {
     && !!job.completedAt && Date.parse(job.completedAt) < Date.parse(FACTORY_KONG_LABEL_SCOPE_FIX_AT);
 }
 
+/** A build whose isolated UI candidate check failed only because the office-screen
+ * allowlist lacked client/src/lib/office-*.ts (run 45902724453). Window = after #598
+ * shipped, before the allowlist fix; paid at most FACTORY_SCOPE_BUILD_RETRY_MAX_CENTS. */
+export const FACTORY_OFFICE_LIB_SCOPE_WINDOW = ["2026-11-26T22:05:00Z", "2026-11-26T22:45:00Z"] as const;
+export const FACTORY_SCOPE_BUILD_RETRY_MAX_CENTS = 100;
+function isPreFixOfficeScopeBuild(job: FactoryJob): boolean {
+  const r = job.result as { reason?: unknown; costCents?: unknown } | undefined, t = Date.parse(job.completedAt ?? "");
+  return job.kind === "build" && job.status === "failed" && r?.reason === "FACTORY_ACTIONS_CHECK_FAILED"
+    && Number.isSafeInteger(r.costCents) && (r.costCents as number) >= 0 && (r.costCents as number) <= FACTORY_SCOPE_BUILD_RETRY_MAX_CENTS
+    && t >= Date.parse(FACTORY_OFFICE_LIB_SCOPE_WINDOW[0]) && t < Date.parse(FACTORY_OFFICE_LIB_SCOPE_WINDOW[1]);
+}
+
 /** True only for a zero-cost stop caused by infrastructure, never by the order or the code. */
 export function isInfrastructureStop(job: FactoryJob, options: RetryOptions = {}): boolean {
-  if (isPreFixNoSafeScope(job)) return true;
+  if (isPreFixNoSafeScope(job) || isPreFixOfficeScopeBuild(job)) return true;
   const reason = reasonOf(job);
   if (reason === undefined) return false;
   if (INFRA.test(reason) || RESERVATION.test(reason) || INPUT_SIZE.test(reason) || SELECTION_REUSE.test(reason) || SOURCE.test(reason) || OWNER_SETTLED_ORPHAN.test(reason)) return true;
@@ -113,7 +125,7 @@ export function isZeroCostInfrastructureChain(jobs: readonly FactoryJob[], root:
   // (finding.sourcePaths). Its retry reuses that selection at $0 (stable
   // selection key, never replayed), so only the $0 later stops decide.
   const reusable = root.status === "completed" && Array.isArray((root.result as { evidence?: { pipelineState?: { finding?: { sourcePaths?: unknown } } } } | undefined)?.evidence?.pipelineState?.finding?.sourcePaths);
-  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0 && !((reusable || isPreFixNoSafeScope(root)) && j.id === root.id)) || (j.id !== root.id && j.status === "completed"); })) return false;
+  if (chain.some(j => { const c = (j.result as { costCents?: unknown } | undefined)?.costCents; return (c !== undefined && c !== 0 && !((reusable || isPreFixNoSafeScope(root)) && j.id === root.id) && !isPreFixOfficeScopeBuild(j)) || (j.id !== root.id && j.status === "completed"); })) return false;
   const stopped = chain.filter(j => j.status === "blocked" || j.status === "failed");
   // Any spend or non-infrastructure stop in the chain keeps the order settled.
   return stopped.length > 0 && stopped.every(j => isInfrastructureStop(j, options));
