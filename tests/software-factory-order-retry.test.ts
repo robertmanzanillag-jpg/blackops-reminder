@@ -25,6 +25,15 @@ test("zero-cost provider block becomes eligible for a bounded retry", () => {
   assert.equal(companyOrderRetryAttempt([r0, r1, r2, build(r2, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED")], ownerKey, orderId, rev), FACTORY_ORDER_MAX_RETRIES);
 });
 
+test("$0 source-export failure is retryable within the bound; a paid one is not", () => {
+  const r0 = root();
+  assert.equal(companyOrderRetryAttempt([r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:SOURCE")], ownerKey, orderId, rev), 1);
+  assert.equal(companyOrderRetryAttempt([r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:SOURCE", 4)], ownerKey, orderId, rev), 0);
+  assert.equal(companyOrderRetryAttempt([r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:SOURCE_X")], ownerKey, orderId, rev), 0);
+  const r1 = root(1), r2 = root(2);
+  assert.equal(companyOrderRetryAttempt([r0, r1, r2, build(r2, "failed", "FACTORY_REMOTE_BUILD_FAILED:SOURCE")], ownerKey, orderId, rev), FACTORY_ORDER_MAX_RETRIES);
+});
+
 test("spend, code failures, running chains and unknown history are never retried", () => {
   const r0 = root();
   assert.equal(companyOrderRetryAttempt([r0, build(r0, "failed", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_BLOCKED", 3)], ownerKey, orderId, rev), 0);
