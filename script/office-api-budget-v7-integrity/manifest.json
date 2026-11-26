@@ -139,7 +139,7 @@
     },
     {
       "path": "server/software-factory-openai-builder.ts",
-      "sha256": "0df15dfa34f70801fe5d67bc43497b1c9d65b563fd3ce70474eb409ff898b1de"
+      "sha256": "243b020991f4d525db24b294fb21c6c002cdc2c833703c9a1fe637b0140f63c4"
     },
     {
       "path": "server/software-factory-openai-count.ts",

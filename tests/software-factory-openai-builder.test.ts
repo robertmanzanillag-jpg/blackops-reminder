@@ -144,7 +144,7 @@ test("exact source edits use original offsets across files and generate strict d
  try{
   await writeFile(path.join(workspace,"app.ts"),"const first = 1;\nconst second = 2;\n");await writeFile(path.join(workspace,"test.ts"),"assert.equal(first, 1);\n");
   const edits=[{path:"test.ts",before:"first, 1",after:"second, 1"},{path:"app.ts",before:"second",after:"third"},{path:"app.ts",before:"first",after:"second"}];
-  const make=(value:unknown)=>createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts","test.ts"]},maxOutputTokens:1000,patchMode:"exactSourceEdits",generateText:async request=>{assert.match(request.instructions,/ORIGINAL/);return {status:"completed",text:JSON.stringify(value),costCents:7,inputTokens:20,outputTokens:30};}});
+  const make=(value:unknown)=>createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts","test.ts"]},maxOutputTokens:1000,patchMode:"exactSourceEdits",generateText:async request=>{assert.match(request.instructions,/ORIGINAL/);assert.equal(request.responseSchema?.name,"factory_exact_edits");assert.deepEqual(request.responseSchema?.schema.required,["edits"]);return {status:"completed",text:JSON.stringify(value),costCents:7,inputTokens:20,outputTokens:30};}});
   const result=await make({edits})(input,{workspace,maxCostCents:10});
   assert.equal(result.costCents,7);assert.equal(result.diagnostic,undefined);validateFactoryPublicationPatch(result.patch);
   assert.equal(result.patch,"diff --git a/app.ts b/app.ts\n--- a/app.ts\n+++ b/app.ts\n@@ -1,2 +1,2 @@\n-const first = 1;\n-const second = 2;\n+const second = 1;\n+const third = 2;\ndiff --git a/test.ts b/test.ts\n--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-assert.equal(first, 1);\n+assert.equal(second, 1);\n");
