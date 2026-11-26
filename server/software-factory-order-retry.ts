@@ -55,8 +55,22 @@ const SOURCE = /^SOURCE$/;
  * charges the hold) never qualifies. Bounded by FACTORY_ORDER_MAX_RETRIES. */
 const OWNER_SETTLED_ORPHAN = /^api-unknown-resolve: owner-evidence-orphan-job-zero-cost; evidence sha256 [a-f0-9]{64}$/;
 
+/** Instant the selector/builder instructions stopped treating any Kong mention as out of
+ * scope (a Kong label on BlackOps' own office screen is in scope). A discovery that the
+ * selector answered NO_SAFE_SCOPE before then got a policy-induced refusal, not an order
+ * verdict: one bounded re-selection is allowed when that call cost at most this much. */
+export const FACTORY_KONG_LABEL_SCOPE_FIX_AT = "2026-11-26T22:30:00Z";
+export const FACTORY_NO_SAFE_SCOPE_RETRY_MAX_CENTS = 25;
+function isPreFixNoSafeScope(job: FactoryJob): boolean {
+  const r = job.result as { reason?: unknown; costCents?: unknown } | undefined;
+  return job.kind === "discover" && job.status === "blocked" && r?.reason === "FACTORY_AUTO_SELECTION_NO_SAFE_SCOPE"
+    && Number.isSafeInteger(r.costCents) && (r.costCents as number) >= 0 && (r.costCents as number) <= FACTORY_NO_SAFE_SCOPE_RETRY_MAX_CENTS
+    && !!job.completedAt && Date.parse(job.completedAt) < Date.parse(FACTORY_KONG_LABEL_SCOPE_FIX_AT);
+}
+
 /** True only for a zero-cost stop caused by infrastructure, never by the order or the code. */
 export function isInfrastructureStop(job: FactoryJob, options: RetryOptions = {}): boolean {
+  if (isPreFixNoSafeScope(job)) return true;
   const reason = reasonOf(job);
   if (reason === undefined) return false;
   if (INFRA.test(reason) || RESERVATION.test(reason) || INPUT_SIZE.test(reason) || SELECTION_REUSE.test(reason) || SOURCE.test(reason) || OWNER_SETTLED_ORPHAN.test(reason)) return true;

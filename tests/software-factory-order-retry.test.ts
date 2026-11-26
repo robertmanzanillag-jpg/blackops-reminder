@@ -145,3 +145,11 @@ test("owner-settled zero-cost orphan (api-unknown-resolve orphan policy) is a bo
   assert.equal(isInfrastructureStop(root(0, "failed", { status: "failed", reason: `api-unknown-resolve: conservative-full-reserved-amount; evidence sha256 ${"a".repeat(64)}`, costCents: 0 })), false);
   assert.equal(isInfrastructureStop(root(0, "failed", { status: "failed", reason: `api-unknown-resolve: owner-evidence-orphan-job-zero-cost; evidence sha256 ${"a".repeat(64)}`, costCents: 3 })), false);
 });
+
+test("NO_SAFE_SCOPE from the pre-fix Kong-label refusal gets one bounded, cheap re-selection", () => {
+  const pre = { ...root(0, "blocked", { status: "blocked", reason: "FACTORY_AUTO_SELECTION_NO_SAFE_SCOPE", costCents: 3 }), completedAt: "2026-11-26T21:39:14Z" };
+  assert.equal(isInfrastructureStop(pre), true);
+  assert.equal(isInfrastructureStop({ ...pre, completedAt: "2026-11-27T00:00:00Z" }), false);
+  assert.equal(isInfrastructureStop({ ...pre, result: { ...pre.result, costCents: 26 } }), false);
+  assert.equal(isInfrastructureStop({ ...pre, kind: "build" }), false);
+});
