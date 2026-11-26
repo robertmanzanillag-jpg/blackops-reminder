@@ -29,6 +29,38 @@ async function container(args: string[], timeout: number, maxBuffer = 1048576) {
         await removeAcceptanceContainer(name);
     }
 }
+export type CandidateChange = { path: string; oldMode: string; newMode: string };
+/** Parses `git diff --raw --no-renames -z` output; fails closed on anything unexpected. */
+export function parseRawDiff(raw: string): CandidateChange[] {
+    const parts = raw.split('\0');
+    if (parts.at(-1) === '') parts.pop();
+    if (parts.length % 2) throw Error('UI_CANDIDATE_SCOPE_INVALID');
+    const out: CandidateChange[] = [];
+    for (let i = 0; i < parts.length; i += 2) {
+        const m = /^:(\d{6}) (\d{6}) [0-9a-f]+ [0-9a-f]+ [AMD]$/.exec(parts[i]);
+        if (!m) throw Error('UI_CANDIDATE_SCOPE_INVALID');
+        out.push({ oldMode: m[1], newMode: m[2], path: parts[i + 1] });
+    }
+    return out;
+}
+const OFFICE_UI_CANDIDATE_SCOPE = [
+    /^client\/src\/components\/agents-world-office\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/,
+    /^client\/src\/pages\/agents-office[A-Za-z0-9_-]*\.tsx$/,
+    /^server\/office-role-work\.ts$/,
+    /^tests\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.test\.ts$/,
+];
+/** Explicit allowlist; harness files are never editable even if a pattern would match. */
+export function officeUiCandidatePathAllowed(file: string) {
+    if (typeof file !== 'string' || !file || file.length > 300 || /[\\\x00-\x20]/.test(file) || file.split('/').some(p => !p || p === '.' || p === '..' || p.startsWith('.')))
+        return false;
+    if (OFFICE_UI_HARNESS_FILES.includes(file)) return false;
+    return OFFICE_UI_CANDIDATE_SCOPE.some(r => r.test(file));
+}
+export function officeUiCandidateScopeValid(changes: CandidateChange[]) {
+    // Regular files only (no symlinks, submodules or executables); deletions are permitted.
+    const mode = (m: string) => m === '100644' || m === '000000';
+    return changes.length > 0 && changes.every(c => officeUiCandidatePathAllowed(c.path) && mode(c.oldMode) && mode(c.newMode));
+}
 async function main() {
     stage = 'validate-input';
     if (process.platform !== 'linux' || process.env.FACTORY_QA_ISOLATED !== 'true' || !/^\d+$/.test(process.env.GITHUB_RUN_ID ?? '') || !/^\d+$/.test(process.env.GITHUB_RUN_ATTEMPT ?? ''))
@@ -39,9 +71,9 @@ async function main() {
     const base = await checkedRoot(baseRoot, baseSha), head = await checkedRoot(headRoot, headSha), deps = await realpath(dependencyRoot);
     if (base === head || baseSha === headSha || !path.isAbsolute(output) || /[\r\n,]/.test(deps) || path.resolve(output).startsWith(base + path.sep) || path.resolve(output).startsWith(head + path.sep))
         throw Error('UI_DISTINCT_ROOTS_REQUIRED');
-    // The model may edit only this approved backend leaf and its test. It cannot change the oracle, auth, UI, dependency or build policy.
-    const changed = (await exec('git', ['-C', head, 'diff', '--name-only', baseSha, headSha], { timeout: 10000 })).stdout.trim().split('\n').filter(Boolean);
-    if (!changed.length || changed.some(p => !['server/office-role-work.ts', 'tests/office-role-work.test.ts'].includes(p)))
+    // The model may edit only the office screen, its backend leaf and tests. It cannot change the oracle, auth, workflows, dependency or build policy.
+    const raw = (await exec('git', ['-C', head, 'diff', '--raw', '--no-renames', '-z', baseSha, headSha], { timeout: 10000 })).stdout;
+    if (!officeUiCandidateScopeValid(parseRawDiff(raw)))
         throw Error('UI_CANDIDATE_SCOPE_INVALID');
     for (const file of ['package.json', 'package-lock.json'])
         if (!(await readFile(path.join(base, file))).equals(await readFile(path.join(head, file))))
