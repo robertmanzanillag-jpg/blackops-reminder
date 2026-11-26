@@ -429,6 +429,29 @@ test("non Black Room requests from the owner become a task for the main office; 
   }
 });
 
+test("owner engineering requests placed as factory-eligible orders say truthfully they went to the factory", async () => {
+  const dir = await tempDir();
+  try {
+    const { orders } = fakeOrders();
+    orders.placeGeneral = async () => ({ orderId: "main-2", assignees: ["App QA", "Code", "Mecanico"], factory: true });
+    const { chat } = setup(dir, { orders });
+    const out = await chat.sendMessage({ text: "Arregla el bug de App QA más reciente que falla en la pantalla de oficina", actor: OWNER, authorName: "Robert", contextUserId: "robert" });
+    assert.match(out.reply.text, /fábrica de software/);
+    assert.match(out.reply.text, /PR en borrador/);
+    assert.doesNotMatch(out.reply.text, /no es de Black Room|todavía no lo ejecutan/);
+    assert.deepEqual(out.reply.orderIds, ["main-2"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("factory eligibility uses the factory's own admission filters", async () => {
+  const { classifyCompanyOrderAdmission } = await import("../server/software-factory-company");
+  const base = { id: "o", text: "arregla el bug de la pantalla de oficina", createdAt: "2026-11-26T03:18:00.000Z", assignees: [{ agentId: "app-qa", status: "pendiente" }, { agentId: "code", status: "pendiente" }] } as any;
+  assert.equal(classifyCompanyOrderAdmission(base, { enabled: true, since: "1970-01-01T00:00:00.000Z" }), "eligible");
+  assert.equal(classifyCompanyOrderAdmission({ ...base, assignees: [{ agentId: "asistente", status: "pendiente" }] }, { enabled: true, since: "1970-01-01T00:00:00.000Z" }), "no_active_engineering_assignee");
+});
+
 test("analytics questions only run the analytics agent, with a live refresh and the full report in the card", async () => {
   assert.deepEqual(routeCeoChatMessage("dame las analiticas de black room hoy", NOW).intents.map((intent) => `${intent.agentId}:${intent.operation}`), ["blackroom-analytics:daily-report"]);
   assert.deepEqual(routeCeoChatMessage("como nos fue este mes en redes", NOW).intents.map((intent) => intent.operation), ["monthly-report"]);
