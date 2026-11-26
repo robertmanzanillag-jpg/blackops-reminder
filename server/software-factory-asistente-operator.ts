@@ -322,7 +322,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             // Automatic order: current head of the base branch, code-owned generic
             // scenario, and a validated, persisted file selection. The order text is
             // requirements only; scope, kind and acceptance are enforced here.
-            const selected = await selectFiles({ orderId: order.id, revision, orderText: order.text, baseSha, maxCostCents: budget.maxCostCents, signal });
+            const selected = await selectFiles({ orderId: order.id, revision, orderText: order.text, baseSha, maxCostCents: budget.maxCostCents, signal, ...(budget.retry ? { retry: budget.retry } : {}) });
             if (selected.status !== "selected") return { blocked: selected.reason, costCents: selected.costCents };
             return { kind: selected.kind, regressionScenarioId: COMPANY_ORDER_CHECKS_ID, sourcePaths: selected.paths, costCents: selected.costCents, ...(selected.modelProvider ? { modelProvider: selected.modelProvider } : {}) };
         } if (baseSha !== mapping.baseSha)

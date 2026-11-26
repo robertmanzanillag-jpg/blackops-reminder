@@ -89,7 +89,7 @@ export function createCompanyOrderDiscovery(options: {
   // Mapped orders are zero-cost. Only the operator's bounded, shared-credit
   // reserved file selection may spend, within budget.maxCostCents, and must
   // report its known cost (or a terminal block) here.
-  inspectOrder(order: CompanyOrder, baseSha: string, signal: AbortSignal, budget: { maxCostCents: number }): Promise<{ kind: "bug" | "improvement"; regressionScenarioId: string; sourcePaths?: string[]; costCents?: number; modelProvider?: string } | { blocked: string; costCents: number } | undefined>;
+  inspectOrder(order: CompanyOrder, baseSha: string, signal: AbortSignal, budget: { maxCostCents: number; retry?: number }): Promise<{ kind: "bug" | "improvement"; regressionScenarioId: string; sourcePaths?: string[]; costCents?: number; modelProvider?: string } | { blocked: string; costCents: number } | undefined>;
 }): NonNullable<FactoryPipelineDependencies["discover"]> {
   return async (project, context) => {
     context.signal.throwIfAborted();
@@ -103,7 +103,7 @@ export function createCompanyOrderDiscovery(options: {
     if (current.revision !== source.revision) throw Error("FACTORY_COMPANY_ORDER_CHANGED");
     const baseSha = await options.resolveHead(project.repo, context.signal);
     if (!/^[a-f0-9]{40}$/.test(baseSha)) throw Error("FACTORY_COMPANY_HEAD_UNVERIFIED");
-    const inspected = await options.inspectOrder(structuredClone(order), baseSha, context.signal, { maxCostCents: context.maxCostCents });
+    const inspected = await options.inspectOrder(structuredClone(order), baseSha, context.signal, { maxCostCents: context.maxCostCents, ...(source.retry ? { retry: source.retry as number } : {}) });
     const cost = inspected?.costCents ?? 0;
     if (!Number.isSafeInteger(cost) || cost < 0 || cost > context.maxCostCents) throw Error("FACTORY_COMPANY_COST_UNVERIFIED");
     if (inspected && "blocked" in inspected) {

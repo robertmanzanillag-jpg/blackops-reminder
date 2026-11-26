@@ -120,7 +120,7 @@ export function createFactoryOrderFileSelector(options: {
   const maxOutputTokens = Math.min(options.maxOutputTokens, SELECTION_MAX_OUTPUT_TOKENS);
   if (!Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > FACTORY_MAX_FILES_PER_ORDER || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 16 || typeof options.listPaths !== "function") throw Error("FACTORY_SELECTION_CONFIGURATION_INVALID");
   const blocked = (reason: string, costCents = 0): FactoryOrderSelection => ({ status: "blocked", reason, costCents });
-  return async (input: { orderId: string; revision: string; orderText: string; baseSha: string; maxCostCents: number; signal: AbortSignal }): Promise<FactoryOrderSelection> => {
+  return async (input: { orderId: string; revision: string; orderText: string; baseSha: string; maxCostCents: number; signal: AbortSignal; retry?: number }): Promise<FactoryOrderSelection> => {
     const { signal } = input;
     signal.throwIfAborted();
     if (typeof input.orderId !== "string" || !input.orderId || !/^[a-f0-9]{64}$/.test(input.revision) || !sha.test(input.baseSha) || typeof input.orderText !== "string" || !input.orderText.trim() || input.orderText.length > 500 ||
@@ -156,7 +156,23 @@ export function createFactoryOrderFileSelector(options: {
     }
     const text = JSON.stringify({ maxFiles, requirements: input.orderText, files: listed });
     if (Buffer.byteLength(text) > 240000) return blocked("FACTORY_AUTO_SELECTION_LISTING_TOO_LARGE");
-    const key = `factory-select:${digest(["asistente", input.orderId, input.revision])}`;
+    const reuse = async (): Promise<FactoryOrderSelection | undefined> => {
+      const prior = options.previousSelection ? await options.previousSelection(input.orderId, input.revision).catch(() => undefined) : undefined;
+      if (!prior || (prior.kind !== "bug" && prior.kind !== "improvement") || !Array.isArray(prior.paths)) return undefined;
+      let reused: string[];
+      try { reused = validateFactoryOrderPaths([...prior.paths], { roots, maxFiles }); } catch { return undefined; }
+      const available = new Set(listed);
+      if (!reused.length || !reused.every(p => available.has(p)) || !reused.some(isFactoryTestPath)) return undefined;
+      signal.throwIfAborted();
+      return { status: "selected", kind: prior.kind, paths: reused, costCents: 0 };
+    };
+    // A bounded retry (1..FACTORY_ORDER_MAX_RETRIES) first reuses a persisted
+    // selection at $0. Otherwise it gets its own key: the earlier attempt's key
+    // may be settled by a $0 pre-dispatch block (e.g. reservation too small),
+    // which would make every retry FACTORY_AUTO_SELECTION_ALREADY_EXECUTED.
+    const retry = Number.isSafeInteger(input.retry) && (input.retry as number) >= 1 && (input.retry as number) <= 2 ? input.retry as number : 0;
+    if (retry) { const reused = await reuse(); if (reused) return reused; }
+    const key = `factory-select:${digest(retry ? ["asistente", input.orderId, input.revision, retry] : ["asistente", input.orderId, input.revision])}`;
     let result: Awaited<ReturnType<typeof runFactoryModelCall>>["result"], modelProvider: string | undefined;
     try {
       const call = await runFactoryModelCall(routes, { key, unknownError: "FACTORY_AUTO_SELECTION_OUTCOME_UNKNOWN",
@@ -177,14 +193,7 @@ export function createFactoryOrderFileSelector(options: {
           : await (factoryModelErrorLedger(error) ?? ledger).settledReceipt(key).then(() => true, () => false);
         if (settled) {
           // Never replay the paid call; reuse its persisted, re-validated answer at $0.
-          const prior = options.previousSelection ? await options.previousSelection(input.orderId, input.revision).catch(() => undefined) : undefined;
-          if (prior && (prior.kind === "bug" || prior.kind === "improvement") && Array.isArray(prior.paths)) {
-            let reused: string[] | undefined;
-            try { reused = validateFactoryOrderPaths([...prior.paths], { roots, maxFiles }); } catch { reused = undefined; }
-            const available = new Set(listed);
-            if (reused && reused.length && reused.every(p => available.has(p)) && reused.some(isFactoryTestPath)) { signal.throwIfAborted(); return { status: "selected", kind: prior.kind, paths: reused, costCents: 0 }; }
-          }
-          return blocked("FACTORY_AUTO_SELECTION_ALREADY_EXECUTED");
+          return (await reuse()) ?? blocked("FACTORY_AUTO_SELECTION_ALREADY_EXECUTED");
         }
         throw Error("FACTORY_AUTO_SELECTION_OUTCOME_UNKNOWN");
       }

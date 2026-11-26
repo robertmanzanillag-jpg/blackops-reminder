@@ -371,6 +371,11 @@ test("auto discovery selects bounded existing files at the current head and pers
     assert.deepEqual((reused.evidence as any).pipelineState.finding.sourcePaths, ["server/office-search.ts", "tests/office-search.test.ts"]);
     assert.equal(f.counts().generations, 1);
     f.jobs.pop();
+    // A bounded retry with nothing persisted to reuse gets its own selection key
+    // (the earlier key may be settled by a $0 block) instead of ALREADY_EXECUTED.
+    const retryInput = companyOrderJob(f.orders[0], project, 1, 1);
+    const retried = await worker.adapters!.discover!.execute({ ...f.discoverJob(f.orders[0]), key: retryInput.key, payload: retryInput.payload }, { signal: signal(), maxCostCents: 1 });
+    assert.equal(retried.status, "completed", JSON.stringify(retried)); assert.equal(f.counts().generations, 2);
     const before = f.counts();
     const built = await worker.adapters!.build!.execute({ id: "55555555-5555-4555-8555-555555555555", ownerKey, projectId: "asistente", kind: "build", key: `${discover.id}.next`, payload: { previousJobId: discover.id, repairAttempts: 0 }, reservedCents: 2, recoveryCents: 0, month: "2026-11", status: "running", createdAt: at.toISOString() } as any, { signal: signal(), maxCostCents: 2 });
     assert.equal(built.reason, "FACTORY_DAILY_DRAFT_PR_LIMIT"); assert.equal(built.costCents, 0);
