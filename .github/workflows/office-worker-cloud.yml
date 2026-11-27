@@ -129,6 +129,8 @@ jobs:
           DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
           OPENAI_API_KEY: ${{ secrets.OFFICE_OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.OFFICE_GITHUB_TOKEN }}
+          # Restricted read-only Stripe key (rk_) for control/revenue roles; never the live sk_ key.
+          STRIPE_READONLY_KEY: ${{ secrets.STRIPE_READONLY_KEY }}
           # Read-only KONG operations/city evidence for the council's KONG rounds (same token as the web app).
           KONG_OFFICE_READ_TOKEN: ${{ secrets.KONG_OFFICE_READ_TOKEN }}
           OFFICE_EXPECTED_WEB_REVISION: ${{ vars.OFFICE_EXPECTED_WEB_REVISION }}

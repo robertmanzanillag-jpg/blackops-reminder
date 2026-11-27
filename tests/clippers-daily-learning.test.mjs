@@ -373,6 +373,30 @@ test('actual TikTok response can prove owner and published time without fabricat
   assert.equal(observed.views, 42);
 });
 
+test('published post missing from the scheduler list is attributed from analytics only on a unique title+time match', async () => {
+  const item = { id: 'fb1', metricoolId: 'mc-gone', caption: 'Ibai pierde la cabeza en directo\n#clips', mediaUrl: 'https://drive.google.com/uc?id=x',
+    scheduledAt: '2026-11-18T16:30:00.000Z' };
+  const postUrl = 'https://www.tiktok.com/@streamersclips/video/777';
+  const row = (id, min) => ({ videoId: id, shareUrl: postUrl.replace('777', id), createTime: Date.parse(item.scheduledAt) / 1000 + min * 60,
+    videoDescription: 'Ibai pierde la cabeza en directo #clips', viewCount: 9 });
+  const make = rows => createPortfolioMetricool({ token, userId: 12, fetcher: async (resource) => {
+    const u = new URL(resource);
+    if (u.pathname.endsWith('/simpleProfiles')) return Response.json([{ id: target.brandId, tiktok: target.account, ownerUserId: 12, isShared: false }]);
+    if (u.pathname.includes('/scheduler/')) return Response.json({ data: [] });
+    if (u.pathname.includes('/analytics/')) return Response.json({ data: rows });
+    assert.fail('unexpected request');
+  } });
+  const one = make([row('777', 2), { ...row('888', 90) }]);
+  const post = await one.publication(target, item, days(1));
+  assert.equal(post.id, '777'); assert.equal(post.source, 'metricool_post_analytics_match');
+  assert.equal((await one.metrics(target, post, days(1))).views, 9);
+  const two = make([row('777', 2), row('778', 5)]);
+  assert.equal(await two.publication(target, item, days(1)), null);
+  assert.equal(two.lastObservationMiss, 'scheduler_row_missing');
+  const other = make([{ ...row('777', 2), videoDescription: 'otro clip' }]);
+  assert.equal(await other.publication(target, item, days(1)), null);
+});
+
 test('brand settings fallback is only for omitted identities; conflicts never become authorized', async () => {
   for (const connected of [undefined, null, false, { username: target.account, connected: false }, 'other-account']) {
     let mcpReads = 0;

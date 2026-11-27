@@ -45,7 +45,7 @@ export function parseRoleWork(value:unknown,owner:string):RoleWorkState {
  return {version:1,ownerKey:parsed.ownerKey,jobs};
 }
 
-export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof createAgentCouncil>,"updateOfficeExecution">;owner:string;read:(role:SqlAuditRole)=>Promise<RoleSnapshot>;readGithub?:(role:GithubAuditRole)=>Promise<RoleSnapshot>;readWeb?:(role:WebSourceRole)=>Promise<WebRoleSource|null>;now?:()=>number;shouldStop?:()=>boolean}) {
+export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof createAgentCouncil>,"updateOfficeExecution">;owner:string;read:(role:SqlAuditRole)=>Promise<RoleSnapshot>;readGithub?:(role:GithubAuditRole)=>Promise<RoleSnapshot>;readStripe?:(role:"control"|"revenue")=>Promise<RoleSnapshot>;readWeb?:(role:WebSourceRole)=>Promise<WebRoleSource|null>;now?:()=>number;shouldStop?:()=>boolean}) {
  const now=options.now || Date.now;
  return {async tick(){
   for(const role of PENDING_OFFICE_ROLES){
@@ -82,10 +82,11 @@ export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof cre
    };
    const webMode=!!options.readWeb && WEB_SOURCE_ROLES.includes(role as WebSourceRole);
    const githubMode=!!options.readGithub && GITHUB_AUDIT_ROLES.includes(role as GithubAuditRole);
+   const stripeMode=!!options.readStripe && (role==="control" || role==="revenue");
    if(SQL_AUDIT_ROLES.includes(role as SqlAuditRole) || githubMode){
     try {
      if(options.shouldStop?.() || now()>=Date.parse(job.expiresAt))throw new Error("Read not admitted");
-     source=await readWithinLease(()=>githubMode?options.readGithub!(role as GithubAuditRole):options.read(role as SqlAuditRole));
+     source=await readWithinLease(()=>githubMode?options.readGithub!(role as GithubAuditRole):stripeMode?options.readStripe!(role as "control"|"revenue"):options.read(role as SqlAuditRole));
      if(source.role!==role || Date.parse(source.observedAt)<start-30000)throw new Error("Source assignment mismatch");
      validateRoleSnapshot(source,options.owner,now());
     }catch{source=undefined;sourceFailed=true;}

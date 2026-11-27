@@ -1,4 +1,4 @@
-import {GITHUB_AUDIT_ROLES,PENDING_OFFICE_ROLES,SQL_AUDIT_ROLES,sourceDigest,validateRoleSnapshot,type GithubAuditRole,type PendingOfficeRole,type RoleSnapshot} from "./office-role-snapshots";
+import {STRIPE_AUDIT_ROLES,type StripeAuditRole,GITHUB_AUDIT_ROLES,PENDING_OFFICE_ROLES,SQL_AUDIT_ROLES,sourceDigest,validateRoleSnapshot,type GithubAuditRole,type PendingOfficeRole,type RoleSnapshot} from "./office-role-snapshots";
 export type RoleAudit={role:PendingOfficeRole;status:"completed"|"blocked";capability:string;scope:string;sourceDigest?:string;selected:number;total:number|null;completeCoverage:boolean;findings:Array<{code:string;recordIds:string[];detail:string}>;metrics:Record<string,number>;artifactId:string};
 const limits="Auditoría de registros guardados; no acredita ejecución comercial, conexión actual, entrenamiento ni promoción.";
 const blocked:Partial<Record<PendingOfficeRole,string>>={code:"Requiere PR/diff identificado y ejecutor de revisión",github:"Requiere repositorios registrados y lectura autorizada",news:"Requiere evidencia del editor existente; no iniciar otro publicador","news:ny-news":"Requiere evidencia del editor de Nueva York","news:miami-news":"Requiere evidencia del editor de Miami","blackroom-videos":"Requiere el worker externo y sus resultados",clippers:"Requiere fuentes y resultados del worker multimedia",dropshipping:"Requiere almacenamiento canónico de productos/proveedores; no usar archivos vacíos de la PC","marketing-cmo":"Requiere campañas y métricas auténticas por cliente"};
@@ -12,6 +12,7 @@ export function auditSavedRole(role:PendingOfficeRole,source:RoleSnapshot|undefi
  if(GITHUB_AUDIT_ROLES.includes(role as GithubAuditRole) && (source || options.sourceAttempted))return auditGithubRole(role as GithubAuditRole,source,owner,now);
  const result:Omit<RoleAudit,"artifactId">={role,status:"blocked",capability:`saved-record-audit:${role}:v1`,scope:limits,selected:0,total:null,completeCoverage:false,findings:[],metrics:{}};
  const finish=()=>({...result,artifactId:sourceDigest(result)});
+ if(source?.stripe!==undefined && source.role===role && STRIPE_AUDIT_ROLES.includes(role as StripeAuditRole))return auditStripeRole(role as StripeAuditRole,source,owner,now);
  if(!SQL_AUDIT_ROLES.includes(role as any)){result.findings.push({code:"CAPABILITY_UNAVAILABLE",recordIds:[],detail:blocked[role]!});return finish();}
  if(!source || source.role!==role){result.findings.push({code:"SOURCE_UNAVAILABLE",recordIds:[],detail:"No hay una lectura canónica verificada."});return finish();}
  const data=validateRoleSnapshot(source,owner,now);result.sourceDigest=data.sourceDigest;result.selected=data.rows.length;result.total=data.total;result.completeCoverage=data.rows.length===data.total;
@@ -83,6 +84,32 @@ function auditGithubRole(role:GithubAuditRole,source:RoleSnapshot|undefined,owne
   if(unreadable.length===read){result.findings=[{code:"REPOSITORIES_UNREADABLE",recordIds:unreadable.map(r=>r.id),detail:"Ningún repositorio registrado fue legible; revisar credencial y acceso."}];return finish();}
  }
  if(scope.truncated)result.findings.push({code:"PARTIAL_COVERAGE",recordIds:[],detail:`Lectura acotada (máx. 10 repositorios / 30 PR); cobertura parcial.`});
+ if(Object.values(result.metrics).some(v=>!Number.isFinite(v))){result.metrics={};result.findings=[{code:"INVALID_SOURCE_VALUES",recordIds:[],detail:"Datos inválidos impiden cálculos fiables."}];return finish();}
+ result.status="completed";return finish();
+}
+
+const stripeLimits="Lectura de solo consulta de Stripe (clave restringida): agregados de 30 días por negocio y moneda; no acredita conciliación bancaria, contabilidad ni ejecución comercial.";
+const stripeBlockDetail:Record<string,string>={STRIPE_KEY_MISSING:"Falta STRIPE_READONLY_KEY (clave restringida de solo lectura); no se usa la clave secreta de KONG.",STRIPE_KEY_NOT_RESTRICTED:"STRIPE_READONLY_KEY no es una clave restringida (rk_); se rechazó sin enviarla.",STRIPE_AUTH_REJECTED:"Stripe rechazó la clave (401).",STRIPE_PERMISSION_DENIED:"La clave restringida no tiene permiso de lectura para este recurso (403).",STRIPE_RATE_LIMITED:"Límite de tasa de Stripe; se reintentará en el próximo ciclo diario.",STRIPE_TIMEOUT:"Stripe no respondió a tiempo.",STRIPE_NETWORK_ERROR:"Error de red hacia api.stripe.com.",STRIPE_UPSTREAM_ERROR:"Stripe respondió con error de servidor.",STRIPE_RESPONSE_INVALID:"Respuesta de Stripe con forma inesperada."};
+/** Missing/rejected key -> blocked with SOURCE_MISSING/SOURCE_UNAVAILABLE (source-exempt: no career penalty). */
+function auditStripeRole(role:StripeAuditRole,source:RoleSnapshot,owner:string,now:number):RoleAudit {
+ const result:Omit<RoleAudit,"artifactId">={role,status:"blocked",capability:`stripe-read-audit:${role}:v1`,scope:stripeLimits,selected:0,total:null,completeCoverage:false,findings:[],metrics:{}};
+ const finish=()=>({...result,artifactId:sourceDigest(result)});
+ const data=validateRoleSnapshot(source,owner,now),scope=data.stripe!;
+ result.sourceDigest=data.sourceDigest;result.selected=data.rows.length;result.total=data.total;
+ if(scope.blocked){result.findings.push({code:scope.blocked==="STRIPE_KEY_MISSING"||scope.blocked==="STRIPE_KEY_NOT_RESTRICTED"?"SOURCE_MISSING":"SOURCE_UNAVAILABLE",recordIds:[],detail:`${scope.blocked}: ${stripeBlockDetail[scope.blocked]}`});return finish();}
+ result.completeCoverage=!scope.truncated;
+ const rows=data.rows as any[],add=(code:string,ids:string[],detail:string)=>result.findings.push({code,recordIds:ids,detail});
+ if(scope.truncated)add("PARTIAL_COVERAGE",[],"Lectura de Stripe truncada por límite de páginas; totales parciales.");
+ if(scope.livemode===false)add("STRIPE_TEST_MODE",[],"La clave es de modo prueba; no son ingresos reales.");
+ if(role==="revenue"){
+  if(!rows.length)add("NO_CHARGES_IN_WINDOW",[],"Stripe no registra cobros exitosos en los últimos 30 días.");
+  for(const r of rows){for(const k of ["charges","grossMinor","refundedMinor","feeMinor","netMinor"])result.metrics[`${k}:${r.business}:${r.currency}`]=r[k];
+   if(r.business==="unattributed")add("UNATTRIBUTED_REVENUE",[r.id],`${r.charges} cobros ${r.currency} sin metadata business=kong|blackroom; añadir metadata en Stripe para separarlos.`);
+   if(r.disputed>0)add("DISPUTED_CHARGES",[r.id],`${r.disputed} cobros en disputa (${r.business}, ${r.currency}).`);}
+ }else{
+  for(const r of rows){if(r.kind==="stripe_balance"){result.metrics[`availableMinor:${r.currency}`]=r.availableMinor;result.metrics[`pendingMinor:${r.currency}`]=r.pendingMinor;if(r.availableMinor<0)add("NEGATIVE_BALANCE",[r.id],`Saldo disponible negativo en ${r.currency}.`);}
+   else{result.metrics[`payouts:${r.status}:${r.currency}`]=r.payouts;result.metrics[`payoutMinor:${r.status}:${r.currency}`]=r.amountMinor;if(r.status==="failed")add("FAILED_PAYOUT",[r.id],`${r.payouts} payouts fallidos en ${r.currency}; revisar cuenta bancaria en Stripe.`);}}
+ }
  if(Object.values(result.metrics).some(v=>!Number.isFinite(v))){result.metrics={};result.findings=[{code:"INVALID_SOURCE_VALUES",recordIds:[],detail:"Datos inválidos impiden cálculos fiables."}];return finish();}
  result.status="completed";return finish();
 }

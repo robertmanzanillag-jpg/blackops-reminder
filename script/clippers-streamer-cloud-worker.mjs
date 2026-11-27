@@ -34,6 +34,7 @@ import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW
 import { emptyCloudPublish, cloudPublishOf, mediaEntriesOf, isProtectedMediaClaim, retainLegacyUncertainReservation, legacyUncertainAttemptKey, upsertMediaLedgerClaim } from '../shared/clippers-media-ledger.mjs';
 import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS, resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE, normalizeLanguage, SERVED_LANGUAGES } from '../shared/clippers-account-lanes.mjs';
 
+const LATE_OBSERVATION_MAX_HOURS = 168;
 const HOUR = 3_600_000;
 const MAX_POSTS = 600;
 const real = v => typeof v === 'string' && v.trim().length > 0 && !/^(replace|paste|your-|<|changeme)/i.test(v.trim());
@@ -573,11 +574,16 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           }
         } else if (post.status === 'scheduled' && post.metricoolId && !post.observation) {
           const age = (now - Date.parse(post.scheduledAt)) / HOUR;
-          if (age < OBSERVATION_WINDOW.minHours || age >= OBSERVATION_WINDOW.maxHours) continue;
+          // Learning only ranks 24-48 h observations; a post missed in that window is still observed late (<= 7 days)
+          // so office clip_metrics gets its real numbers (learning ignores ageHours >= 48 by design).
+          if (age < OBSERVATION_WINDOW.minHours || age >= LATE_OBSERVATION_MAX_HOURS) continue;
+          const missed = reason => { const k = `observationMiss_${reason || 'unknown'}`; report.counts[k] = (report.counts[k] ?? 0) + 1; };
+          metricool.lastObservationMiss = undefined;
           const publication = await metricool.publication(post.destination, post, new Date(now));
-          if (!publication) continue;
+          if (!publication) { missed(metricool.lastObservationMiss); continue; }
+          metricool.lastObservationMiss = undefined;
           const metrics = await metricool.metrics(post.destination, publication, new Date(now));
-          if (!metrics) continue;
+          if (!metrics) { missed(metricool.lastObservationMiss); continue; }
           const ageHours = (Date.parse(metrics.observedAt) - Date.parse(publication.publishedAt)) / HOUR;
           await update((s, c) => { const p = c.posts.find(x => x.id === post.id); if (p) p.observation = { views: metrics.views, completionRate: metrics.completionRate, likes: metrics.likes ?? null, comments: metrics.comments ?? null, shares: metrics.shares ?? null, saves: metrics.saves ?? null, observedAt: metrics.observedAt, publishedAt: publication.publishedAt, platformPostId: publication.id, ageHours: Math.round(ageHours * 100) / 100 }; });
           report.counts.observed++;

@@ -350,6 +350,20 @@ test('learning loop: reads Metricool analytics 24-48 h after the slot and stores
   assert.equal(store.state.cloudPublish.learning.samples, 1);
 });
 
+test('learning loop: a post missed in 24-48 h is still observed late for office metrics (not ranked); misses report a reason', async () => {
+  const mk = (id, h) => ({ ...postItem({ candidate: candidate(id, 'twitch:100', 'thegrefg'), destination: DESTINATIONS[0], scheduledAt: new Date(NOW - h * 3600_000).toISOString(), caption: 'c', mediaUrl: 'u', mediaSha256: 'a'.repeat(64), hookVariant: 'title' }), status: 'scheduled', metricoolId: `mc-${id}` });
+  const store = memoryStore(baseState([], { cloudPublish: { version: 1, clips: {}, posts: [mk('late', 80), mk('gone', 200)], learning: null, lastRun: null } }));
+  const m = fakeMetricool();
+  const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({}), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia() });
+  assert.equal(report.counts.observed, 1);
+  assert.equal(store.state.cloudPublish.posts[0].observation.views, 1234);
+  assert.ok(!store.state.cloudPublish.posts[1].observation, 'older than 7 days is not read');
+  const m2 = fakeMetricool(); m2.publication = async function () { this.lastObservationMiss = 'public_url_missing'; return null; };
+  const store2 = memoryStore(baseState([], { cloudPublish: { version: 1, clips: {}, posts: [mk('x', 30)], learning: null, lastRun: null } }));
+  const r2 = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store: store2, approvals: approvals({}), metricool: m2, stager: fakeStager(), fetch: okFetch, ...fakeMedia() });
+  assert.equal(r2.report.counts.observationMiss_public_url_missing, 1);
+});
+
 test('GitHub release stager: creates the staging release once, uploads, deletes', async () => {
   const calls = [];
   const fetch = async (url, init = {}) => {
