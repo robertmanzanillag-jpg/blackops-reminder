@@ -540,7 +540,8 @@ test("two instances never send the same proposal to the Trust Center twice", asy
   const state = parseCouncilState(shared.raw());
   assert.equal(state.proposals[0].status, "submitted");
   assert.equal(state.proposals[0].pendingActionId, "pa-1", "the id that was created is the one saved");
-  assert.equal(state.company.orders.length, 2, "orders placed meanwhile are kept");
+  assert.equal(state.company.orders.filter(o => !o.text.startsWith("Skills Scout:")).length, 2, "orders placed meanwhile are kept");
+  assert.equal(state.company.orders.filter(o => o.text.startsWith("Skills Scout:")).length, 1, "risky skill fix becomes one factory order");
   // Next round (after the gap) reads the saved id and does not submit again.
   a.tick(MIN_CYCLE_GAP_MS + 1000);
   await first.runCycle();

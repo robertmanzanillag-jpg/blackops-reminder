@@ -45,6 +45,8 @@ export type AgentCareer = {
   efficiency?: import("./agent-self-improvement").AgentEfficiency;
   /** Bounded prompt/context shrink applied automatically from the efficiency trend. */
   tuning?: import("./agent-self-improvement").EfficiencyTuning;
+  /** Points at the first council round of each UTC day (shared/agent-journal.ts). */
+  pointsDaily?: Array<{ day: string; points: number }>;
 };
 
 export type SkillSource = "academia" | "orden" | "leccion";
