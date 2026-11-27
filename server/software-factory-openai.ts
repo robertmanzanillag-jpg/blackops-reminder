@@ -1,4 +1,3 @@
-import {createHash} from "node:crypto";
 import {FactoryApiBudgetError,factoryApiPriceSchema,type FactoryApiPrice} from "./factory-api-invocation";
 import {factoryTextMaximumMicroUsd,factoryTextActualMicroUsd,requireFactoryCacheWritePrice} from "./factory-api-token-cost";
 import {readOpenAiCacheUsage,validateTextOutputTokenDetails,factoryResponseModelMatches,factoryUnconfirmedSubCause,logFactoryResponseShape,failFactoryOpenAiHttpResponse,isFactoryOpenAiRequestRejected,FACTORY_OPENAI_REQUEST_REJECTED_PATTERN} from "./factory-api-cache-usage";
@@ -86,8 +85,7 @@ export function createOpenAiFactoryTextProvider(config:{
    submitted=true;
    // background/truncation are omitted: the API defaults are false/"disabled",
    // and the Factory monetary gate prices only its reviewed field allow-list.
-   // Stable prompt_cache_key per instructions: repeated stages share the cached prefix (billed at the cached rate, already priced).
-   const response=await post("",{...prompt,max_output_tokens:input.maxOutputTokens,store:false,tools:[],stream:false,service_tier:"default",prompt_cache_key:factoryPromptCacheKey(input.instructions)},byteLimit);
+   const response=await post("",{...prompt,max_output_tokens:input.maxOutputTokens,store:false,tools:[],stream:false,service_tier:"default"},byteLimit);
    received=response;
    const usage=response?.usage;
    if(response?.service_tier!==undefined&&response.service_tier!=="default")throw Error("SERVICE_TIER_UNPRICED");
@@ -136,6 +134,3 @@ export function createOpenAiFactoryTextProvider(config:{
   finally{clearTimeout(timer);input.signal.removeEventListener("abort",abort);}
  };
 }
-
-/** Provider prompt-cache routing key: same instructions -> same key (no prompt text leaves in it). */
-export function factoryPromptCacheKey(instructions:string):string{return `bo-factory-${createHash("sha256").update(instructions).digest("hex").slice(0,32)}`;}

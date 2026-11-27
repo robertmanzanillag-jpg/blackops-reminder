@@ -251,7 +251,8 @@ test("council round: every agent gets a vida row, cloud Clippers work recovers i
   assert.equal(publicCompany.careers["clippers-streamers"].vitality.creditedIds, undefined, "receipt ledger is not served");
   const state = parseCouncilState(stored);
   assert.ok((state.company.careers["clippers-editor"].skills || []).some(s => s.source === "academia"));
-  assert.ok(submitted.some(p => p.key.startsWith("automejora:clippers-hook:")), "automejora goes to the Trust Center");
+  assert.ok(state.proposals.some(p => p.key.startsWith("automejora:clippers-hook:") && p.status === "applied"), "low-risk automejora applies itself (shared/skill-auto-apply.ts)");
+  assert.ok(state.lessons.some(l => l.key.startsWith("automejora:clippers-hook:")), "applied automejora is an active lesson");
 });
 
 test("clock-only evidence (already scored elsewhere) restarts the clock without extra vida", () => {

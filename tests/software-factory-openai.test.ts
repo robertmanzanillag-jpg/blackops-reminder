@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createOpenAiFactoryTextProvider,factoryPromptCacheKey} from "../server/software-factory-openai";
+import {createOpenAiFactoryTextProvider} from "../server/software-factory-openai";
 const model="fixture-model-2026-11-01";
 const apiPrice={model,inputNanoUsdPerToken:1000,outputNanoUsdPerToken:4000,cachedInputNanoUsdPerToken:100,cacheWrite30mNanoUsdPerToken:1250,cacheWrite12hNanoUsdPerToken:2000, maxInputTokens:1_049_600,validUntil:"2026-12-01T00:00:00Z",evidenceSha256:"a".repeat(64)};
 const config={model,apiPrice,inputNanoUsdPerToken:1000,outputNanoUsdPerToken:4000,pricingValidUntil:"2026-12-01T00:00:00Z",now:()=>new Date("2026-11-06T00:00:00Z"),maxInputTokens:10000};
@@ -14,7 +14,7 @@ test("counts identical prompt before bounded stateless generation and rounds cos
  assert.deepEqual(await generate(input()),{status:"completed",text:"verified text",costCents:1,inputTokens:100,outputTokens:20});
  assert.deepEqual(calls.map(c=>c.url),["https://api.openai.com/v1/responses/input_tokens","https://api.openai.com/v1/responses"]);
  assert.deepEqual(calls[0].body,{model,instructions:"Review synthetic code",input:"fixture"});
- assert.deepEqual(calls[1].body,{...calls[0].body,max_output_tokens:100,store:false,tools:[],stream:false,service_tier:"default",prompt_cache_key:factoryPromptCacheKey("Review synthetic code")});
+ assert.deepEqual(calls[1].body,{...calls[0].body,max_output_tokens:100,store:false,tools:[],stream:false,service_tier:"default"});
 });
 test("worst-case output reservation blocks generation even when likely output is cheap",async()=>{
  let calls=0;const generate=createOpenAiFactoryTextProvider({...config,outputNanoUsdPerToken:1000000,apiPrice:{...apiPrice,outputNanoUsdPerToken:1000000},request:async()=>{calls++;return count();}});
@@ -110,11 +110,4 @@ test("documented Responses body with unsplit cache writes and reasoning tokens s
  const outcome=await generate({...input(),maxCostCents:5});
  // 100*2000 (12h write) + 20*4000 = 280000 nano = 280 micro -> 1 cent (rounded up); 30m rate would be lower.
  assert.deepEqual(outcome,{status:"completed",text:"verified text",costCents:1,inputTokens:100,outputTokens:20});
-});
-
-test("prompt cache key is stable per instructions and carries no prompt text",()=>{
- const a=factoryPromptCacheKey("Review synthetic code");
- assert.equal(a,factoryPromptCacheKey("Review synthetic code"));
- assert.notEqual(a,factoryPromptCacheKey("other"));
- assert.match(a,/^bo-factory-[0-9a-f]{32}$/);
 });
