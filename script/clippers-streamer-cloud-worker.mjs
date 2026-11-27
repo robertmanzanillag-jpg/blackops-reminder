@@ -19,6 +19,7 @@
 // Dry runs never write state. State: agent_council_state `clippers-streamers:<owner>` -> cloudPublish.
 import { createPublishingClient } from './social-publishing/provider.mjs';
 import { createHash } from 'node:crypto';
+import { seriesKeyOf } from '../shared/clippers-fair-queue.mjs';
 import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -27,7 +28,7 @@ import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption
 import { sourceRightsGate, rightsDestinationDetail } from '../shared/clippers-source-authorization.mjs';
 import { autoApproveConfig, autoApprovalDecision, applyStreamerRequirements, blocklistFromTakedowns, autoApprovedToday, recordAutoApproval, autoApprovalSummary, detectStreamerRequirements, ownerDefaultPolicyGrant, recordOwnerDefaultGrant, revokeOwnerDefaultGrants } from '../shared/clippers-auto-approval.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
-import { DESTINATIONS, destinationKey, findDestination, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, findDestination, TIME_ZONE, localDay, localHour, canonicalDestinationKey, tiktokTitle } from './clippers-portfolio-metricool.mjs';
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText, detectSpeechLanguage, whisperConfigured } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
@@ -338,6 +339,36 @@ export function laneSortWeight(state, ledger, candidate, now) {
   return Math.max(...lane.destinations.map(d => growthWeight(ledger?.growth, { destinationKey: destinationKey(d), creatorKey: candidate.creatorKey, streamKey: streamKeyOf(candidate) }, now).weight));
 }
 
+/** Read-only: account analytics for each configured destination -> per-post observations + per-series stats. */
+export async function observeBrandPosts({ metricool, destinations = [], now, report }) {
+  const byDestination = {}, byId = new Map(), all = [];
+  let ok = 0;
+  for (const d of destinations) {
+    const key = destinationKey(d);
+    try {
+      const r = await metricool.accountAnalytics(d, new Date(now));
+      const posts = (Array.isArray(r?.posts) ? r.posts : []).filter(p => p?.id && Number.isSafeInteger(p.views)).slice(0, 100)
+        .map(p => ({ id: String(p.id), publishedAt: p.publishedAt, observedAt: p.observedAt, views: p.views, completionRate: p.completionRate ?? null,
+          likes: p.likes ?? null, comments: p.comments ?? null, shares: p.shares ?? null, saves: p.saves ?? null, series: seriesKeyOf(p.text) }));
+      byDestination[key] = { observedAt: iso(now), posts };
+      const texts = new Map((r.posts ?? []).map(x => [String(x?.id), String(x?.text ?? '')]));
+      for (const p of posts) { byId.set(`${key}:${p.id}`, p); all.push({ ...p, key, text: texts.get(p.id) ?? '' }); }
+      ok++;
+    } catch (e) { report.heldReasons.push(`brand_analytics:${d.brandId}:${code(e)}`); }
+  }
+  const series = {};
+  for (const [k, v] of Object.entries(byDestination)) series[k] = seriesPerformanceFromKeys(v.posts);
+  report.counts.observedBrand = all.length;
+  return { destinations: ok, byDestination, byId, series, all };
+}
+function seriesPerformanceFromKeys(posts) {
+  const groups = {};
+  for (const p of posts) (groups[p.series] ??= []).push(p.views);
+  const out = {};
+  for (const [k, v] of Object.entries(groups)) { const s = [...v].sort((a, b) => a - b), m = Math.floor(s.length / 2); out[k] = { posts: s.length, medianViews: s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }; }
+  return out;
+}
+
 /** Read-only growth pass: Metricool account analytics + best-time -> computeGrowth (stored in the ledger). */
 export async function refreshGrowth({ metricool, ledger, now, report, override = new Set() }) {
   const accountPosts = {}, bestTimes = { ...(ledger.bestTimes ?? {}) };
@@ -572,7 +603,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             });
             if(changed)report.counts.reconciled++;
           }
-        } else if (post.status === 'scheduled' && post.metricoolId && !post.observation) {
+        } else if (post.status === 'scheduled' && post.metricoolId && !post.observation && !post.observationGaveUp) {
           const age = (now - Date.parse(post.scheduledAt)) / HOUR;
           // Learning only ranks 24-48 h observations; a post missed in that window is still observed late (<= 7 days)
           // so office clip_metrics gets its real numbers (learning ignores ageHours >= 48 by design).
@@ -580,7 +611,16 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           const missed = reason => { const k = `observationMiss_${reason || 'unknown'}`; report.counts[k] = (report.counts[k] ?? 0) + 1; };
           metricool.lastObservationMiss = undefined;
           const publication = await metricool.publication(post.destination, post, new Date(now));
-          if (!publication) { missed(metricool.lastObservationMiss); continue; }
+          if (!publication) {
+            // Not in the calendar and not in account analytics: the clip never reached the queue (e.g. the day was
+            // already full). That is not an observation miss; stop expecting it once the window has passed.
+            if (metricool.lastObservationMiss === 'scheduler_row_missing') {
+              report.counts.observationSkipped_not_in_calendar = (report.counts.observationSkipped_not_in_calendar ?? 0) + 1;
+              if (age >= OBSERVATION_WINDOW.maxHours) await update((s, c) => { const p = c.posts.find(x => x.id === post.id); if (p && !p.observation) p.observationGaveUp = { at: iso(now), reason: 'not_in_calendar' }; });
+              continue;
+            }
+            missed(metricool.lastObservationMiss); continue;
+          }
           metricool.lastObservationMiss = undefined;
           const metrics = await metricool.metrics(post.destination, publication, new Date(now));
           if (!metrics) { missed(metricool.lastObservationMiss); continue; }
@@ -591,7 +631,31 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       } catch (e) { report.heldReasons.push(`metricool_read:${code(e)}`); }
     }
   }
-  const learning = await update((s, c) => (c.learning = computeLearning(c.posts, { now })));
+  // One account-analytics read per destination per run, shared by brand observation and the growth loop.
+  const analyticsMemo = new Map();
+  const analyticsOnce = metricool?.accountAnalytics ? { ...metricool, accountAnalytics: (d, at) => {
+    const k = destinationKey(d); if (!analyticsMemo.has(k)) analyticsMemo.set(k, metricool.accountAnalytics(d, at)); return analyticsMemo.get(k); } } : metricool;
+  // 1a) Brand-wide observation: every published post on the configured accounts (streamer clips and other series,
+  // e.g. the manual "Serie educativa" batch) is matched by provider id and measured from account analytics.
+  if (metricool?.accountAnalytics && !config.missing.length) {
+    const brand = await observeBrandPosts({ metricool: analyticsOnce, destinations: config.destinations, now, report });
+    if (brand.destinations) await update((s, c) => {
+      c.brandObservations = brand.byDestination;
+      c.seriesPerformance = brand.series;
+      for (const p of c.posts) {
+        if (p.observation || p.status !== 'scheduled') continue;
+        const dk = canonicalDestinationKey(p.destinationKey ?? '');
+        const title = tiktokTitle(p.caption).replace(/…$/, '').trim(), slot = Date.parse(p.scheduledAt);
+        const near = title.length >= 8 && Number.isFinite(slot) ? brand.all.filter(b => b.key === dk && b.text.includes(title) && Math.abs(Date.parse(b.publishedAt) - slot) <= 20 * 60_000) : [];
+        const hit = brand.byId.get(`${dk}:${p.platformPostId ?? ''}`) ?? (near.length === 1 ? near[0] : null);
+        if (!hit) continue;
+        const ageHours = Math.round(((Date.parse(hit.observedAt) - Date.parse(hit.publishedAt)) / HOUR) * 100) / 100;
+        p.observation = { views: hit.views, completionRate: hit.completionRate ?? null, likes: hit.likes ?? null, comments: hit.comments ?? null, shares: hit.shares ?? null, saves: hit.saves ?? null, observedAt: hit.observedAt, publishedAt: hit.publishedAt, platformPostId: hit.id, ageHours, source: 'metricool_account_analytics' };
+        report.counts.observed++;
+      }
+    });
+  }
+  const learning = await update((s, c) => (c.learning = { ...computeLearning(c.posts, { now }), seriesPerformance: c.seriesPerformance ?? {} }));
 
   // 1b) Owner-action holds (e.g. Facebook "Confirm your identity"): read-only provider probe, one per network.
   if (metricool?.providerHealth && !config.missing.length) {
@@ -740,7 +804,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const cur = cloudPublishOf(parseStreamerState(await store.read(ns)));
     if (growthOnly || !cur.growth?.evaluatedAt || now - Date.parse(cur.growth.evaluatedAt) >= config.growthIntervalMs) {
       try {
-        const { growth, bestTimes } = await refreshGrowth({ metricool, ledger: cur, now, report, override: config.autopublishOverride });
+        const { growth, bestTimes } = await refreshGrowth({ metricool: analyticsOnce, ledger: cur, now, report, override: config.autopublishOverride });
         await update((s, c) => { c.growth = growth; c.bestTimes = bestTimes; });
         report.growth = { accounts: growth.accounts, decisions: growth.decisions.slice(0, 20) };
       } catch (e) { report.heldReasons.push(`growth:${code(e)}`); }
@@ -1064,7 +1128,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
               tried.add(at);
               // Metricool's day is already at the cap (drafts count, e.g. another pipeline's drafts): skip the whole day.
               if (e?.detail === 'daily_cap') fullDays.add(localDay(new Date(at)));
-              slotMiss = `${e?.detail ?? 'slot_duplicate_or_daily_cap'}${e?.detail === 'daily_cap' && Number.isFinite(e?.dayRows) ? `:${e.dayRows}/${e.dayLimit}` : ''}`;
+              slotMiss = `${e?.detail ?? 'slot_duplicate_or_daily_cap'}${e?.detail === 'daily_cap' && Number.isFinite(e?.dayRows) ? `:${e.dayRows}/${e.dayLimit}` : ''}${e?.seriesReason && e.seriesReason !== 'daily_cap' ? `:${e.seriesReason}` : ''}`;
               const freshPosts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
               const slotConfig = lanePick ? { ...config, slots: lanePick.slots, dailyCap: lanePick.dailyLimit } : config;
               at = nextSlot({ now: clock(), config: slotConfig, destination: p.destination, index: p.index, posts: freshPosts, skip: tried, skipDays: fullDays });

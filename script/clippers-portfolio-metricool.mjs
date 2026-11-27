@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 const API = 'https://app.metricool.com';
 const MCP = 'https://ai.metricool.com/mcp';
 export const TIME_ZONE = 'America/New_York';
+import { fairSlotDecision, seriesKeyOf, STREAMER_SERIES } from '../shared/clippers-fair-queue.mjs';
 export const DAILY_LIMIT = 5;
 // Per-account scale-up ceiling (cloud streamer lanes, weekly median >= 1k views). Callers opt in per item.
 export const SCALED_DAILY_LIMIT = 8;
@@ -336,14 +337,18 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       if (!findDestination(destination)) throw new Error('destination_not_allowlisted');
       const rows = await postAnalytics(destination, new Date(+now - 7 * 86400000).toISOString(), now);
       const posts = rows.slice(0, 200).flatMap(row => {
-        const post = exactPost(row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url, destination);
+        // Provider id fallback: TikTok analytics rows may carry only the numeric video id (no public URL).
+        const providerId = String(row.postId ?? row.videoId ?? row.id ?? '');
+        const post = exactPost(row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url, destination) ??
+          (destination.network === 'tiktok' && /^\d{15,25}$/.test(providerId) ? { id: providerId, url: `https://www.tiktok.com/@${destination.account}/video/${providerId}` } : null);
         const publishedAt = analyticsPublicationTime(row);
         const metric = metricsFrom(row, destination);
         const reported = row.observedAt ?? row.updatedAt;
         const providerAt = providerTimestamp(reported);
         if (!post || !publishedAt || !metric || Date.parse(publishedAt) > +now ||
             +now - Date.parse(publishedAt) > 7 * 86400000 || (reported != null && !providerAt) || (providerAt && Date.parse(providerAt) > +now)) return [];
-        return [{ ...post, publishedAt, ...metric, observedAt: providerAt ?? now.toISOString(),
+        const text = String(row.text ?? row.videoDescription ?? row.description ?? row.title ?? row.caption ?? '').slice(0, 300);
+        return [{ ...post, publishedAt, text, ...metric, observedAt: providerAt ?? now.toISOString(),
           timing: providerAt ? 'provider_observation_time' : 'retrieved_at_only',
           actualAgeHours: ((providerAt ? Date.parse(providerAt) : +now) - Date.parse(publishedAt)) / 3600000 }];
       }).filter(row => row.actualAgeHours >= 0);
@@ -360,10 +365,13 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       const contentDuplicate = rows.some(row => row.text === item.caption || providerMedia(row) === item.mediaUrl);
       const hourClash = rows.some(row => localHour(scheduledTime(row)) === localHour(item.scheduledAt));
       const limit = Number.isSafeInteger(item.dailyLimit) ? Math.max(1, Math.min(SCALED_DAILY_LIMIT, item.dailyLimit)) : DAILY_LIMIT;
-      if (contentDuplicate || hourClash || quotaRows.length >= limit) {
+      // Fair queue: one series gets at most its per-series share of the day; a full day names the series that holds it.
+      const fair = fairSlotDecision({ rows: quotaRows.map(row => ({ text: row.text })), cap: limit, series: item.series ?? (item.candidateId ? STREAMER_SERIES : seriesKeyOf(item.caption)) });
+      if (contentDuplicate || hourClash || quotaRows.length >= limit || !fair.ok) {
         // Same public code for every caller; `detail` tells the streamer worker to stop (content), skip the day (cap) or try another hour.
         const e = new Error('metricool_slot_duplicate_or_daily_cap');
-        e.detail = contentDuplicate ? 'slot_duplicate_content' : quotaRows.length >= limit ? 'daily_cap' : 'slot_duplicate';
+        e.detail = contentDuplicate ? 'slot_duplicate_content' : quotaRows.length >= limit ? 'daily_cap' : !fair.ok ? 'daily_cap' : 'slot_duplicate';
+        e.seriesReason = fair.reason; e.seriesCounts = fair.counts;
         e.dayRows = quotaRows.length; e.dayLimit = limit; e.reservedDraftRows = rows.length - quotaRows.length;
         throw e;
       }
