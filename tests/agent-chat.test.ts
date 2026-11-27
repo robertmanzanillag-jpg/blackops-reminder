@@ -6,6 +6,23 @@ import { createAgentCouncil, emptyCouncilState } from "../server/agent-council";
 import { AgentChatModelError, createAgentChatService, createChatStorageThreadStore } from "../server/agent-chat";
 import { createAgentChatModel } from "../server/agent-chat-model";
 import { registerAgentChatRoutes } from "../server/agent-chat-routes";
+import { compactSkillBody } from "../server/claude-skill-bridge";
+
+test("skill bridge packs whole priority sections and cuts on line boundaries within the chat limit", () => {
+  const body = ["# Skill", "Intro line.", "## Rules", "- **Never** publish without approval.", "- PR-first.", "## Examples",
+    ...Array.from({ length: 40 }, (_, i) => `- example line number ${i} with some padding text`), "## Output", "Return a short plan."].join("\n");
+  const out = compactSkillBody(body, 900);
+  assert.ok(out.length <= 900, String(out.length));
+  assert.match(out, /- Never publish without approval\./);
+  assert.match(out, /## Output\nReturn a short plan\./);
+  assert.match(out, /Intro line\./);
+  assert.match(out, /\[Skill truncated for token budget\]$/);
+  const known = new Set(body.replace(/\*\*/g, "").split("\n"));
+  for (const line of out.split("\n")) {
+    if (line && !line.startsWith("[Skill truncated")) assert.ok(known.has(line), line);
+  }
+  assert.equal(compactSkillBody("## Rules\nshort", 900), "## Rules\nshort");
+});
 
 // ---------- Routing (Spanish / English) ----------
 const cases: Array<[string, string, "keep" | "handoff" | "answer", string]> = [

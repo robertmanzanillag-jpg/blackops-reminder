@@ -95,22 +95,36 @@ export function compactSkillBody(body: string, maxChars: number): string {
       const trimmed = line.trim();
       return trimmed && !trimmed.startsWith("!`") && !trimmed.startsWith("```");
     })
+    .map((line) => line.replace(/\*\*/g, "").replace(/(\S)[ \t]{2,}/g, "$1 ").trimEnd())
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
   if (cleaned.length <= maxChars) return cleaned;
 
-  const prioritySections = cleaned
-    .split(/(?=^##\s+)/m)
-    .filter((section) => /purpose|operating|rules|intent|workflow|output|routing|instructions/i.test(section.slice(0, 120)))
-    .join("\n\n")
-    .trim();
-
-  const candidate = prioritySections || cleaned;
-  return candidate.length <= maxChars
-    ? candidate
-    : `${candidate.slice(0, maxChars - 80).trim()}\n\n[Skill truncated for token budget]`;
+  const marker = "\n\n[Skill truncated for token budget]";
+  const budget = Math.max(0, maxChars - marker.length);
+  const isPriority = (section: string) => /purpose|operating|rules|intent|workflow|output|routing|instructions/i.test(section.slice(0, 120));
+  const sections = cleaned.split(/(?=^##\s+)/m).map((s) => s.trim()).filter(Boolean);
+  const ordered = [...sections.filter(isPriority), ...sections.filter((s) => !isPriority(s))];
+  let out = "";
+  for (const section of ordered) {
+    const sep = out ? "\n\n" : "";
+    if (out.length + sep.length + section.length <= budget) {
+      out += sep + section;
+      continue;
+    }
+    let partial = sep;
+    for (const line of section.split("\n")) {
+      const next = partial === sep ? partial + line : `${partial}\n${line}`;
+      if (out.length + next.length > budget) break;
+      partial = next;
+    }
+    if (partial !== sep) out += partial;
+    break;
+  }
+  if (!out.trim()) out = cleaned.slice(0, budget);
+  return `${out.trim()}${marker}`;
 }
 
 async function readClaudeSkills(): Promise<ClaudeSkill[]> {
