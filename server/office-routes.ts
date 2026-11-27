@@ -66,6 +66,19 @@ export function registerOfficeRoutes(app: Express, dependencies: {
       return res.json(buildOfficeRoster(await getAgentCouncil().load(), now()));
     } catch { return res.status(503).json({ error: "No se pudo leer el estado de los agentes." }); }
   });
+  // Bitácora diaria ("Notas"): what every agent did today vs yesterday, from persisted records only.
+  app.get("/api/agents-office/journal", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!owner(req, res)) return;
+    try {
+      const { getAgentCouncil } = await import("./agent-council");
+      const { buildOfficeRoster } = await import("./office-roster-status");
+      const { buildAgentJournal } = await import("../shared/agent-journal");
+      const state = await getAgentCouncil().load(), at = now();
+      const roster = buildOfficeRoster(state, at).agents.map(a => ({ id: a.id, name: a.name }));
+      return res.json(buildAgentJournal(state, at, {}, roster));
+    } catch { return res.status(503).json({ error: "No se pudo leer la bitácora de los agentes." }); }
+  });
   app.post("/api/agents-office/contact-action", async (req, res) => {
     const userId = owner(req, res);
     if (!userId) return;

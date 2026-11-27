@@ -344,9 +344,12 @@ export function councilDeskStatus(view: CouncilView | null, kind: "scout" | "fac
     if (!last) return { state: "checking", label: "Primera ronda pendiente", activity: ["Vigila releases publicos", "1 vez al dia, gratis"] };
     const stale = Date.now() - last > 26 * 3_600_000;
     const pending = view.proposals.filter((p) => p.owner === "skills-scout" && p.status === "submitted").length;
+    // Skills applied by the auto-apply step (shared/skill-auto-apply.ts) or approved by Robert.
+    const applied = view.proposals.filter((p) => (p.kind === "lesson" || p.kind === "skill_update") && p.status === "applied").length;
+    const appliedText = applied ? ` · ${applied} aplicadas` : "";
     return {
       state: stale ? "needs-setup" : "available",
-      label: stale ? "Ronda atrasada" : pending ? `${pending} mejoras propuestas` : "Skills al dia",
+      label: stale ? "Ronda atrasada" : pending ? `${pending} mejoras propuestas${appliedText}` : applied ? `Skills al dia${appliedText}` : "Skills al dia",
       detail: view.scout.error || undefined,
       activity,
     };

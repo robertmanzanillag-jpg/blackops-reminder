@@ -72,7 +72,7 @@ test("changed prompt, model, schema or reasoning receives no proof; exact prompt
 });
 
 test("generation proof requires all fixed stateless bounded fields",async()=>{
-  for(const change of [{store:true},{stream:true},{tools:[{type:"web_search"}]},{service_tier:"priority"},{max_output_tokens:0},{max_output_tokens:128001},{previous_response_id:"remote"}]){
+  for(const change of [{store:true},{stream:true},{tools:[{type:"web_search"}]},{service_tier:"priority"},{max_output_tokens:0},{max_output_tokens:128001},{previous_response_id:"remote"},{prompt_cache_key:"Has Spaces"},{prompt_cache_key:7}]){
     const f=fixture();await withFactoryApiParent(parent(),async()=>{await f.route(COUNT,init(prompt()));await f.route(GENERATE,init({...generation(),...change}));});assert.equal(f.proofs[0],undefined);
   }
 });

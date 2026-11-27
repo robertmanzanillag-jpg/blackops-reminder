@@ -6,7 +6,7 @@ import { FactoryApiBudgetError } from "./factory-api-invocation";
 const COUNT_URL = "https://api.openai.com/v1/responses/input_tokens";
 const GENERATE_URL = "https://api.openai.com/v1/responses";
 const COUNT_FIELDS = new Set(["model", "instructions", "input", "reasoning", "text"]);
-const GENERATE_FIELDS = new Set([...COUNT_FIELDS,"max_output_tokens","store","tools","stream","service_tier"]);
+const GENERATE_FIELDS = new Set([...COUNT_FIELDS,"max_output_tokens","store","tools","stream","service_tier","prompt_cache_key"]);
 const MAX_COUNT = 1_049_600, RECEIPT_TTL = 120_000;
 type Parent = { ownerKey: string; jobId: string; fence: string };
 type CountReceipt = { parent: Parent; promptSha256: string; inputTokens: number; obtainedAt: number; evidenceSha256: string };
@@ -31,7 +31,8 @@ function promptSha256(body: unknown, generation: boolean): string | undefined {
       (value.instructions!==undefined && typeof value.instructions!=="string")) return;
     if (generation && (!Number.isSafeInteger(value.max_output_tokens) || (value.max_output_tokens as number)<1 ||
       (value.max_output_tokens as number)>128000 || value.store!==false || value.stream!==false || value.service_tier!=="default" ||
-      !Array.isArray(value.tools) || value.tools.length!==0)) return;
+      !Array.isArray(value.tools) || value.tools.length!==0 ||
+      (value.prompt_cache_key!==undefined && (typeof value.prompt_cache_key!=="string" || !/^[a-z0-9-]{1,64}$/.test(value.prompt_cache_key))))) return;
     const prompt: Record<string,unknown>={};
     for (const key of COUNT_FIELDS) if(Object.hasOwn(value,key)) prompt[key]=value[key];
     return digest(JSON.stringify(prompt));

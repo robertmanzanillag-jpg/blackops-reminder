@@ -100,6 +100,8 @@ import {
 } from "@shared/agent-company";
 import { advanceBlackRoomAcademy, scheduleBlackRoomAcademy, BLACKROOM_ACADEMY_ROLES } from "@shared/blackroom-academy";
 import { applyVitality, closeStaleVitalityFlags, deriveVitalityFlagProposals, publicCareerVitality, vitalityView } from "@shared/agent-vitality";
+import { autoApplySkillImprovements } from "@shared/skill-auto-apply";
+import { stampPointsDaily } from "@shared/agent-journal";
 import { applyOutcomeLessons, collectOutcomeSamples, type CostTrend, clippersAcademyLessons, deriveSelfImprovementProposals, learnClippersLessons, pipelineHolds, roleWorkVitalityEvidence, stampSelfImprovementCooldowns, streamerVitalityEvidence } from "@shared/agent-self-improvement";
 import type { BlackRoomTeamLessonRule } from "@shared/blackroom-team";
 import { blackRoomCurriculumModules } from "./office-role-blackroom-curricula";
@@ -713,6 +715,11 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const automejora = deriveSelfImprovementProposals({ proposals: next.proposals, lessons: next.lessons, roleWorkJobs: next.officeExecution?.roleWork?.jobs, clippersLessons: next.clippersAcademy?.lessons, now, names: { ...kongNamesOf(next), ...AGENT_NAMES }, exempt: unscored, company: flags.company });
         const company = stampSelfImprovementCooldowns(flags.company, automejora, now);
         next = { ...next, company, proposals: closeStaleVitalityFlags(pruneProposals([...repairs, ...specialists, ...flags.proposals, ...automejora, ...next.proposals]), company, now) };
+        // Skills Scout: low-risk skill text applies itself (rollback on regression); risky doc fixes become one factory order a day.
+        { const ex = next.officeExecution;
+          const samples = collectOutcomeSamples({ roleWorkJobs: ex?.roleWork?.jobs, internalWorkJobs: ex?.internalWork?.jobs, deskWorkJobs: ex?.deskWork?.jobs, factoryLedger: ex?.factoryCareers });
+          next = autoApplySkillImprovements(next, samples, now, statuses as never).state;
+          next = { ...next, company: { ...next.company, careers: Object.fromEntries(Object.entries(next.company.careers).map(([id, c]) => [id, { ...c, pointsDaily: stampPointsDaily(c.pointsDaily, c.points, now) }])) } }; }
         wroteRound = true;
         return next;
       });
