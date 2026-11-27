@@ -82,6 +82,26 @@ export function providerTimestamp(value) {
   const date = new Date(value);
   return Number.isFinite(+date) ? date.toISOString() : null;
 }
+/** Lenient analytics time: ISO (with or without offset), compact yyyyMMddHHmmss (UTC, as requested), epoch s/ms, {dateTime,timezone}. */
+export function analyticsTimestamp(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (value.timezone && !['UTC', 'Etc/UTC', 'GMT'].includes(value.timezone)) return null;
+    return analyticsTimestamp(value.dateTime ?? value.date ?? null);
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) value = String(value);
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  let m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?$/.exec(v);
+  if (m) {
+    const [, y, mo, d, h, mi, se = '00'] = m;
+    const ms = Date.UTC(+y, +mo - 1, +d, +h, +mi, +se), t = new Date(ms);
+    return t.getUTCFullYear() === +y && t.getUTCMonth() === +mo - 1 && t.getUTCDate() === +d && t.getUTCHours() === +h && t.getUTCMinutes() === +mi && +y >= 2000 ? t.toISOString() : null;
+  }
+  if (/^\d{10}$/.test(v)) return new Date(+v * 1000).toISOString();
+  if (/^\d{13}$/.test(v)) return new Date(+v).toISOString();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(v)) return providerTimestamp(v.replace(' ', 'T').replace(/^(.{16})$/, '$1:00') + 'Z');
+  return providerTimestamp(v);
+}
 function list(value) {
   if (value?.hasMore || value?.next || value?.page?.next || value?.metadata?.next || value?.metadata?.hasMore || value?.pagination?.next || value?.meta?.next || value?.paging?.next ||
       (Number.isInteger(value?.total) && value.total > (value.data?.length ?? -1))) throw new Error('metricool_pagination_unverified');
@@ -153,10 +173,10 @@ function analyticsPost(row, destination, id) {
   return url ? post?.id === id : String(row.postId ?? row.videoId ?? '') === id;
 }
 function analyticsPublicationTime(row) {
-  if (Number.isSafeInteger(row.createTime) && row.createTime >= 1_000_000_000 && row.createTime < 10_000_000_000) {
-    return new Date(row.createTime * 1000).toISOString();
+  for (const v of [row.publishedAt, row.createTime, row.created, row.publicationDate, row.date, row.published]) {
+    const at = analyticsTimestamp(v); if (at) return at;
   }
-  return providerTimestamp(row.publishedAt ?? row.createTime);
+  return null;
 }
 function statusOf(row, destination) {
   return row.providers?.find(p => p.network === destination.network)?.status ?? row.status;
@@ -338,13 +358,13 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       const rows = await postAnalytics(destination, new Date(+now - 7 * 86400000).toISOString(), now);
       const posts = rows.slice(0, 200).flatMap(row => {
         // Provider id fallback: TikTok analytics rows may carry only the numeric video id (no public URL).
-        const providerId = String(row.postId ?? row.videoId ?? row.id ?? '');
+        const providerId = String(row.postId ?? row.videoId ?? row.providerId ?? row.id ?? '');
         const post = exactPost(row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url, destination) ??
           (destination.network === 'tiktok' && /^\d{15,25}$/.test(providerId) ? { id: providerId, url: `https://www.tiktok.com/@${destination.account}/video/${providerId}` } : null);
         const publishedAt = analyticsPublicationTime(row);
         const metric = metricsFrom(row, destination);
         const reported = row.observedAt ?? row.updatedAt;
-        const providerAt = providerTimestamp(reported);
+        const providerAt = analyticsTimestamp(reported);
         if (!post || !publishedAt || !metric || Date.parse(publishedAt) > +now ||
             +now - Date.parse(publishedAt) > 7 * 86400000 || (reported != null && !providerAt) || (providerAt && Date.parse(providerAt) > +now)) return [];
         const text = String(row.text ?? row.videoDescription ?? row.description ?? row.title ?? row.caption ?? '').slice(0, 300);

@@ -647,7 +647,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         const dk = canonicalDestinationKey(p.destinationKey ?? '');
         const title = tiktokTitle(p.caption).replace(/…$/, '').trim(), slot = Date.parse(p.scheduledAt);
         const near = title.length >= 8 && Number.isFinite(slot) ? brand.all.filter(b => b.key === dk && b.text.includes(title) && Math.abs(Date.parse(b.publishedAt) - slot) <= 20 * 60_000) : [];
-        const hit = brand.byId.get(`${dk}:${p.platformPostId ?? ''}`) ?? (near.length === 1 ? near[0] : null);
+        const urlId = /\/(?:video|videos|posts)\/(\d+)/.exec(String(p.publicUrl ?? p.publication?.url ?? ''))?.[1];
+        const hit = (p.platformPostId && brand.byId.get(`${dk}:${p.platformPostId}`)) || (urlId && brand.byId.get(`${dk}:${urlId}`)) || (near.length === 1 ? near[0] : null);
         if (!hit) continue;
         const ageHours = Math.round(((Date.parse(hit.observedAt) - Date.parse(hit.publishedAt)) / HOUR) * 100) / 100;
         p.observation = { views: hit.views, completionRate: hit.completionRate ?? null, likes: hit.likes ?? null, comments: hit.comments ?? null, shares: hit.shares ?? null, saves: hit.saves ?? null, observedAt: hit.observedAt, publishedAt: hit.publishedAt, platformPostId: hit.id, ageHours, source: 'metricool_account_analytics' };
