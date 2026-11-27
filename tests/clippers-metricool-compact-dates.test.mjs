@@ -32,3 +32,22 @@ test('accountAnalytics keeps @news305miami TikTok rows with compact dates', asyn
   assert.equal(r.posts[0].publishedAt, '2026-11-26T00:02:06.000Z');
   assert.equal(r.posts[0].observedAt, '2026-11-26T12:00:00.000Z');
 });
+
+test('accountAnalytics accepts live-shaped rows: shareurl with query + string counts', async () => {
+  const rows = [
+    { created: '20261124160512', shareurl: 'https://www.tiktok.com/@news305miami/video/7711769662740122911?utm_campaign=tt4d_open_api&utm_source=x', views: '87', likes: '3', description: 'Clip tres' },
+    { created: '20261124160000', shareurl: 'https://www.tiktok.com/@news305miami/video/7711769662740122000', views: '8.5', description: 'bad views' },
+  ];
+  const fetcher = async url => {
+    const u = String(url);
+    const body = u.includes('simpleProfiles') ? [{ id: 6591612, isShared: false, ownerUserId: '1', tiktokUsername: 'news305miami' }] : u.includes('/analytics/posts/tiktok') ? { data: rows } : [];
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const m = createPortfolioMetricool({ token: 'token-123456789', userId: '1', env: {}, fetcher });
+  const r = await m.accountAnalytics({ brandId: 6591612, network: 'tiktok', account: 'news305miami' }, new Date('2026-11-26T15:00:00Z'));
+  assert.equal(r.posts.length, 1);
+  assert.equal(r.posts[0].id, '7711769662740122911');
+  assert.equal(r.posts[0].views, 87);
+  assert.equal(r.posts[0].likes, 3);
+  assert.equal(r.posts[0].text, 'Clip tres');
+});

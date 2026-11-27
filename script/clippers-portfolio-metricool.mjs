@@ -168,7 +168,7 @@ async function verifiedMedia(fetcher, row, item) {
   return length > 0 && (!Number.isSafeInteger(item.byteLength)||length===item.byteLength) && hash.digest('hex') === item.mediaSha256 ? media : null;
 }
 function analyticsPost(row, destination, id) {
-  const url = row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url;
+  const url = row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.shareurl ?? row.url;
   const post = url ? exactPost(url, destination) : null;
   return url ? post?.id === id : String(row.postId ?? row.videoId ?? '') === id;
 }
@@ -191,12 +191,15 @@ export function confirmedNonPublishingDraft(row, network) {
 }
 function metricsFrom(row, destination) {
   const metrics = row.providers?.find(p => p.network === destination.network)?.metrics ?? row.metrics ?? row;
-  const views = metrics.views ?? metrics.videoViews ?? metrics.viewCount;
-  const completionRate = metrics.completionRate;
+  // Metricool analytics can report counts as numeric strings ("89"); accept only exact non-negative integers.
+  const int = v => typeof v === 'string' && /^\d{1,15}$/.test(v.trim()) ? Number(v.trim()) : v;
+  const views = int(metrics.views ?? metrics.videoViews ?? metrics.viewCount);
+  const rawRate = metrics.completionRate;
+  const completionRate = typeof rawRate === 'string' && /^\d+(?:\.\d+)?$/.test(rawRate.trim()) ? Number(rawRate) : rawRate;
   if (!Number.isSafeInteger(views) || views < 0 || (completionRate != null &&
       (!Number.isFinite(completionRate) || completionRate < 0 || completionRate > 1))) return null;
   // Optional engagement: only provider-reported non-negative integers (never invented).
-  const pick = (...keys) => { for (const k of keys) if (Number.isSafeInteger(metrics[k]) && metrics[k] >= 0) return metrics[k]; return null; };
+  const pick = (...keys) => { for (const k of keys) { const v = int(metrics[k]); if (Number.isSafeInteger(v) && v >= 0) return v; } return null; };
   return { views, completionRate: completionRate ?? null, likes: pick('likes', 'likeCount'), comments: pick('comments', 'commentCount'), shares: pick('shares', 'shareCount'), saves: pick('saves', 'saved', 'favorites') };
 }
 const schedulerId = row => String(row?.id ?? row?.uuid ?? '');
@@ -308,7 +311,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
     const slot = Date.parse(item.scheduledAt), title = tiktokTitle(item.caption).replace(/…$/, '').trim();
     if (!Number.isFinite(slot) || title.length < 8) return null;
     const rows = await postAnalytics(destination, new Date(slot - 3_600_000).toISOString(), now);
-    const hits = rows.map(row => ({ row, at: analyticsPublicationTime(row), url: row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url,
+    const hits = rows.map(row => ({ row, at: analyticsPublicationTime(row), url: row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.shareurl ?? row.url,
       text: String(row.text ?? row.videoDescription ?? row.description ?? row.title ?? row.caption ?? '') }))
       .filter(h => h.at && Math.abs(Date.parse(h.at) - slot) <= 20 * 60_000 && h.url && h.text.includes(title));
     if (hits.length !== 1) return null;
@@ -359,7 +362,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       const posts = rows.slice(0, 200).flatMap(row => {
         // Provider id fallback: TikTok analytics rows may carry only the numeric video id (no public URL).
         const providerId = String(row.postId ?? row.videoId ?? row.providerId ?? row.id ?? '');
-        const post = exactPost(row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url, destination) ??
+        const post = exactPost(row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.shareurl ?? row.url, destination) ??
           (destination.network === 'tiktok' && /^\d{15,25}$/.test(providerId) ? { id: providerId, url: `https://www.tiktok.com/@${destination.account}/video/${providerId}` } : null);
         const publishedAt = analyticsPublicationTime(row);
         const metric = metricsFrom(row, destination);
