@@ -92,7 +92,8 @@ export function buildPanelRows(input: {
       const agent = input.agents.get(id);
       if (!agent || seen.has(id)) continue;
       seen.add(id);
-      const status = agent.status;
+      // A desk whose probe has not answered yet still shows a status (never a blank or a crash).
+      const status: AgentLiveStatus = agent.status ?? { state: "checking", label: "Verificando..." };
       const kind = panelStatusKind(status);
       const career = input.careers[company][id];
       const rank = input.leaderboards[company].find(row => row.agentId === id);
