@@ -501,31 +501,35 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       return {id:String(row.id),uuid:String(row.uuid),mediaUrl:native,status:draft?'nonpublishing_draft':active&&disclosure?'scheduled':'unverified',commercialDisclosureVerified:disclosure,confirmedNonPublishingDraft:draft};
     },
     async publication(destination, item, now = new Date()) {
+      // lastObservationMiss: a reason code (no data) so the worker can report why an observation was not taken.
+      const miss = code => { this.lastObservationMiss = code; return null; };
       const rows = await schedule(destination, localDay(new Date(item.scheduledAt)));
       const matches = rows.filter(row => schedulerId(row) === item.metricoolId);
-      if (matches.length !== 1 || !matchingContent(matches[0], item, destination)) return null;
+      if (matches.length !== 1) return miss(matches.length ? 'scheduler_row_ambiguous' : 'scheduler_row_missing');
+      if (!matchingContent(matches[0], item, destination)) return miss('scheduler_content_mismatch');
       const row = matches[0];
       const target = row.providers.find(p => p.network === destination.network);
-      if (!['published', 'posted'].includes(String(statusOf(row, destination)).toLowerCase()) ||
-          !await verifiedMedia(fetcher, row, item)) return null;
-      const post = exactPost(target.publicUrl ?? row.publicUrl ?? row.publishedPostUrl, destination);
-      if (!post) return null;
+      if (!['published', 'posted'].includes(String(statusOf(row, destination)).toLowerCase())) return miss('not_published_yet');
+      if (!await verifiedMedia(fetcher, row, item)) return miss('media_unverified');
+      const post = exactPost(target?.publicUrl ?? row.publicUrl ?? row.publishedPostUrl, destination);
+      if (!post) return miss('public_url_missing');
       let publishedAt = providerTimestamp(target.publishedAt ?? row.publishedAt);
       if (!publishedAt) {
         const analytics = await postAnalytics(destination, new Date(Date.parse(item.scheduledAt) - 3_600_000).toISOString(), now);
         const matches = analytics.filter(row => analyticsPost(row, destination, post.id));
         if (matches.length === 1) publishedAt = analyticsPublicationTime(matches[0]);
       }
-      return publishedAt ? { ...post, publishedAt, source: 'metricool_scheduler' } : null;
+      return publishedAt ? { ...post, publishedAt, source: 'metricool_scheduler' } : miss('published_at_missing');
     },
     async metrics(destination, publication, now) {
       const rows = await postAnalytics(destination, publication.publishedAt, now);
       const matches = rows.filter(row => analyticsPost(row, destination, publication.id));
-      if (matches.length !== 1) return null;
+      if (matches.length !== 1) { this.lastObservationMiss = matches.length ? 'analytics_ambiguous' : 'analytics_row_missing'; return null; }
       const metric = metricsFrom(matches[0], destination);
       const reportedAt = matches[0].observedAt ?? matches[0].updatedAt;
       const providerObservedAt = providerTimestamp(reportedAt);
-      if (reportedAt != null && !providerObservedAt) return null;
+      if (reportedAt != null && !providerObservedAt) { this.lastObservationMiss = 'analytics_time_invalid'; return null; }
+      if (!metric) this.lastObservationMiss = 'analytics_views_missing';
       return metric ? { ...metric, observedAt: providerObservedAt ?? now.toISOString(),
         timing: providerObservedAt ? 'provider_observation_time' : 'retrieved_at_only', source: 'metricool_post_analytics' } : null;
     },
