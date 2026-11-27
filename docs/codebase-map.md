@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-25T23:08:47-05:00
+Generated: 2026-11-26T21:56:20-05:00
 Repo: `.`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1494 | 1369 | 5764 | 676 | 31976 |
+| 1507 | 1382 | 5822 | 682 | 32358 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,33 +28,34 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 415 | 410 | test:415 |
-| `server` | 318 | 311 | server:318 |
-| `script` | 171 | 154 | script:171 |
+| `tests` | 421 | 416 | test:421 |
+| `server` | 320 | 313 | server:320 |
+| `client/src` | 168 | 166 | client-component:56, ui-component:55, client-page:29, client-lib:21 |
+| `script` | 172 | 155 | script:172 |
 | `docs` | 96 | 93 | docs:96 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `shared` | 62 | 55 | shared:62 |
-| `client/src/components` | 38 | 38 | client-component:38 |
-| `client/src/pages` | 29 | 27 | client-page:29 |
-| `client/src/lib` | 21 | 21 | client-lib:21 |
+| `shared` | 65 | 58 | shared:65 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
-| `server/blackroom-team` | 12 | 12 | server:12 |
+| `server/blackroom-team` | 17 | 17 | server:17 |
+| `server/replit_integrations` | 9 | 9 | server:9 |
 | `server/social-hub` | 9 | 9 | server:9 |
-| `tests/fixtures` | 8 | 8 | test:8 |
-| `client/src/components/agents-world-office` | 7 | 7 | client-component:7 |
+| `tests/fixtures` | 11 | 9 | test:11 |
+| `script/office-api-budget-v6` | 10 | 8 | script:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
-| `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/social-publishing` | 5 | 5 | server:5 |
-| `script/office-api-budget-v6` | 6 | 4 | script:6 |
-| `script/office-api-budget-v6/files/server` | 4 | 4 | script:4 |
-| `server/replit_integrations/chat` | 4 | 4 | server:4 |
 | `tests/helpers` | 4 | 4 | test:4 |
-| `client/src` | 3 | 3 | other:3 |
+| `script/office-api-budget-v7-integrity` | 3 | 3 | script:3 |
+| `script/social-publishing` | 4 | 3 | script:4 |
+| `server/social-analytics` | 3 | 3 | server:3 |
+| `client/public` | 16 | 2 | other:16 |
+| `script/social-analytics` | 2 | 2 | script:2 |
+| `.agents/skills` | 2 | 1 | docs:1, other:1 |
+| `client` | 1 | 1 | other:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agent-chat`, `/agents-office`, `/agents-office/panel`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/social-hub`, `/tools`
+- `script/kong-invitations-ui-fixture.mjs`: `/`, `/api/agent-council/state`, `/api/agents-office/kong-invitations`, `/fixture.js`, `/fixture/mismatch`
 - `script/software-factory-office-ui-fixture.mjs`: `/api/agent-council/state`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/ceo/conversation-history`, `/api/legal-compliance/reports`, `/api/monthly-goals`
 - `server/agent-chat-routes.ts`: `/api/agent-chat/:agentId/messages`, `/api/agent-chat/:agentId/threads`, `/api/agent-chat/:agentId/threads/:threadId`, `/api/agent-chat/agents`, `/api/agent-chat/handoffs`
 - `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/internal-work`, `/api/agent-council/run`, `/api/agent-council/state`, `/api/agents-office/kong-invitations`
@@ -75,7 +76,7 @@ Package: `rest-express`
 - `server/marketing-learning-routes.ts`: `/api/marketing-command-center`, `/api/marketing-command-center/run-day`
 - `server/office-business-routes.ts`: `/api/agents-office/${route.path}`
 - `server/office-review-benchmarks.ts`: `/diagnostics`, `/notes`, `/profile`, `/projects/:id`, `/report`, `/users/:id`
-- `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/roster-status`, `/api/agents-office/runs`, `/api/agents-office/verification`
+- `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/journal`, `/api/agents-office/kong-snapshot`, `/api/agents-office/roster-status`, `/api/agents-office/runs`, `/api/agents-office/verification`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
 - `server/revenue-stripe-routes.ts`: `/api/stripe/revenue-readiness`, `/api/stripe/revenue-webhook`
@@ -117,6 +118,7 @@ Package: `rest-express`
 - `tests/agent-council-store.test.ts`
 - `tests/agent-council.test.ts`
 - `tests/agent-efficiency.test.ts`
+- `tests/agent-journal.test.ts`
 - `tests/agent-live-status.test.ts`
 - `tests/agent-outcome-learning.test.ts`
 - `tests/agent-vitality.test.ts`
@@ -272,6 +274,7 @@ Package: `rest-express`
 - `tests/office-capability-training.test.ts`
 - `tests/office-career-reconciliation.test.ts`
 - `tests/office-central-panel.test.ts`
+- `tests/office-ceo-remedy.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
@@ -312,6 +315,7 @@ Package: `rest-express`
 - `tests/office-shared-credits.test.ts`
 - `tests/office-source-documents.test.ts`
 - `tests/office-status.test.ts`
+- `tests/office-stripe-role-source.test.ts`
 - `tests/office-token-budget.test.ts`
 - `tests/office-training-receipts.test.ts`
 - `tests/office-verification.test.ts`
@@ -378,6 +382,7 @@ Package: `rest-express`
 - `tests/software-factory-office-review.test.ts`
 - `tests/software-factory-office-ui-artifact.test.ts`
 - `tests/software-factory-office-ui-evidence.test.ts`
+- `tests/software-factory-office-ui-scope.test.ts`
 - `tests/software-factory-once.test.ts`
 - `tests/software-factory-openai-builder.test.ts`
 - `tests/software-factory-openai-count.test.ts`
@@ -422,7 +427,7 @@ Package: `rest-express`
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
 - `client/src/pages/agent-chat.tsx` (client-page; 29 symbols, 6 imports)
-- `client/src/pages/agents-office.tsx` (client-page; 103 symbols, 26 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 103 symbols, 27 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)
