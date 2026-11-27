@@ -9,6 +9,12 @@ export type SqlAuditRole=typeof SQL_AUDIT_ROLES[number];
 export const GITHUB_AUDIT_ROLES=["github","code"] as const;
 export type GithubAuditRole=typeof GITHUB_AUDIT_ROLES[number];
 export type SnapshotRole=SqlAuditRole|GithubAuditRole;
+/** Read-only Stripe observations (restricted key) for the money roles. */
+export const STRIPE_AUDIT_ROLES=["control","revenue"] as const;
+export type StripeAuditRole=typeof STRIPE_AUDIT_ROLES[number];
+export const STRIPE_BLOCK_CODES=["STRIPE_KEY_MISSING","STRIPE_KEY_NOT_RESTRICTED","STRIPE_AUTH_REJECTED","STRIPE_PERMISSION_DENIED","STRIPE_RATE_LIMITED","STRIPE_TIMEOUT","STRIPE_NETWORK_ERROR","STRIPE_UPSTREAM_ERROR","STRIPE_RESPONSE_INVALID"] as const;
+export type StripeBlockCode=typeof STRIPE_BLOCK_CODES[number];
+export const STRIPE_WINDOW_DAYS=30,STRIPE_MAX_ROWS=200;
 export const GITHUB_MAX_REPOSITORIES=10,GITHUB_MAX_PULL_REQUESTS=30;
 export const GITHUB_BLOCK_CODES=["NO_REGISTERED_REPOSITORIES","GITHUB_TOKEN_INVALID","GITHUB_AUTH_REJECTED","GITHUB_RATE_LIMITED","GITHUB_TIMEOUT","GITHUB_READ_DEADLINE","GITHUB_NETWORK_ERROR","GITHUB_UPSTREAM_ERROR","GITHUB_RESPONSE_INVALID"] as const;
 export type GithubBlockCode=typeof GITHUB_BLOCK_CODES[number];
@@ -28,6 +34,16 @@ export const auditRows={
   z.object({id:s,kind:z.literal("repository"),repo:githubRepo,readable:z.literal(false)}).strict(),
  ]),
 };
+const minor=z.number().int(),currency=z.string().regex(/^[a-z]{3}$/);
+export const stripeRows={
+ revenue:z.object({id:s,kind:z.literal("stripe_business_summary"),business:z.enum(["kong","blackroom","unattributed"]),currency,charges:count,grossMinor:count,refundedMinor:count,feeMinor:count,netMinor:minor,disputed:count}).strict(),
+ control:z.discriminatedUnion("kind",[
+  z.object({id:s,kind:z.literal("stripe_balance"),currency,availableMinor:minor,pendingMinor:minor}).strict(),
+  z.object({id:s,kind:z.literal("stripe_payout_summary"),currency,status:z.enum(["paid","pending","in_transit","canceled","failed"]),payouts:count,amountMinor:minor}).strict(),
+ ]),
+};
+const stripeScope=z.object({blocked:z.enum(STRIPE_BLOCK_CODES).nullable(),truncated:z.boolean(),windowDays:z.literal(STRIPE_WINDOW_DAYS),livemode:z.boolean().nullable()}).strict();
+export type StripeSnapshotScope=z.infer<typeof stripeScope>;
 const githubScope=z.object({blocked:z.enum(GITHUB_BLOCK_CODES).nullable(),truncated:z.boolean(),repositories:count}).strict();
 export type GithubSnapshotScope=z.infer<typeof githubScope>;
 const isGithubRole=(role:unknown):role is GithubAuditRole=>GITHUB_AUDIT_ROLES.includes(role as GithubAuditRole);
@@ -35,8 +51,9 @@ export function sourceDigest(value:unknown):string {
  const normalize=(v:any):any=>Array.isArray(v)?v.map(normalize):v && typeof v==="object"?Object.fromEntries(Object.keys(v).sort().map(k=>[k,normalize(v[k])])):v;
  return createHash("sha256").update(JSON.stringify(normalize(value))).digest("hex");
 }
-/** `github` is present only for GitHub roles (absent keeps SQL digests unchanged). */
-export type RoleSnapshot={version:1;role:SnapshotRole;ownerKey:string;observedAt:string;total:number;rows:Record<string,any>[];github?:GithubSnapshotScope;sourceDigest:string};
+/** `github` is present only for GitHub roles, `stripe` only for Stripe reads of control/revenue (absent keeps SQL digests unchanged). */
+export type RoleSnapshot={version:1;role:SnapshotRole;ownerKey:string;observedAt:string;total:number;rows:Record<string,any>[];github?:GithubSnapshotScope;stripe?:StripeSnapshotScope;sourceDigest:string};
+export function stripeRecordId(...parts:string[]){return sourceDigest(["stripe",...parts]);}
 function githubCoverageValid(role:GithubAuditRole,total:number,rows:number,scope:GithubSnapshotScope){
  if(scope.blocked)return rows===0 && total===0 && !scope.truncated && (scope.blocked!=="NO_REGISTERED_REPOSITORIES" || scope.repositories===0);
  if(scope.repositories<1)return false;
@@ -46,6 +63,7 @@ function githubCoverageValid(role:GithubAuditRole,total:number,rows:number,scope
 /** Stable record ids: the same repository/PR keeps its id across days and roles. */
 export function githubRecordId(kind:"repository"|"pull_request",repo:string,number?:number){return sourceDigest(kind==="repository"?["github-repo",repo]:["github-pr",repo,number]);}
 export function validateRoleSnapshot(input:RoleSnapshot,owner:string,now:number):RoleSnapshot {
+ if(input && input.stripe!==undefined)return validateStripeSnapshot(input,owner,now);
  const github=input && isGithubRole(input.role);
  if(!owner.trim() || !Number.isFinite(now) || !input || input.version!==1 || (!SQL_AUDIT_ROLES.includes(input.role as SqlAuditRole) && !github) || input.ownerKey!==sourceDigest(owner) || !Number.isFinite(Date.parse(input.observedAt)) || Date.parse(input.observedAt)>now+30000 || now-Date.parse(input.observedAt)>300000 || !Number.isSafeInteger(input.total) || input.total<0 || !Array.isArray(input.rows) || (github?input.github===undefined:input.github!==undefined || input.rows.length!==Math.min(input.total,200)))throw new Error("Unverified audit source");
  const scope=github?githubScope.parse(input.github):undefined;
@@ -54,6 +72,16 @@ export function validateRoleSnapshot(input:RoleSnapshot,owner:string,now:number)
  if(new Set(rows.map(r=>r.id)).size!==rows.length)throw new Error("Duplicate audit source");
  if(github && rows.some((r:any)=>r.id!==githubRecordId(r.kind==="pull_request"?"pull_request":"repository",r.repo,r.number)))throw new Error("Unverified audit source");
  const body={version:1 as const,role:input.role,ownerKey:input.ownerKey,observedAt:input.observedAt,total:input.total,rows,...(scope?{github:scope}:{})};
+ if(sourceDigest(body)!==input.sourceDigest)throw new Error("Audit source digest mismatch");
+ return {...body,sourceDigest:input.sourceDigest};
+}
+function validateStripeSnapshot(input:RoleSnapshot,owner:string,now:number):RoleSnapshot {
+ if(!owner.trim() || !Number.isFinite(now) || input.version!==1 || !STRIPE_AUDIT_ROLES.includes(input.role as StripeAuditRole) || input.github!==undefined || input.ownerKey!==sourceDigest(owner) || !Number.isFinite(Date.parse(input.observedAt)) || Date.parse(input.observedAt)>now+30000 || now-Date.parse(input.observedAt)>300000 || !Number.isSafeInteger(input.total) || !Array.isArray(input.rows) || input.rows.length!==input.total || input.total>STRIPE_MAX_ROWS)throw new Error("Unverified audit source");
+ const scope=stripeScope.parse(input.stripe);
+ if(scope.blocked && (input.total!==0 || scope.truncated))throw new Error("Unverified audit source");
+ const role=input.role as StripeAuditRole,rows=input.rows.map(row=>stripeRows[role].parse(row));
+ if(new Set(rows.map(r=>r.id)).size!==rows.length)throw new Error("Duplicate audit source");
+ const body={version:1 as const,role:input.role,ownerKey:input.ownerKey,observedAt:input.observedAt,total:input.total,rows,stripe:scope};
  if(sourceDigest(body)!==input.sourceDigest)throw new Error("Audit source digest mismatch");
  return {...body,sourceDigest:input.sourceDigest};
 }
