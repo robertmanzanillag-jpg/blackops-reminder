@@ -359,6 +359,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
     async accountAnalytics(destination, now = new Date()) {
       if (!findDestination(destination)) throw new Error('destination_not_allowlisted');
       const rows = await postAnalytics(destination, new Date(+now - 7 * 86400000).toISOString(), now);
+      const reasons = {}; let sampleKeys = null;
       const posts = rows.slice(0, 200).flatMap(row => {
         // Provider id fallback: TikTok analytics rows may carry only the numeric video id (no public URL).
         const providerId = String(row.postId ?? row.videoId ?? row.providerId ?? row.id ?? '');
@@ -368,6 +369,8 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
         const metric = metricsFrom(row, destination);
         const reported = row.observedAt ?? row.updatedAt;
         const providerAt = analyticsTimestamp(reported);
+        const why = !post ? 'post' : !publishedAt ? 'publishedAt' : !metric ? 'metric' : (reported != null && !providerAt) ? 'observedAt' : null;
+        if (why) { reasons[why] = (reasons[why] ?? 0) + 1; if (!sampleKeys) sampleKeys = Object.keys(row ?? {}).slice(0, 40).map(k => `${k}:${Array.isArray(row[k]) ? 'array' : row[k] === null ? 'null' : typeof row[k]}`); }
         if (!post || !publishedAt || !metric || Date.parse(publishedAt) > +now ||
             +now - Date.parse(publishedAt) > 7 * 86400000 || (reported != null && !providerAt) || (providerAt && Date.parse(providerAt) > +now)) return [];
         const text = String(row.text ?? row.videoDescription ?? row.description ?? row.title ?? row.caption ?? '').slice(0, 300);
@@ -375,7 +378,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
           timing: providerAt ? 'provider_observation_time' : 'retrieved_at_only',
           actualAgeHours: ((providerAt ? Date.parse(providerAt) : +now) - Date.parse(publishedAt)) / 3600000 }];
       }).filter(row => row.actualAgeHours >= 0);
-      return { posts, receivedRows: rows.length, rejectedRows: rows.length-posts.length };
+      return { posts, receivedRows: rows.length, rejectedRows: rows.length-posts.length, rejectReasons: reasons, rejectedSampleKeys: sampleKeys };
     },
     async preflight(destination, item) {
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
