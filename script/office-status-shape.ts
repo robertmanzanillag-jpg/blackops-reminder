@@ -151,7 +151,23 @@ export function shapeCouncil(raw: string | null, owner: string, now: number) {
     selfHeal: shapeSelfHeal(execution?.selfHeal),
     selfHealCandidates: shapeSelfHealCandidates(execution?.roleWork),
     companyOrders: shapeCompanyOrders(state.company, now),
+    ceoRemedy: shapeCeoRemedy(execution?.ceoRemedy),
   };
+}
+
+const REMEDY_CAUSES = new Set(["code_bug", "missing_integration", "config", "stale_source"]);
+const REMEDY_ACTIONS = new Set(["factory_order", "auto_fixed", "robert", "rewarm"]);
+/** CEO remediation: agent ids (KONG names collapse to "kong-agent"), cause/action enums, codes. No lines or text. */
+export function shapeCeoRemedy(value: unknown) {
+  if (!object(value) || !Array.isArray(value.items)) return { present: false as const };
+  const digest = object(value.digest) ? value.digest : {};
+  return { present: true as const, updatedAt: typeof value.updatedAt === "string" && !Number.isNaN(Date.parse(value.updatedAt)) ? value.updatedAt : null,
+    items: value.items.slice(0, 60).map((i: any) => ({ company: i?.company === "kong" ? "kong" : "main",
+      agent: i?.company !== "kong" && typeof i?.agent === "string" && ROLE_RE.test(i.agent) ? i.agent : typeof i?.key === "string" && /^kong:[a-z0-9_-]{1,60}$/.test(i.key) ? i.key : "kong-agent",
+      cause: REMEDY_CAUSES.has(i?.cause) ? i.cause : "UNSPECIFIED", action: REMEDY_ACTIONS.has(i?.action) ? i.action : "UNSPECIFIED",
+      codes: Array.isArray(i?.codes) ? i.codes.map(enumCode).slice(0, 8) : [], order: typeof i?.orderId === "string" && /^ord-ceo-[a-f0-9]{20}$/.test(i.orderId) })),
+    digest: { lastSentDay: typeof digest.lastSentDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(digest.lastSentDay) ? digest.lastSentDay : null,
+      pendingDelivery: object(value.outbox), resolved: Array.isArray(digest.resolved) ? digest.resolved.length : 0 } };
 }
 
 const CODE_RE = /^[A-Z0-9_:]{1,120}$/;

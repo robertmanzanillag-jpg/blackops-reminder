@@ -101,6 +101,12 @@ const selfHeal=selfHealConfig.enabled && roleWork && academy?selfHealModule.crea
     const owner=getSystemUserId();const [streamers,lanes]=await Promise.all([readStreamerSelfHealAudits(owner),readCloudLanesSelfHealAudits(owner).catch(()=>[])]);const gate=await (await import("./office-release-gate-backlog")).readReleaseGateSelfHealAudits({token:process.env.GITHUB_TOKEN||null}).catch(()=>[]);
     const appQa=await (await import("./app-qa-self-heal")).readAppQaSelfHealAudits(owner).catch(()=>[]);return [...streamers,...lanes,...gate,...appQa];},
   ...(pacerGate.governed?{fundableOrders:()=>pacerGate.fundable("self_heal_order")}:{})}):undefined;
+// CEO remediation loop: deterministic, $0 AI; owns every blocked agent (order, auto-fix or one daily line for Robert).
+const ceoRemedy=academy && process.env.OFFICE_CEO_REMEDY_ENABLED!=="false"?(await import("./office-ceo-remedy")).createCeoRemedyRunner({council:academy,
+  readCouncil:async()=>{const s=await academy!.load();return {webEnabled:false,lastCycleAt:s.lastCycleAt??null};},
+  readKong:(()=>{let last=0,cache:import("./office-ceo-remedy").KongAgentSummary[]=[];return async()=>{if(!process.env.KONG_OFFICE_READ_TOKEN)return [];if(Date.now()-last<3600_000)return cache;last=Date.now();
+    const ev=(await (await import("./office-kong")).runOfficeKongReadOnly()).evidence;cache=ev.agents.filter(a=>a.kind!=="city").map(a=>({id:a.id,name:a.name,state:a.state,blocker:(a as {blocker?:string|null}).blocker??null}));return cache;};})(),
+  ...(process.env.TELEGRAM_BOT_TOKEN?{deliver:async(text:string)=>{const {storage}=await import("./storage");const cfg=await storage.getTelegramConfig(getSystemUserId());if(!cfg?.chatId)return false;return (await import("./telegram")).sendTelegramPlainMessage(process.env.TELEGRAM_BOT_TOKEN!,cfg.chatId,text);}}:{})}):undefined;
 const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"}):undefined;
 const roleAcademy=roleExecution && academy?(await import("./office-role-academy")).createRoleAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS),shouldStop,run:async(prompt,call)=>{
   const result=await roleExecution.run(prompt,call.executionId);recordUsage(call.executionId,result);
@@ -145,6 +151,7 @@ const academyCycle = council ? async () => {
   if(editorialWork && !shouldStop()) await editorialWork.tick();
   if(roleWork && !shouldStop()) await roleWork.tick();
   if(selfHeal && !shouldStop()){try{await selfHeal.tick();}catch{console.error("Office self-heal step unconfirmed; it will be reconciled on the next cycle.");}}
+  if(ceoRemedy && !shouldStop()){try{await ceoRemedy.tick();}catch{console.error("CEO remediation step unconfirmed; it will be reconciled on the next cycle.");}}
   if(roleAcademy && !shouldStop() && await paceAllows("deferrable","academy_pair")) await roleAcademy.tick();
   if(blackroomAcademy && !shouldStop() && await paceAllows("deferrable","blackroom_pair")) await blackroomAcademy.tick();
   // The web scheduler is disabled in this deployment. Preserve the
