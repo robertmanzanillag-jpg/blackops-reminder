@@ -51,3 +51,8 @@ test('accountAnalytics accepts live-shaped rows: shareurl with query + string co
   assert.equal(r.posts[0].likes, 3);
   assert.equal(r.posts[0].text, 'Clip tres');
 });
+
+test('analyticsTimestamp handles string createTime variants', () => {
+  for (const v of ['1795651326', '2026-11-26T00:02:06+0000', '2026-11-26 00:02:06', '2026-11-26T00:02:06.000+00:00', 'Thu, 26 Nov 2026 00:02:06 GMT'])
+    assert.equal(analyticsTimestamp(v)?.slice(0, 10), v === '1795651326' ? new Date(1795651326000).toISOString().slice(0, 10) : '2026-11-26', v);
+});
