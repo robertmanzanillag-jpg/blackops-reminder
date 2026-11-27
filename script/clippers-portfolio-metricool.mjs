@@ -100,7 +100,12 @@ export function analyticsTimestamp(value) {
   if (/^\d{10}$/.test(v)) return new Date(+v * 1000).toISOString();
   if (/^\d{13}$/.test(v)) return new Date(+v).toISOString();
   if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(v)) return providerTimestamp(v.replace(' ', 'T').replace(/^(.{16})$/, '$1:00') + 'Z');
-  return providerTimestamp(v);
+  // Offset without colon (+0000), space separator, fractional seconds, trailing UTC/GMT.
+  const norm = v.replace(' ', 'T').replace(/\s*(?:UTC|GMT)$/i, 'Z').replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  const direct = providerTimestamp(norm) ?? (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(norm) ? providerTimestamp(norm + 'Z') : null);
+  if (direct) return direct;
+  const ms = Date.parse(v);
+  return /\b20\d{2}\b/.test(v) && /(?:Z|UTC|GMT|[+-]\d{2}:?\d{2})$/i.test(v) && Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 function list(value) {
   if (value?.hasMore || value?.next || value?.page?.next || value?.metadata?.next || value?.metadata?.hasMore || value?.pagination?.next || value?.meta?.next || value?.paging?.next ||
@@ -370,7 +375,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
         const reported = row.observedAt ?? row.updatedAt;
         const providerAt = analyticsTimestamp(reported);
         const why = !post ? 'post' : !publishedAt ? 'publishedAt' : !metric ? 'metric' : (reported != null && !providerAt) ? 'observedAt' : null;
-        if (why) { reasons[why] = (reasons[why] ?? 0) + 1; if (!sampleKeys) sampleKeys = Object.keys(row ?? {}).slice(0, 40).map(k => `${k}:${Array.isArray(row[k]) ? 'array' : row[k] === null ? 'null' : typeof row[k]}`); }
+        if (why) { reasons[why] = (reasons[why] ?? 0) + 1; if (!sampleKeys) sampleKeys = Object.keys(row ?? {}).slice(0, 40).map(k => `${k}:${Array.isArray(row[k]) ? 'array' : row[k] === null ? 'null' : typeof row[k]}`); if (typeof row?.createTime === 'string') sampleKeys.push('createTimeShape:' + row.createTime.slice(0, 40).replace(/[0-9]/g, '9').replace(/[A-Za-z]{4,}/g, 'W')); }
         if (!post || !publishedAt || !metric || Date.parse(publishedAt) > +now ||
             +now - Date.parse(publishedAt) > 7 * 86400000 || (reported != null && !providerAt) || (providerAt && Date.parse(providerAt) > +now)) return [];
         const text = String(row.text ?? row.videoDescription ?? row.description ?? row.title ?? row.caption ?? '').slice(0, 300);
