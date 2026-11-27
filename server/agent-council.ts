@@ -15,6 +15,7 @@ import { creditPacerView, parseCreditPacerState, taskEfficiency } from "./credit
 import { getSystemUserId } from "./user-context";
 import { createChatOrder } from "../shared/agent-chat-routing";
 import type { OfficeKongAuditResult } from "./office-kong";
+import { ceoRemedyView, councilRunning } from "./office-ceo-remedy";
 // Server side of the agent council (see shared/agent-council.ts).
 //
 // Cost: $0. It only reads data the agents already produce (local files and the
@@ -977,7 +978,10 @@ export function createAgentCouncil(deps: CouncilDeps) {
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,
       costUsd: 0,
-      enabled: isAgentCouncilEnabled(),
+      // The web flag is false by design when rounds run in the office worker; the council is
+      // only "off" when no process ran a round recently (server/office-ceo-remedy.ts).
+      enabled: councilRunning({ webEnabled: isAgentCouncilEnabled(), lastCycleAt: state.lastCycleAt ?? null }, deps.now()),
+      ceoRemedy: ceoRemedyView(loaded.officeExecution?.ceoRemedy),
     };
   }
 
