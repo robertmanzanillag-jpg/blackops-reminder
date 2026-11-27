@@ -281,6 +281,19 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
     }
     return rows.filter(row=>provider(row,destination)&&(includeDrafts||row.draft!==true)&&!['deleted','cancelled','canceled','failed'].includes(String(statusOf(row,destination)).toLowerCase()));
   }
+  /** Published scheduler rows can leave Metricool's scheduler list. Attribute from post analytics only when exactly one
+   * post on this account was published within 20 min of the slot AND its text carries the clip's own title line. */
+  async function analyticsFallback(destination, item, now) {
+    const slot = Date.parse(item.scheduledAt), title = tiktokTitle(item.caption).replace(/…$/, '').trim();
+    if (!Number.isFinite(slot) || title.length < 8) return null;
+    const rows = await postAnalytics(destination, new Date(slot - 3_600_000).toISOString(), now);
+    const hits = rows.map(row => ({ row, at: analyticsPublicationTime(row), url: row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url,
+      text: String(row.text ?? row.videoDescription ?? row.description ?? row.title ?? row.caption ?? '') }))
+      .filter(h => h.at && Math.abs(Date.parse(h.at) - slot) <= 20 * 60_000 && h.url && h.text.includes(title));
+    if (hits.length !== 1) return null;
+    const post = exactPost(hits[0].url, destination);
+    return post ? { ...post, publishedAt: hits[0].at, source: 'metricool_post_analytics_match' } : null;
+  }
   async function postAnalytics(destination, from, now) {
     await destinationSettings(destination);
     return list(await get('/api/v2/analytics/posts/' + destination.network, {
@@ -505,7 +518,8 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch, env =
       const miss = code => { this.lastObservationMiss = code; return null; };
       const rows = await schedule(destination, localDay(new Date(item.scheduledAt)));
       const matches = rows.filter(row => schedulerId(row) === item.metricoolId);
-      if (matches.length !== 1) return miss(matches.length ? 'scheduler_row_ambiguous' : 'scheduler_row_missing');
+      if (matches.length > 1) return miss('scheduler_row_ambiguous');
+      if (!matches.length) return (await analyticsFallback(destination, item, now)) ?? miss('scheduler_row_missing');
       if (!matchingContent(matches[0], item, destination)) return miss('scheduler_content_mismatch');
       const row = matches[0];
       const target = row.providers.find(p => p.network === destination.network);
