@@ -1269,7 +1269,7 @@ async function main() {
     console.log(JSON.stringify({reviewedDerivative:derivativeReport}));
   }
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
-  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, autoApproval: report.autoApproval ?? null, captions: report.captions ?? null, learning: report.learning ?? null,
+  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, autoApproval: report.autoApproval ?? null, captions: report.captions ?? null, learning: report.learning ?? null, brandAnalyticsDiag: report.brandAnalyticsDiag ?? null,
     growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish, autoPublishMode: a.autoPublishMode }])), decisions: report.growth.decisions.length } : null }));
   console.log(funnelSummary({ ...report, status: report.status }));
   for (const d of report.diagnostics ?? []) console.log(`clip diagnostics: ${JSON.stringify(d)}`);
