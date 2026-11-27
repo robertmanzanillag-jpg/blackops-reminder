@@ -351,6 +351,7 @@ export async function observeBrandPosts({ metricool, destinations = [], now, rep
         .map(p => ({ id: String(p.id), publishedAt: p.publishedAt, observedAt: p.observedAt, views: p.views, completionRate: p.completionRate ?? null,
           likes: p.likes ?? null, comments: p.comments ?? null, shares: p.shares ?? null, saves: p.saves ?? null, series: seriesKeyOf(p.text) }));
       byDestination[key] = { observedAt: iso(now), posts };
+      (report.brandAnalyticsDiag ??= {})[key] = { received: r?.receivedRows ?? null, kept: posts.length, reasons: r?.rejectReasons ?? null, sampleKeys: r?.rejectedSampleKeys ?? null };
       const texts = new Map((r.posts ?? []).map(x => [String(x?.id), String(x?.text ?? '')]));
       for (const p of posts) { byId.set(`${key}:${p.id}`, p); all.push({ ...p, key, text: texts.get(p.id) ?? '' }); }
       ok++;

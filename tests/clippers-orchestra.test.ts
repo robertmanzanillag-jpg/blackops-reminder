@@ -223,7 +223,7 @@ test('analytics date boundaries use second-precision UTC local time and explicit
    const u=new URL(input);requests++;if(u.pathname.endsWith('simpleProfiles'))return Response.json([{blogId:d.brandId,ownerUserId:'123',isShared:false,[d.network==='tiktok'?'tiktokUsername':'facebook']:d.account}]);
    assert.equal(u.pathname,'/api/v2/analytics/posts/'+d.network);assert.equal(u.searchParams.get('from'),'2026-11-11T18:00:00');assert.equal(u.searchParams.get('to'),'2026-11-18T18:00:00');assert.equal(u.searchParams.get('timezone'),'UTC');
    assert.equal(u.searchParams.get('blogId'),String(d.brandId));return Response.json({data:[]});
-  }});const r=await adapter.accountAnalytics(d,now());assert.equal(requests,2);assert.deepEqual(r,{posts:[],receivedRows:0,rejectedRows:0});
+  }});const r=await adapter.accountAnalytics(d,now());assert.equal(requests,2);assert.deepEqual(r,{posts:[],receivedRows:0,rejectedRows:0,rejectReasons:{},rejectedSampleKeys:null});
  }
 });
 test('analytics non-JSON, invalid JSON, unknown shape and HTTP errors stay held with bounded codes',async()=>fixture(async root=>{
