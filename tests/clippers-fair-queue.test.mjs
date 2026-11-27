@@ -20,8 +20,12 @@ test('a day filled by one series reports the monopoly; streamer gets no slot but
 
 test('a series is capped at its daily quota so the mix keeps room', () => {
   const rows = [1, 2, 3].map(sdo);
-  assert.equal(fairSlotDecision({ rows, cap: 5, series: 'serie_educativa' }).reason, 'series_quota');
+  assert.equal(fairSlotDecision({ rows, cap: 5, series: 'serie_educativa' }).ok, true); // alone: never leave slots empty
+  assert.equal(fairSlotDecision({ rows: [...rows, { text: 'c https://www.twitch.tv/a/clip/9' }], cap: 5, series: 'serie_educativa' }).reason, 'series_quota');
   assert.equal(fairSlotDecision({ rows, cap: 5, series: STREAMER_SERIES }).ok, true);
+  const mixed = [...rows.slice(0, 1), { text: 'x https://www.twitch.tv/a/clip/1' }, { text: 'y https://www.twitch.tv/a/clip/2' }, { text: 'z https://kick.com/a?clip=3' }];
+  assert.equal(fairSlotDecision({ rows: mixed, cap: 5, series: STREAMER_SERIES }).reason, 'series_quota');
+  assert.equal(fairSlotDecision({ rows: mixed.slice(1), cap: 5, series: STREAMER_SERIES }).ok, true);
 });
 
 test('planFairDay prefers best series first and mixes', () => {

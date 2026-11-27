@@ -37,7 +37,9 @@ export function fairSlotDecision({ rows = [], cap, series, share = SERIES_DAILY_
   for (const row of rows) { const k = row?.series ?? seriesKeyOf(row?.text); counts[k] = (counts[k] ?? 0) + 1; }
   const monopolizedBy = Object.entries(counts).find(([, n]) => n > quota)?.[0] ?? null;
   if (rows.length >= cap) return { ok: false, reason: monopolizedBy ? `series_monopoly:${monopolizedBy}` : 'daily_cap', counts, quota, monopolizedBy };
-  if ((counts[series] ?? 0) >= quota) return { ok: false, reason: 'series_quota', counts, quota, monopolizedBy };
+  // The quota binds once another series shares the day, so a lone series never leaves slots empty.
+  const othersPresent = Object.keys(counts).some(k => k !== series);
+  if (othersPresent && (counts[series] ?? 0) >= quota) return { ok: false, reason: 'series_quota', counts, quota, monopolizedBy };
   return { ok: true, reason: null, counts, quota, monopolizedBy };
 }
 
