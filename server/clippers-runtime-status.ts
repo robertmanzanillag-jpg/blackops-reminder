@@ -5,6 +5,7 @@ export type ClipperWorkerRuntimeState = "running" | "completed" | "blocked" | "s
 
 const DEFAULT_STALE_AFTER_MS = 26 * 60 * 60_000;
 const DEFAULT_RUNNING_MAX_AGE_MS = 2 * 60 * 60_000;
+const MAX_CLOCK_SKEW_MS = 5 * 60_000;
 const KNOWN_FAILED_STAGES = new Set(["runtime_report", "supply", "media_upload", "planning", "delivery", "reconciliation", "cleanup"]);
 const KNOWN_CONFIGURATION_BLOCKERS = new Set([
   "metricool_autopublish_not_authorized",
@@ -146,7 +147,9 @@ export async function getClipperWorkerRuntimeStatus(options: RuntimeStatusOption
   const finishedAt = validTimestamp(report?.finishedAt);
   const lastExecutionAt = finishedAt || startedAt;
   const outcome = reportOutcome(report);
-  const failedStage = (reportRead.exists && !report) || (Boolean(lock) && !isRunning && !report)
+  // A report dated in the future cannot prove a fresh export; treat it as invalid.
+  const futureReport = Boolean(lastExecutionAt && Date.parse(lastExecutionAt) - nowMs > MAX_CLOCK_SKEW_MS);
+  const failedStage = (reportRead.exists && !report) || (Boolean(lock) && !isRunning && !report) || futureReport
     ? "runtime_report"
     : safeFailedStage(report);
   const configurationBlockers = safeBlockers(report);
@@ -162,7 +165,7 @@ export async function getClipperWorkerRuntimeStatus(options: RuntimeStatusOption
     state = "stale";
   } else if (!report) {
     state = "never_run";
-  } else if (!outcome || !lastExecutionAt) {
+  } else if (!outcome || !lastExecutionAt || futureReport) {
     state = "blocked";
   } else if (nowMs - Date.parse(lastExecutionAt) > staleAfterMs) {
     state = "stale";

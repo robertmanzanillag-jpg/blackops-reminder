@@ -121,6 +121,21 @@ test("marks an old report stale while retaining its safe failed-stage signal", a
   assert.equal(status.nextAction.code, "restore_worker_schedule");
 });
 
+test("treats a future-dated report as an invalid export instead of completed", async () => {
+  const workspaceRoot = await fixture({
+    status: "completed",
+    startedAt: "2026-08-06T09:59:00.000Z",
+    finishedAt: "2026-08-06T10:01:00.000Z",
+    metricoolDeliveryEnabled: true,
+    publicMediaUploadEnabled: true,
+  });
+  const status = await getClipperWorkerRuntimeStatus({ workspaceRoot, now: NOW });
+
+  assert.equal(status.status, "blocked");
+  assert.equal(status.failedStage, "runtime_report");
+  assert.equal(status.nextAction.code, "repair_runtime_report");
+});
+
 test("fails closed for malformed report fields", async () => {
   const workspaceRoot = await fixture({
     status: "unexpected",
