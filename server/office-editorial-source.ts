@@ -7,7 +7,9 @@ import {detectLocalNewsSensitiveContent,hashLocalNewsCanonicalEventIdentity,hash
 export const EDITORIAL_SOURCE_KIND="office_editorial_source_v1";
 export const EDITORIAL_ROLES=["news","news:ny-news","news:miami-news"] as const;
 export type EditorialRole=typeof EDITORIAL_ROLES[number];
-const stamp=z.string().datetime(),id=z.string().min(1).max(200),hash=z.string().regex(/^[a-f0-9]{64}$/),lane=z.enum(["ny-news","miami-news"]),text=z.string().max(6000);
+// Public alert feeds (e.g. weather.gov effective/expires) carry UTC offsets;
+// rejecting them invalidated the whole news export instead of one field.
+const stamp=z.string().datetime({offset:true}),id=z.string().min(1).max(200),hash=z.string().regex(/^[a-f0-9]{64}$/),lane=z.enum(["ny-news","miami-news"]),text=z.string().max(6000);
 // The canonical news producer truncates provenance claim hashes to 20 hex.
 // Committee identities, review hashes and persistence digests remain full SHA256.
 const sourceClaimHash=z.string().regex(/^[a-f0-9]{20}$/);

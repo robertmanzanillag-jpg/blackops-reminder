@@ -4,12 +4,21 @@ import {mkdtemp,mkdir,writeFile,readdir,readFile,rm} from "node:fs/promises";
 import path from "node:path";
 import {tmpdir} from "node:os";
 import {readWebRoleSources,auditWebRoleSource,validateWebRoleSource,BLACKROOM_SOURCE_PROJECTION_SQL} from "../server/office-web-role-sources";
+import {projectEditorialSource} from "../server/office-editorial-source";
 const now=Date.parse("2026-11-07T01:00:00Z"),at=new Date(now).toISOString(),old=new Date(now-172800000).toISOString();
 const pool={query:async(sql:string,args?:unknown[])=>({rows:sql.includes("FROM users")?[{id:args![0]}]:[]})};
 async function fixture(t:any){const root=await mkdtemp(path.join(tmpdir(),"office-web-source-test-"));t.after(async()=>{assert.ok(path.resolve(root).startsWith(path.resolve(tmpdir())+path.sep));await rm(root,{recursive:true,force:true});});return root;}
 async function put(root:string,file:string,value:unknown){const name=path.join(root,file);await mkdir(path.dirname(name),{recursive:true});await writeFile(name,typeof value==="string"?value:JSON.stringify(value));}
 const news=(count=1)=>({version:1,updatedAt:old,lastRunAt:old,queue:Array.from({length:count},(_,i)=>({id:`private:https://internal/customer-${i}`,lane:i%2?"ny-news":"miami-news",status:"quarantined",createdAt:old,approvalRequired:true,autoEligible:false,qualityScore:50,copy:"SECRET_CUSTOMER",sourceUrl:"https://private/token=secret"}))});
 
+test("editorial news projection accepts offset timestamps instead of invalidating the export",()=>{
+ const off="2026-11-06T20:00:00-05:00",h="a".repeat(64),url="https://api.weather.gov/alerts/x";
+ const event={id:"e1",lane:"miami-news",title:"t",description:"d",instruction:"",location:"l",eventType:"x",source:"NWS",sourceUrl:url,revision:1,risk:"low",lifecycle:"active",effective:off,expires:off,updatedAt:at,provenance:null};
+ const verdicts=["source_verifier","safety_editor","monetization_editor"].map(role=>({role,verdict:"approve",reasons:[],evidence:[],checkedAt:at}));
+ const queue={id:"q1",eventId:"e1",eventRevision:1,lane:"miami-news",platform:"x",copy:"c",source:"NWS",sourceUrl:url,risk:"low",lifecycle:"active",canonicalEventIdentity:h,claimIdentityHash:h,reviewHash:h,verdicts,evidence:[],consensus:"unanimous_approve",publishDecision:"auto_publish",checkedAt:at,createdAt:at,expires:off,status:"auto_eligible",gateReason:"ok",notBefore:null};
+ const source=projectEditorialSource({version:1,updatedAt:at,lastRunAt:at,events:[event],queue:[queue]},"owner",now);
+ assert.equal(source.status,"available");assert.deepEqual(source.blocked,[{queueId:"q1",reason:"SOURCE_UNVERIFIED"}]);
+});
 test("durable marketing history overrides ephemeral files, retains original time, and never falls back after DB failure",async t=>{
  const root=await fixture(t);await put(root,"marketing_command_center_data/learning-runs.json","corrupt local data");
  const saved=[{id:"durable",createdAt:old,focusClientId:"all",clientsReviewed:4,improvementsQueued:["private plan"],rulesUpdated:["private rule"],safetyBlocks:[]}];
