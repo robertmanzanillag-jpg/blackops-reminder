@@ -1,0 +1,161 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { emptyProductionState, runProductionCycle, createProductionAdapters, type EditorialTask, type ProductionDependencies, type ProductionState } from "../server/kong-production-pipeline";
+import type { OnlineFootage } from "../server/kong-online-sources";
+const now = new Date("2026-10-28T14:00:00Z"), sha = "a".repeat(64);
+const rights = { evidenceUrl: "https://example.com/permission", confirmedBy: "Owner", expiresAt: "2026-11-10T00:00:00Z" };
+const source: OnlineFootage = { id: "owner-one", provider: "owner", sourceUrl: "https://example.com/source", mediaUrl: "https://example.com/footage.mp4",
+  author: "Owner", discoveredAt: now.toISOString(), rightsEvidence: "Owner written commercial licence", rightsExpiresAt: rights.expiresAt,
+  allowedMediaOrigins: ["https://example.com"], attribution: "Owner", audioPolicy: "remove_source_audio", qaStatus: "pending" };
+const task: EditorialTask = { id: "pov1", sourceIds: [source.id], layout: "pov", hook: "The group chat finally made it", durationSeconds: 12,
+  title: "Night plans", caption: "Find your next night https://kongnightlife.com", family: "pov", footageRights: rights, musicRights: rights, authorizedForPublicDistribution: true };
+const qa = { reviewedBy: "Independent reviewer", reviewedAt: now.toISOString(), officialWhiteLogo: true as const,
+  noLogoBackgroundOrShadow: true as const, safeZones: true as const, audioChecked: true as const, spellingChecked: true as const, renderedSha256: sha };
+function fixture() {
+  let stored = emptyProductionState(), uploads = 0, renders = 0;
+  stored.candidates.push(source);
+  const deps: ProductionDependencies = {
+    save: async state => { stored = structuredClone(state); },
+    artifactExists: async () => true,
+    render: async () => { renders++; return { outputPath: "/tmp/kong-production-test/output.mp4", sha256: sha, width: 1080, height: 1920,
+      durationSeconds: 12, logoSha256: "b".repeat(64), sourceAudioDiscarded: true }; },
+    upload: async job => { uploads++; assert.equal(stored.jobs.find(j => j.id === job.id)?.stage, "upload_intent");
+      return { fileId: "uploaded-one", mediaUrl: "https://example.com/rendered.mp4", sha256: sha, verifiedAt: now.toISOString() }; },
+  };
+  return { deps, state: () => structuredClone(stored), uploads: () => uploads, renders: () => renders };
+}
+test("real render receipt stays QA pending until explicit hash-bound review", async () => {
+  const f = fixture();
+  let state = await runProductionCycle(f.state(), [task, task], f.deps, { now });
+  assert.equal(state.jobs.length, 1); assert.equal(f.uploads(), 1); assert.equal(state.jobs[0].stage, "qa_pending");
+  assert.equal(state.assets.length, 0); assert.equal(state.jobs[0].sources[0].rightsEvidence, source.rightsEvidence);
+  state = await runProductionCycle(state, [], { ...f.deps, review: async () => qa }, { now });
+  assert.equal(state.jobs[0].stage, "ready"); assert.equal(state.assets.length, 1); assert.equal(f.uploads(), 1);
+});
+test("explicit test metadata survives persisted restart and reviewed asset conversion", async () => {
+  const f = fixture();
+  const creativeTest = { testId: "baseline-record", kind: "baseline" as const, hookStyle: "pov", sourceIds: [...task.sourceIds],
+    primaryVariable: "hook_text" as const, hypothesis: "Establish baseline outcomes without claiming a winner." };
+  await runProductionCycle(f.state(), [{ ...task, creativeTest }], f.deps, { now });
+  assert.deepEqual(f.state().jobs[0].task.creativeTest, creativeTest);
+  const restarted = await runProductionCycle(f.state(), [], { ...f.deps, review: async () => qa }, { now });
+  assert.deepEqual(restarted.assets[0].creativeTest, creativeTest);
+  assert.equal(f.renders(), 1); assert.equal(f.uploads(), 1);
+});
+test("test source identity cannot differ from actual footage", async () => {
+  const f = fixture();
+  const result = await runProductionCycle(f.state(), [{ ...task, creativeTest: { testId: "test", kind: "exploration", hookStyle: "pov", sourceIds: ["unrelated"] } }], f.deps, { now });
+  assert.equal(result.jobs[0].error, "invalid_test_metadata"); assert.equal(f.renders(), 0); assert.equal(f.uploads(), 0);
+});
+test("production adapter supplies read-only reconciliation by default and preserves explicit override", async () => {
+  const config = { soundtrack: { path: "/tmp/music.wav", rightsEvidence: "authorized" }, logo: { path: "/tmp/logo.png", approvedSha256: sha }, fontPath: "/tmp/font.ttf",
+    folderId: "folder-123456789", userId: "owner", approvedPublicOrigins: ["https://drive.usercontent.google.com"], save: async () => undefined };
+  const defaults = createProductionAdapters(config);
+  assert.equal(typeof defaults.reconcileUpload, "function");
+  const f = fixture(), state = await runProductionCycle(f.state(), [task], { ...f.deps, render: async () => { throw Error("fixture"); } }, { now });
+  assert.equal(await defaults.reconcileUpload!(state.jobs[0]), null);
+  let calls = 0; const override = async () => { calls++; return null; };
+  const injected = createProductionAdapters({ ...config, reconcileUpload: override });
+  assert.equal(injected.reconcileUpload, override); await injected.reconcileUpload!(state.jobs[0]); assert.equal(calls, 1);
+});
+test("failed save of upload intent prevents public upload", async () => {
+  const f = fixture(), save = f.deps.save;
+  f.deps.save = async state => { if (state.jobs.some(j => j.stage === "upload_intent")) throw Error("db_down"); await save(state); };
+  await assert.rejects(runProductionCycle(f.state(), [task], f.deps, { now }), /db_down/);
+  assert.equal(f.uploads(), 0); assert.equal(f.state().jobs[0].stage, "rendered");
+});
+test("restart after upload receipt save failure only reconciles; never repeats upload", async () => {
+  const f = fixture(), save = f.deps.save;
+  f.deps.save = async state => { if (state.jobs.some(j => j.stage === "qa_pending")) throw Error("db_down"); await save(state); };
+  await assert.rejects(runProductionCycle(f.state(), [task], f.deps, { now }), /db_down/);
+  assert.equal(f.uploads(), 1); assert.equal(f.state().jobs[0].stage, "upload_intent");
+  f.deps.save = save;
+  let state = await runProductionCycle(f.state(), [], f.deps, { now });
+  assert.equal(state.jobs[0].stage, "upload_uncertain"); assert.equal(f.uploads(), 1);
+  state = await runProductionCycle(state, [], { ...f.deps, reconcileUpload: async () => ({ fileId: "uploaded-one",
+    mediaUrl: "https://example.com/rendered.mp4", sha256: sha, verifiedAt: now.toISOString() }) }, { now });
+  assert.equal(state.jobs[0].stage, "qa_pending"); assert.equal(f.uploads(), 1);
+});
+test("unknown upload exception does not retry even when render file disappears", async () => {
+  const f = fixture(); let attempts = 0;
+  const deps = { ...f.deps, upload: async () => { attempts++; throw Error("timeout"); } };
+  let state = await runProductionCycle(f.state(), [task], deps, { now });
+  state = await runProductionCycle(state, [], { ...deps, artifactExists: async () => false, reconcileUpload: async () => null }, { now });
+  assert.equal(attempts, 1); assert.equal(f.renders(), 1); assert.equal(state.jobs[0].stage, "upload_uncertain");
+});
+test("missing preupload temporary file is rerendered on restart", async () => {
+  const f = fixture(), save = f.deps.save;
+  f.deps.save = async state => { if (state.jobs.some(j => j.stage === "upload_intent")) throw Error("db_down"); await save(state); };
+  await assert.rejects(runProductionCycle(f.state(), [task], f.deps, { now }));
+  f.deps.save = save;
+  const state = await runProductionCycle(f.state(), [], { ...f.deps, artifactExists: async () => false }, { now });
+  assert.equal(f.renders(), 2); assert.equal(f.uploads(), 1); assert.equal(state.jobs[0].stage, "qa_pending");
+});
+test("source outage preserves reviewed assets and continues eligible existing queue", async () => {
+  const f = fixture();
+  const state = await runProductionCycle(f.state(), [task], { ...f.deps, review: async () => qa }, { now });
+  const next = await runProductionCycle(state, [], { ...f.deps, discover: async () => { throw Error("provider_down"); } }, { now });
+  assert.equal(next.assets.length, 1); assert.equal(next.errors.at(-1)?.code, "source_discovery_failed");
+  assert.equal(f.uploads(), 1);
+});
+test("missing authorization, expired source and missing claim evidence cannot render/upload", async () => {
+  for (const invalid of [{ ...task, authorizedForPublicDistribution: false }, { ...task, family: "lineup" as const },
+    { ...task, sourceIds: ["missing"] }, { ...task, musicRights: { ...rights, expiresAt: "2020-01-01" } }]) {
+    const f = fixture(); const state = await runProductionCycle(f.state(), [invalid], f.deps, { now });
+    assert.equal(state.jobs[0].stage, "blocked"); assert.equal(f.renders(), 0); assert.equal(f.uploads(), 0);
+  }
+});
+test("bad QA and duplicate rendered hashes never create second publishable asset", async () => {
+  const f = fixture();
+  let state = await runProductionCycle(f.state(), [task, { ...task, id: "pov2", hook: "Another night" }], f.deps, { now });
+  assert.equal(f.uploads(), 1); assert.equal(state.jobs[1].error, "duplicate_render_hash");
+  state = await runProductionCycle(state, [], { ...f.deps, review: async () => ({ ...qa, renderedSha256: "c".repeat(64) }) }, { now });
+  assert.equal(state.assets.length, 0); assert.equal(state.jobs[0].stage, "qa_pending");
+});
+
+test("render retries persist backoff and quarantine after three failures", async () => {
+  const f = fixture(); let attempts = 0;
+  const deps = { ...f.deps, render: async () => { attempts++; throw Error("ffmpeg_failed"); } };
+  let state = await runProductionCycle(f.state(), [task], deps, { now });
+  assert.equal(state.jobs[0].renderAttempts, 1); assert.equal(state.jobs[0].stage, "queued");
+  assert.equal(state.jobs[0].nextRenderAttemptAt, new Date(+now + 15 * 60_000).toISOString());
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 60_000) });
+  assert.equal(attempts, 1);
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 15 * 60_000) });
+  assert.equal(state.jobs[0].renderAttempts, 2);
+  assert.equal(state.jobs[0].nextRenderAttemptAt, new Date(+now + 45 * 60_000).toISOString());
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 45 * 60_000) });
+  assert.equal(state.jobs[0].stage, "blocked"); assert.equal(state.jobs[0].error, "render_attempts_exhausted");
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 3600_000) });
+  assert.equal(attempts, 3); assert.equal(f.uploads(), 0); assert.equal(state.jobs.length, 1);
+});
+
+test("interrupted third render is quarantined on restart instead of a fourth render", async () => {
+  const f = fixture(); let state = await runProductionCycle(f.state(), [task], { ...f.deps, render: async () => { throw Error("fail"); } }, { now });
+  state.jobs[0].stage = "rendering"; state.jobs[0].renderAttempts = 3; state.jobs[0].nextRenderAttemptAt = undefined;
+  state = await runProductionCycle(state, [], f.deps, { now });
+  assert.equal(state.jobs[0].stage, "blocked"); assert.equal(f.renders(), 0);
+});
+
+test("expired and old cache entries are evicted but immutable job provenance remains", async () => {
+  const f = fixture();
+  let state = await runProductionCycle(f.state(), [task], f.deps, { now });
+  const originalEvidence = structuredClone(state.jobs[0].sources);
+  state.candidates[0].discoveredAt = new Date(+now - 8 * 86400_000).toISOString();
+  state.candidates.push({ ...source, id: "expired", rightsExpiresAt: new Date(+now - 1).toISOString() });
+  let seen: string[] = [];
+  state = await runProductionCycle(state, [], { ...f.deps, discover: async (_cursor, ids) => {
+    seen = ids; return { nextCursor: 1, candidates: [{ ...source, id: "new-source" }] };
+  } }, { now });
+  assert.deepEqual(state.candidates.map(s => s.id), ["new-source"]);
+  assert.deepEqual(state.jobs[0].sources, originalEvidence);
+  assert.ok(seen.includes(source.id)); assert.equal(state.jobs.length, 1); assert.equal(f.uploads(), 1);
+});
+test("reveal copy cannot bypass prohibited terms or claim evidence", async () => {
+  for (const reveal of ["Join guestlist tonight", "Complimentary entry tonight", "FREE tonight"]) {
+    const f = fixture();
+    const state = await runProductionCycle(f.state(), [{ ...task, layout: "reveal", reveal }], f.deps, { now });
+    assert.equal(state.jobs[0].stage, "blocked");
+    assert.equal(f.renders(), 0); assert.equal(f.uploads(), 0);
+  }
+});
